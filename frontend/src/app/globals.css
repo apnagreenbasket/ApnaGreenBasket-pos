@@ -1,0 +1,171 @@
+@import "tailwindcss";
+
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+  --font-display: "Inter", system-ui, -apple-system, sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, sans-serif;
+
+  --bg-base: #fafafa;
+  /* Vercel Light Background */
+  --bg-surface: #ffffff;
+  /* Pure White Card Surface */
+  --bg-surface-elevated: #f5f5f5;
+  /* Elevated Surface */
+  --bg-surface-hover: #eaeaea;
+  /* Vercel Light Hover */
+
+  --text-primary: #111111;
+  /* Deep Primary Text */
+  --text-secondary: #666666;
+  /* Vercel Secondary Slate */
+  --text-muted: #888888;
+  /* Vercel Muted Text */
+
+  --border-subtle: #eaeaea;
+  /* Hairline Border */
+  --border-strong: #d1d5db;
+  /* Strong Outline Border */
+
+  --accent-brand: #0070F3;
+  /* Iconic Vercel Electric Blue */
+  --accent-brand-hover: #0051cb;
+  /* Vercel Blue Hover */
+  --accent-brand-subtle: #e6f0ff;
+  /* Vercel Blue Subtle Tint */
+  --text-on-accent: #ffffff;
+  /* Pure White Text */
+
+  --accent-alt: #059669;
+  /* Muted Emerald Green */
+  --accent-alt-subtle: #d1fae5;
+  --text-on-accent-alt: #065f46;
+
+  --signal-copper: #c2410c;
+}
+
+[data-theme="dark"],
+.dark {
+  color-scheme: dark;
+  --font-display: "Inter", system-ui, -apple-system, sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, sans-serif;
+
+  --bg-base: #000000;
+  /* Vercel Pure Pitch Black */
+  --bg-surface: #0a0a0a;
+  /* Vercel Deep Card Surface */
+  --bg-surface-elevated: #111111;
+  /* Vercel Elevated Container */
+  --bg-surface-hover: #1c1c1c;
+  /* Vercel Hover Container */
+
+  --text-primary: #ffffff;
+  /* Crisp White Primary Text */
+  --text-secondary: #a1a1a1;
+  /* Vercel Cool Gray Body */
+  --text-muted: #666666;
+  /* Vercel Muted Metadata */
+
+  --border-subtle: #1f1f1f;
+  /* Vercel Hairline Dark Border */
+  --border-strong: #333333;
+  /* Vercel Card Outline Border */
+
+  --accent-brand: #0070F3;
+  /* Iconic Vercel Electric Blue */
+  --accent-brand-hover: #0060df;
+  /* Vercel Blue Hover */
+  --accent-brand-subtle: #001e3d;
+  /* Vercel Blue Dark Badge Tint */
+  --text-on-accent: #ffffff;
+  /* Pure White Text */
+
+  --accent-alt: #059669;
+  /* Muted Emerald Green */
+  --accent-alt-subtle: #064e3b;
+  /* Soft Emerald Badge */
+  --text-on-accent-alt: #ecfdf5;
+
+  --signal-copper: #ea580c;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  min-height: 100vh;
+  font-family: var(--font-body);
+
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.font-body {
+  font-family: var(--font-body);
+}
+
+.marketing-grid-bg {
+  background-image:
+    radial-gradient(circle at 15% 15%, rgba(30, 64, 175, 0.08), transparent 45%),
+    radial-gradient(circle at 83% 65%, rgba(194, 65, 12, 0.06), transparent 48%),
+    linear-gradient(to bottom, rgba(15, 23, 42, 0.03), transparent 35%),
+    repeating-linear-gradient(to right,
+      rgba(15, 23, 42, 0.04) 0,
+      rgba(15, 23, 42, 0.04) 1px,
+      transparent 1px,
+      transparent 82px);
+}
+
+.dark .marketing-grid-bg {
+  background-image:
+    radial-gradient(circle at 15% 15%, rgba(37, 99, 235, 0.08), transparent 45%),
+    radial-gradient(circle at 83% 65%, rgba(234, 88, 12, 0.06), transparent 48%),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.01), transparent 35%),
+    repeating-linear-gradient(to right,
+      rgba(255, 255, 255, 0.02) 0,
+      rgba(255, 255, 255, 0.02) 1px,
+      transparent 1px,
+      transparent 82px);
+}
+
+.spotlight {
+  background: radial-gradient(circle, rgba(37, 99, 235, 0.15) 0%, rgba(37, 99, 235, 0) 70%);
+  filter: blur(18px);
+}
+
+.dark input[type="text"],
+.dark input[type="number"],
+.dark select,
+.dark textarea {
+  background-color: var(--bg-surface-elevated);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.dark input::placeholder {
+  color: var(--text-muted);
+}
+
+/* -------------------------------------------------------------------------
+   Accessibility & Reduced Motion
+   ------------------------------------------------------------------------- */
+*:focus-visible {
+  outline: 2px solid var(--accent-brand);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
