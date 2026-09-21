@@ -1,5 +1,31 @@
 @import "tailwindcss";
 
+@theme {
+  --color-amber-50: #f2f1f8;
+  --color-amber-100: #e5e3f2;
+  --color-amber-200: #cbcae4;
+  --color-amber-300: #0d0b33;
+  --color-amber-400: #0d0b33;
+  --color-amber-500: #0d0b33;
+  --color-amber-600: #0d0b33;
+  --color-amber-700: #0a0828;
+  --color-amber-800: #07061d;
+  --color-amber-900: #040312;
+  --color-amber-950: #02020a;
+
+  --color-yellow-50: #f2f1f8;
+  --color-yellow-100: #e5e3f2;
+  --color-yellow-200: #cbcae4;
+  --color-yellow-300: #0d0b33;
+  --color-yellow-400: #0d0b33;
+  --color-yellow-500: #0d0b33;
+  --color-yellow-600: #0d0b33;
+  --color-yellow-700: #0a0828;
+  --color-yellow-800: #07061d;
+  --color-yellow-900: #040312;
+  --color-yellow-950: #02020a;
+}
+
 :root,
 [data-theme="light"] {
   color-scheme: light;
@@ -87,6 +113,30 @@
   --text-on-accent-alt: #ecfdf5;
 
   --signal-copper: #ea580c;
+
+  --color-amber-50: #100f2e;
+  --color-amber-100: #1a1848;
+  --color-amber-200: #2c286d;
+  --color-amber-300: #c7d2fe;
+  --color-amber-400: #a5b4fc;
+  --color-amber-500: #818cf8;
+  --color-amber-600: #a5b4fc;
+  --color-amber-700: #c7d2fe;
+  --color-amber-800: #e0e7ff;
+  --color-amber-900: #eef2ff;
+  --color-amber-950: #08071e;
+
+  --color-yellow-50: #100f2e;
+  --color-yellow-100: #1a1848;
+  --color-yellow-200: #2c286d;
+  --color-yellow-300: #c7d2fe;
+  --color-yellow-400: #a5b4fc;
+  --color-yellow-500: #818cf8;
+  --color-yellow-600: #a5b4fc;
+  --color-yellow-700: #c7d2fe;
+  --color-yellow-800: #e0e7ff;
+  --color-yellow-900: #eef2ff;
+  --color-yellow-950: #08071e;
 }
 
 body {

@@ -142,7 +142,7 @@ export function OutletEarningsReport({ data, isLoading }: { data: OutletEarnings
                   <Line type="monotone" dataKey="udhaar_recovered" name="Udhaar Recovered" stroke="#0ea5e9" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
                   <Line type="monotone" dataKey="customer_returns" name="Customer Returns" stroke="#ef4444" strokeWidth={2} strokeDasharray="4 4" dot={{ r: 3 }} />
                   <Line type="monotone" dataKey="loyalty_value_redeemed" name="Loyalty Discount" stroke="#a855f7" strokeWidth={2} dot={{ r: 3 }} />
-                  <Line type="monotone" dataKey="credit_cashed_out" name="Credit Cashed Out" stroke="#eab308" strokeWidth={2} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="credit_cashed_out" name="Credit Cashed Out" stroke="#0d0b33" strokeWidth={2} dot={{ r: 3 }} />
                 </LineChart>
               </ResponsiveContainer>
             </div>

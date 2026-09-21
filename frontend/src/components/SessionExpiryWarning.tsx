@@ -98,14 +98,14 @@ export default function SessionExpiryWarning() {
         <div className="flex items-center gap-3 mb-4">
           <div
             className="flex items-center justify-center w-12 h-12 rounded-full"
-            style={{ background: "rgba(245, 158, 11, 0.15)" }}
+            style={{ background: "rgba(13, 11, 51, 0.15)" }}
           >
             <svg
               width="24"
               height="24"
               viewBox="0 0 24 24"
               fill="none"
-              stroke="#f59e0b"
+              stroke="#0d0b33"
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -133,11 +133,11 @@ export default function SessionExpiryWarning() {
         {/* Countdown */}
         <div
           className="text-center py-4 mb-4 rounded-xl"
-          style={{ background: "rgba(245, 158, 11, 0.1)" }}
+          style={{ background: "rgba(13, 11, 51, 0.1)" }}
         >
           <p
             className="text-3xl font-mono font-bold"
-            style={{ color: "#f59e0b" }}
+            style={{ color: "#0d0b33" }}
           >
             {timeStr}
           </p>

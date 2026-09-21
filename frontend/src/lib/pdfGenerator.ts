@@ -81,13 +81,13 @@ export async function generateReceiptPDF(
   restaurantName: string = "Outlet Receipt",
   menuItemsMap?: Record<string, { name: string; price?: string; tax_rate?: number | string | null; tax_category?: string | null; unit_label?: string; unit?: string; hsn_code?: string | null }>,
   storeDetailsOrAction?: any,
-  actionOpt: "download" | "view" = "download"
+  actionOpt: "download" | "view" | "print" = "download"
 ) {
   let storeDetails: any = undefined;
-  let action: "download" | "view" = actionOpt;
+  let action: "download" | "view" | "print" = actionOpt;
 
   if (typeof storeDetailsOrAction === "string") {
-    if (storeDetailsOrAction === "download" || storeDetailsOrAction === "view") {
+    if (storeDetailsOrAction === "download" || storeDetailsOrAction === "view" || storeDetailsOrAction === "print") {
       action = storeDetailsOrAction;
     }
   } else if (typeof storeDetailsOrAction === "object" && storeDetailsOrAction !== null) {
@@ -102,8 +102,8 @@ export async function generateReceiptPDF(
   });
 
   const pageWidth = doc.internal.pageSize.getWidth(); // 80mm
-  const margin = 4;
-  const contentWidth = pageWidth - margin * 2; // 72mm
+  const margin = 6;
+  const contentWidth = pageWidth - margin * 2; // 68mm safe printable width for thermal printers
 
   let y = 8;
 
@@ -165,7 +165,7 @@ export async function generateReceiptPDF(
   y += 4;
   const addressStr = getOutletField("address");
   if (addressStr) {
-    doc.setFont("courier", "normal");
+    doc.setFont("courier", "bold");
     doc.setFontSize(7);
     doc.text(addressStr, pageWidth / 2, y, { align: "center", maxWidth: contentWidth });
     y += 3.5;
@@ -175,7 +175,7 @@ export async function generateReceiptPDF(
   if (billQrUrlRaw) {
     try {
       const parsedUrl = new URL(billQrUrlRaw);
-      doc.setFont("courier", "normal");
+      doc.setFont("courier", "bold");
       doc.setFontSize(7);
       doc.text(parsedUrl.hostname, pageWidth / 2, y, { align: "center" });
       y += 3.5;
@@ -186,30 +186,30 @@ export async function generateReceiptPDF(
 
   const fssai = getOutletField("fssai_no");
   if (fssai) {
-    doc.setFont("courier", "normal");
+    doc.setFont("courier", "bold");
     doc.setFontSize(6.5);
     doc.text(`FSSAI Reg No: ${fssai}`, pageWidth / 2, y, { align: "center" });
     y += 3.5;
   }
 
   const gstin = getOutletField("gstin") || "01AAFCB7044K1ZV";
-  doc.setFont("courier", "normal");
-  doc.setFontSize(6.5);
+  doc.setFont("courier", "bold");
+  doc.setFontSize(7);
   doc.text(`GSTIN: ${gstin}`, pageWidth / 2, y, { align: "center" });
   y += 3.5;
   
   const phoneStr = getOutletField("phone");
   if (phoneStr) {
-    doc.setFont("courier", "normal");
-    doc.setFontSize(6.5);
+    doc.setFont("courier", "bold");
+    doc.setFontSize(7);
     doc.text(`Phone: ${phoneStr}`, pageWidth / 2, y, { align: "center" });
     y += 3.5;
   }
   
   const emailStr = getOutletField("email");
   if (emailStr) {
-    doc.setFont("courier", "normal");
-    doc.setFontSize(6.5);
+    doc.setFont("courier", "bold");
+    doc.setFontSize(7);
     doc.text(`Email: ${emailStr}`, pageWidth / 2, y, { align: "center", maxWidth: contentWidth });
     y += 3.5;
   }
@@ -224,7 +224,7 @@ export async function generateReceiptPDF(
   doc.text("TAX INVOICE", pageWidth / 2, y, { align: "center" });
 
   y += 4;
-  doc.setFont("courier", "normal");
+  doc.setFont("courier", "bold");
   doc.setFontSize(7.5);
 
   const invoiceNo = (order as any).invoice_no || (order as any).id?.slice(0, 8).toUpperCase() || "RECEIPT";
@@ -248,11 +248,12 @@ export async function generateReceiptPDF(
 
   y += 3.5;
   const guestName = (order as any).customer?.name || (order as any).customer_name || "Walk-In";
-  doc.text(`Customer: ${guestName}`, margin, y);
-  
   const guestPhone = (order as any).customer?.phone || (order as any).customer_phone;
   if (guestPhone) {
+    doc.text(`Customer: ${guestName}`, margin, y, { maxWidth: 38 });
     doc.text(`Mob: ${guestPhone}`, pageWidth - margin, y, { align: "right" });
+  } else {
+    doc.text(`Customer: ${guestName}`, margin, y, { maxWidth: contentWidth });
   }
 
   const custGstin = (order as any).customer_gstin || (order as any).customer?.gstin;
@@ -372,7 +373,8 @@ export async function generateReceiptPDF(
     theme: "plain",
     styles: {
       font: "courier",
-      fontSize: 6.5,
+      fontStyle: "bold",
+      fontSize: 7,
       cellPadding: { top: 1, bottom: 1, left: 0, right: 0 },
       textColor: [0, 0, 0],
       lineWidth: 0,
@@ -380,13 +382,13 @@ export async function generateReceiptPDF(
     headStyles: {
       font: "courier",
       fontStyle: "bold",
-      fontSize: 6.5,
+      fontSize: 7,
       textColor: [0, 0, 0],
       fillColor: false,
     },
     columnStyles: {
-      0: { cellWidth: 24, halign: "left" },
-      1: { cellWidth: 14, halign: "center" },
+      0: { cellWidth: 22, halign: "left" },
+      1: { cellWidth: 12, halign: "center" },
       2: { cellWidth: 11, halign: "right" },
       3: { cellWidth: 11, halign: "right" },
       4: { cellWidth: 12, halign: "right" },
@@ -463,7 +465,7 @@ export async function generateReceiptPDF(
   const creditApplied = parseFloat(String((order as any).credit_applied || 0)) || 0;
   const debitApplied = parseFloat(String((order as any).debit_applied || 0)) || 0;
 
-  doc.setFont("courier", "normal");
+  doc.setFont("courier", "bold");
   doc.setFontSize(7.5);
   doc.setTextColor(0, 0, 0);
 
@@ -550,7 +552,7 @@ export async function generateReceiptPDF(
   const hasExtraLines = deliveryCharge > 0 || handlingCharge > 0 || Math.abs(roundOff) > 0.001 || extraDiscountRupees > 0 || loyaltyDiscountRupees > 0 || mrpSavings > 0;
 
   if (hasExtraLines) {
-    doc.setFont("courier", "normal");
+    doc.setFont("courier", "bold");
     doc.setFontSize(7.5);
     doc.text("Bill Amount", margin, summaryY);
     doc.text(`INR ${billAmount.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
@@ -596,7 +598,7 @@ export async function generateReceiptPDF(
   let netPaid = netTotal;
 
   if (loyaltyDiscountRupees > 0 || creditApplied > 0 || debitApplied > 0 || debtSettled > 0 || creditAwarded > 0 || creditCashedOut > 0) {
-      doc.setFont("courier", "normal");
+      doc.setFont("courier", "bold");
       doc.setFontSize(7.5);
       
       if (loyaltyDiscountRupees > 0) {
@@ -657,7 +659,7 @@ export async function generateReceiptPDF(
   if (customerBalanceRaw !== undefined && customerBalanceRaw !== null) {
       const customerBalance = parseFloat(String(customerBalanceRaw)) || 0;
       summaryY += 2;
-      doc.setFont("courier", "normal");
+      doc.setFont("courier", "bold");
       doc.setFontSize(7.5);
       if (customerBalance > 0) {
           doc.text("Store Credit", margin, summaryY);
@@ -675,7 +677,7 @@ export async function generateReceiptPDF(
   const customerLoyaltyRaw = (order as any).customer_loyalty_points ?? (order as any).customer_loyalty_balance ?? (order as any).customer?.loyalty_points;
   if (customerLoyaltyRaw !== undefined && customerLoyaltyRaw !== null) {
       const loyaltyPts = parseInt(String(customerLoyaltyRaw), 10) || 0;
-      doc.setFont("courier", "normal");
+      doc.setFont("courier", "bold");
       doc.setFontSize(7.5);
       doc.text("Loyalty Points", margin, summaryY);
       doc.text(`${loyaltyPts} pts`, pageWidth - margin, summaryY, { align: "right" });
@@ -694,7 +696,7 @@ export async function generateReceiptPDF(
       doc.setFontSize(7.5);
       doc.text("PAYMENT MODE: SPLIT", margin, summaryY);
       summaryY += 3.5;
-      doc.setFont("courier", "normal");
+      doc.setFont("courier", "bold");
       doc.setFontSize(7.5);
       doc.text("  Cash Tendered", margin, summaryY);
       doc.text(`INR ${cashAmt.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
@@ -706,7 +708,7 @@ export async function generateReceiptPDF(
       summaryY += 1.5;
       drawDashedLine(summaryY);
       summaryY += 4.0;
-      doc.setFont("courier", "normal");
+      doc.setFont("courier", "bold");
       doc.setFontSize(7.5);
       doc.text(`Payment Mode: ${(order as any).payment_method}`, margin, summaryY);
       summaryY += 3.5;
@@ -721,7 +723,7 @@ export async function generateReceiptPDF(
     doc.text("GST TAX SUMMARY", pageWidth / 2, summaryY, { align: "center" });
     summaryY += 3.2;
 
-    doc.setFont("courier", "normal");
+    doc.setFont("courier", "bold");
     doc.setFontSize(6.5);
     doc.text(isInterstateOrder ? "(INTER-STATE / IGST)" : "(INTRA-STATE SALE)", pageWidth / 2, summaryY, { align: "center" });
     summaryY += 3.0;
@@ -733,21 +735,21 @@ export async function generateReceiptPDF(
     doc.setFontSize(6.5);
     if (isInterstateOrder) {
       doc.text("HSN/SAC", margin, summaryY);
-      doc.text("Taxable", 38, summaryY, { align: "right" });
-      doc.text("Rate", 54, summaryY, { align: "right" });
+      doc.text("Taxable", 36, summaryY, { align: "right" });
+      doc.text("Rate", 52, summaryY, { align: "right" });
       doc.text("IGST Amt", pageWidth - margin, summaryY, { align: "right" });
     } else {
       doc.text("HSN/SAC", margin, summaryY);
-      doc.text("Taxable", 30, summaryY, { align: "right" });
-      doc.text("CGST", 44, summaryY, { align: "right" });
-      doc.text("SGST", 58, summaryY, { align: "right" });
+      doc.text("Taxable", 29, summaryY, { align: "right" });
+      doc.text("CGST", 43, summaryY, { align: "right" });
+      doc.text("SGST", 57, summaryY, { align: "right" });
       doc.text("Total Tax", pageWidth - margin, summaryY, { align: "right" });
     }
     summaryY += 1.8;
     drawDashedLine(summaryY);
     summaryY += 4.0;
 
-    doc.setFont("courier", "normal");
+    doc.setFont("courier", "bold");
     doc.setFontSize(6.5);
 
     let totHsnBase = 0;
@@ -763,14 +765,14 @@ export async function generateReceiptPDF(
       doc.text(displayHsn, margin, summaryY);
 
       if (isInterstateOrder) {
-        doc.text(grp.base.toFixed(2), 38, summaryY, { align: "right" });
-        doc.text(`${grp.rate.toFixed(1).replace(/\.0$/, "")}%`, 54, summaryY, { align: "right" });
+        doc.text(grp.base.toFixed(2), 36, summaryY, { align: "right" });
+        doc.text(`${grp.rate.toFixed(1).replace(/\.0$/, "")}%`, 52, summaryY, { align: "right" });
         doc.text(grp.tax.toFixed(2), pageWidth - margin, summaryY, { align: "right" });
       } else {
         const halfTax = grp.tax / 2;
-        doc.text(grp.base.toFixed(2), 30, summaryY, { align: "right" });
-        doc.text(halfTax.toFixed(2), 44, summaryY, { align: "right" });
-        doc.text(halfTax.toFixed(2), 58, summaryY, { align: "right" });
+        doc.text(grp.base.toFixed(2), 29, summaryY, { align: "right" });
+        doc.text(halfTax.toFixed(2), 43, summaryY, { align: "right" });
+        doc.text(halfTax.toFixed(2), 57, summaryY, { align: "right" });
         doc.text(grp.tax.toFixed(2), pageWidth - margin, summaryY, { align: "right" });
       }
       summaryY += 3.8;
@@ -785,13 +787,13 @@ export async function generateReceiptPDF(
     doc.text("Total", margin, summaryY);
 
     if (isInterstateOrder) {
-      doc.text(totHsnBase.toFixed(2), 38, summaryY, { align: "right" });
+      doc.text(totHsnBase.toFixed(2), 36, summaryY, { align: "right" });
       doc.text(totHsnTax.toFixed(2), pageWidth - margin, summaryY, { align: "right" });
     } else {
       const halfTot = totHsnTax / 2;
-      doc.text(totHsnBase.toFixed(2), 30, summaryY, { align: "right" });
-      doc.text(halfTot.toFixed(2), 44, summaryY, { align: "right" });
-      doc.text(halfTot.toFixed(2), 58, summaryY, { align: "right" });
+      doc.text(totHsnBase.toFixed(2), 29, summaryY, { align: "right" });
+      doc.text(halfTot.toFixed(2), 43, summaryY, { align: "right" });
+      doc.text(halfTot.toFixed(2), 57, summaryY, { align: "right" });
       doc.text(totHsnTax.toFixed(2), pageWidth - margin, summaryY, { align: "right" });
     }
 
@@ -882,7 +884,14 @@ export async function generateReceiptPDF(
   // With jsPDF you can't dynamically resize the page after creation easily, 
   // but starting with 297mm ensures we don't clip unless it's a huge order.
   
-  if (action === "view") {
+  if (action === "print") {
+    doc.autoPrint();
+    const blobUrl = doc.output("bloburl");
+    const printWindow = window.open(blobUrl, "_blank");
+    if (printWindow) {
+      printWindow.focus();
+    }
+  } else if (action === "view") {
     const blobUrl = doc.output("bloburl");
     window.open(blobUrl, "_blank");
   } else {
@@ -1035,12 +1044,12 @@ export async function generateReturnReceiptPDF(
   returnData: ReturnPdfData,
   restaurantName: string = "ApnaGreen Basket",
   storeDetailsOrAction?: any,
-  actionOpt: "download" | "view" = "download",
+  actionOpt: "download" | "view" | "print" = "download",
   menuItemsMap?: Record<string, any>
 ) {
   let storeDetails: any = undefined;
-  let action: "download" | "view" = actionOpt;
-  if (storeDetailsOrAction === "download" || storeDetailsOrAction === "view") {
+  let action: "download" | "view" | "print" = actionOpt;
+  if (storeDetailsOrAction === "download" || storeDetailsOrAction === "view" || storeDetailsOrAction === "print") {
     action = storeDetailsOrAction;
   } else if (storeDetailsOrAction) {
     storeDetails = storeDetailsOrAction;
@@ -1064,8 +1073,8 @@ export async function generateReturnReceiptPDF(
   });
 
   const pageWidth = doc.internal.pageSize.getWidth();
-  const margin = 4;
-  const contentWidth = pageWidth - margin * 2;
+  const margin = 6;
+  const contentWidth = pageWidth - margin * 2; // 68mm safe printable width for thermal printers
   let y = 8;
 
   const drawDashedLine = (posY: number) => {
@@ -1120,7 +1129,7 @@ export async function generateReturnReceiptPDF(
   y += 4;
   const addressStr = getOutletField("address");
   if (addressStr) {
-    doc.setFont("courier", "normal");
+    doc.setFont("courier", "bold");
     doc.setFontSize(7);
     doc.text(addressStr, pageWidth / 2, y, { align: "center", maxWidth: contentWidth });
     y += 3.5;
@@ -1130,7 +1139,7 @@ export async function generateReturnReceiptPDF(
   if (billQrUrlRaw) {
     try {
       const parsedUrl = new URL(billQrUrlRaw);
-      doc.setFont("courier", "normal");
+      doc.setFont("courier", "bold");
       doc.setFontSize(7);
       doc.text(parsedUrl.hostname, pageWidth / 2, y, { align: "center" });
       y += 3.5;
@@ -1139,30 +1148,30 @@ export async function generateReturnReceiptPDF(
 
   const fssai = getOutletField("fssai_no");
   if (fssai) {
-    doc.setFont("courier", "normal");
+    doc.setFont("courier", "bold");
     doc.setFontSize(6.5);
     doc.text(`FSSAI Reg No: ${fssai}`, pageWidth / 2, y, { align: "center" });
     y += 3.5;
   }
 
   const gstin = getOutletField("gstin") || "01AAFCB7044K1ZV";
-  doc.setFont("courier", "normal");
-  doc.setFontSize(6.5);
+  doc.setFont("courier", "bold");
+  doc.setFontSize(7);
   doc.text(`GSTIN: ${gstin}`, pageWidth / 2, y, { align: "center" });
   y += 3.5;
   
   const phoneStr = getOutletField("phone");
   if (phoneStr) {
-    doc.setFont("courier", "normal");
-    doc.setFontSize(6.5);
+    doc.setFont("courier", "bold");
+    doc.setFontSize(7);
     doc.text(`Phone: ${phoneStr}`, pageWidth / 2, y, { align: "center" });
     y += 3.5;
   }
   
   const emailStr = getOutletField("email");
   if (emailStr) {
-    doc.setFont("courier", "normal");
-    doc.setFontSize(6.5);
+    doc.setFont("courier", "bold");
+    doc.setFontSize(7);
     doc.text(`Email: ${emailStr}`, pageWidth / 2, y, { align: "center", maxWidth: contentWidth });
     y += 3.5;
   }
@@ -1177,7 +1186,7 @@ export async function generateReturnReceiptPDF(
   doc.text("RETURN INVOICE", pageWidth / 2, y, { align: "center" });
 
   y += 4;
-  doc.setFont("courier", "normal");
+  doc.setFont("courier", "bold");
   doc.setFontSize(7.5);
 
   const invoiceNo = returnData.return_number;
@@ -1206,11 +1215,12 @@ export async function generateReturnReceiptPDF(
 
   y += 3.5;
   const guestName = returnData.customer_name || "Walk-In";
-  doc.text(`Customer  : ${guestName}`, margin, y);
-  
   const guestPhone = returnData.customer_phone;
   if (guestPhone) {
+    doc.text(`Customer  : ${guestName}`, margin, y, { maxWidth: 38 });
     doc.text(`Mob: ${guestPhone}`, pageWidth - margin, y, { align: "right" });
+  } else {
+    doc.text(`Customer  : ${guestName}`, margin, y, { maxWidth: contentWidth });
   }
   
   // Determine if interstate based strictly on original bill if present; fallback to outlet settings
@@ -1274,7 +1284,8 @@ export async function generateReturnReceiptPDF(
     theme: "plain",
     styles: {
       font: "courier",
-      fontSize: 6.5,
+      fontStyle: "bold",
+      fontSize: 7,
       cellPadding: { top: 1, bottom: 1, left: 0, right: 0 },
       textColor: [0, 0, 0],
       lineWidth: 0,
@@ -1282,13 +1293,13 @@ export async function generateReturnReceiptPDF(
     headStyles: {
       font: "courier",
       fontStyle: "bold",
-      fontSize: 6.5,
+      fontSize: 7,
       textColor: [0, 0, 0],
       fillColor: false,
     },
     columnStyles: {
-      0: { cellWidth: 24, halign: "left" },
-      1: { cellWidth: 14, halign: "center" },
+      0: { cellWidth: 22, halign: "left" },
+      1: { cellWidth: 12, halign: "center" },
       2: { cellWidth: 11, halign: "right" },
       3: { cellWidth: 11, halign: "right" },
       4: { cellWidth: 12, halign: "right" },
@@ -1330,7 +1341,8 @@ export async function generateReturnReceiptPDF(
       theme: "plain",
       styles: {
         font: "courier",
-        fontSize: 6.5,
+        fontStyle: "bold",
+        fontSize: 7,
         cellPadding: { top: 1, bottom: 1, left: 0, right: 0 },
         textColor: [0, 0, 0],
         lineWidth: 0,
@@ -1338,13 +1350,13 @@ export async function generateReturnReceiptPDF(
       headStyles: {
         font: "courier",
         fontStyle: "bold",
-        fontSize: 6.5,
+        fontSize: 7,
         textColor: [0, 0, 0],
         fillColor: false,
       },
       columnStyles: {
-        0: { cellWidth: 35, halign: "left" },
-        1: { cellWidth: 15, halign: "center" },
+        0: { cellWidth: 32, halign: "left" },
+        1: { cellWidth: 14, halign: "center" },
         2: { cellWidth: 11, halign: "right" },
         3: { cellWidth: 11, halign: "right" },
       },
@@ -1400,7 +1412,7 @@ export async function generateReturnReceiptPDF(
   // 4. FINANCIAL SUMMARY GRID
   let summaryY = finalY + 4;
   
-  doc.setFont("courier", "normal");
+  doc.setFont("courier", "bold");
   doc.setFontSize(7.5);
   doc.setTextColor(0, 0, 0);
 
@@ -1472,7 +1484,7 @@ export async function generateReturnReceiptPDF(
   const creditCashedOut = returnData.credit_cashed_out || 0;
 
   if (creditApplied > 0 || debitApplied > 0 || debtSettled > 0 || creditAwarded > 0 || creditCashedOut > 0) {
-      doc.setFont("courier", "normal");
+      doc.setFont("courier", "bold");
       doc.setFontSize(7.5);
       
       if (creditApplied > 0) {
@@ -1527,7 +1539,7 @@ export async function generateReturnReceiptPDF(
   if (customerBalanceRaw !== undefined && customerBalanceRaw !== null) {
       const customerBalance = parseFloat(String(customerBalanceRaw)) || 0;
       summaryY += 2;
-      doc.setFont("courier", "normal");
+      doc.setFont("courier", "bold");
       doc.setFontSize(7.5);
       if (customerBalance >= 0) {
           doc.text("Store Credit Balance", margin, summaryY);
@@ -1548,7 +1560,7 @@ export async function generateReturnReceiptPDF(
     doc.text("GST TAX SUMMARY", pageWidth / 2, summaryY, { align: "center" });
     summaryY += 3.2;
 
-    doc.setFont("courier", "normal");
+    doc.setFont("courier", "bold");
     doc.setFontSize(6.5);
     doc.text(isInterstateOrder ? "(INTER-STATE / IGST)" : "(INTRA-STATE SALE)", pageWidth / 2, summaryY, { align: "center" });
     summaryY += 3.0;
@@ -1560,21 +1572,21 @@ export async function generateReturnReceiptPDF(
     doc.setFontSize(6.5);
     if (isInterstateOrder) {
       doc.text("HSN/SAC", margin, summaryY);
-      doc.text("Taxable", 38, summaryY, { align: "right" });
-      doc.text("Rate", 54, summaryY, { align: "right" });
+      doc.text("Taxable", 36, summaryY, { align: "right" });
+      doc.text("Rate", 52, summaryY, { align: "right" });
       doc.text("IGST Amt", pageWidth - margin, summaryY, { align: "right" });
     } else {
       doc.text("HSN/SAC", margin, summaryY);
-      doc.text("Taxable", 30, summaryY, { align: "right" });
-      doc.text("CGST", 44, summaryY, { align: "right" });
-      doc.text("SGST", 58, summaryY, { align: "right" });
+      doc.text("Taxable", 29, summaryY, { align: "right" });
+      doc.text("CGST", 43, summaryY, { align: "right" });
+      doc.text("SGST", 57, summaryY, { align: "right" });
       doc.text("Total Tax", pageWidth - margin, summaryY, { align: "right" });
     }
     summaryY += 1.8;
     drawDashedLine(summaryY);
     summaryY += 4.0;
 
-    doc.setFont("courier", "normal");
+    doc.setFont("courier", "bold");
     doc.setFontSize(6.5);
 
     let totHsnBase = 0;
@@ -1590,14 +1602,14 @@ export async function generateReturnReceiptPDF(
       doc.text(displayHsn, margin, summaryY);
 
       if (isInterstateOrder) {
-        doc.text(grp.base.toFixed(2), 38, summaryY, { align: "right" });
-        doc.text(`${grp.rate.toFixed(1).replace(/\.0$/, "")}%`, 54, summaryY, { align: "right" });
+        doc.text(grp.base.toFixed(2), 36, summaryY, { align: "right" });
+        doc.text(`${grp.rate.toFixed(1).replace(/\.0$/, "")}%`, 52, summaryY, { align: "right" });
         doc.text(grp.tax.toFixed(2), pageWidth - margin, summaryY, { align: "right" });
       } else {
         const halfTax = grp.tax / 2;
-        doc.text(grp.base.toFixed(2), 30, summaryY, { align: "right" });
-        doc.text(halfTax.toFixed(2), 44, summaryY, { align: "right" });
-        doc.text(halfTax.toFixed(2), 58, summaryY, { align: "right" });
+        doc.text(grp.base.toFixed(2), 29, summaryY, { align: "right" });
+        doc.text(halfTax.toFixed(2), 43, summaryY, { align: "right" });
+        doc.text(halfTax.toFixed(2), 57, summaryY, { align: "right" });
         doc.text(grp.tax.toFixed(2), pageWidth - margin, summaryY, { align: "right" });
       }
       summaryY += 3.8;
@@ -1612,13 +1624,13 @@ export async function generateReturnReceiptPDF(
     doc.text("Total", margin, summaryY);
 
     if (isInterstateOrder) {
-      doc.text(totHsnBase.toFixed(2), 38, summaryY, { align: "right" });
+      doc.text(totHsnBase.toFixed(2), 36, summaryY, { align: "right" });
       doc.text(totHsnTax.toFixed(2), pageWidth - margin, summaryY, { align: "right" });
     } else {
       const halfTot = totHsnTax / 2;
-      doc.text(totHsnBase.toFixed(2), 30, summaryY, { align: "right" });
-      doc.text(halfTot.toFixed(2), 44, summaryY, { align: "right" });
-      doc.text(halfTot.toFixed(2), 58, summaryY, { align: "right" });
+      doc.text(totHsnBase.toFixed(2), 29, summaryY, { align: "right" });
+      doc.text(halfTot.toFixed(2), 43, summaryY, { align: "right" });
+      doc.text(halfTot.toFixed(2), 57, summaryY, { align: "right" });
       doc.text(totHsnTax.toFixed(2), pageWidth - margin, summaryY, { align: "right" });
     }
 
@@ -1707,7 +1719,14 @@ export async function generateReturnReceiptPDF(
     // Note: jsPDF format modification after creation is complex, so we skip dynamic trim here for safety unless explicitly handled
   }
 
-  if (action === "download") {
+  if (action === "print") {
+    doc.autoPrint();
+    const blobUrl = doc.output("bloburl");
+    const printWindow = window.open(blobUrl, "_blank");
+    if (printWindow) {
+      printWindow.focus();
+    }
+  } else if (action === "download") {
     doc.save(`Return-${invoiceNo}.pdf`);
   } else {
     window.open(doc.output("bloburl"), "_blank");

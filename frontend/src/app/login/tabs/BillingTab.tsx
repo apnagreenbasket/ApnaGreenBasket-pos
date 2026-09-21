@@ -28,6 +28,9 @@ import {
   X,
   Clock,
   Play,
+  MoreHorizontal,
+  ChevronDown,
+  FileText,
 } from "lucide-react";
 import { generateReceiptPDF, generateBillsHistoryPdfReport } from "@/lib/pdfGenerator";
 import { generateA4InvoicePDF } from "@/lib/invoiceGenerator";
@@ -115,6 +118,20 @@ export function BillingTab({
   const [successReturnData, setSuccessReturnData] = useState<any | null>(null);
   const [showReturnSuccessModal, setShowReturnSuccessModal] = useState(false);
   const [showDenomWidget, setShowDenomWidget] = useState(false);
+  const [activeDropdownBillId, setActiveDropdownBillId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleGlobalClick = () => setActiveDropdownBillId(null);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setActiveDropdownBillId(null);
+    };
+    window.addEventListener("click", handleGlobalClick);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("click", handleGlobalClick);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
 
   const menuItemsMap = useMemo(() => {
     const map: Record<string, AdminMenuItem> = {};
@@ -226,7 +243,7 @@ export function BillingTab({
         e.preventDefault();
         const recentBill = billsList.find(b => b.status === "PAID" || b.status === "COMPLETED");
         if (recentBill) {
-          generateReceiptPDF(recentBill as any, restaurant?.name || "RESTAURANT", menuItemsMap, restaurant || {}, "view");
+          generateReceiptPDF(recentBill as any, restaurant?.name || "RESTAURANT", menuItemsMap, restaurant || {}, "print");
         }
       }
     };
@@ -626,7 +643,7 @@ export function BillingTab({
         </div>
 
         {/* Bills List Table */}
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto min-h-[380px] pb-24">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
@@ -842,87 +859,200 @@ export function BillingTab({
 
                       <td className="p-3.5 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                        {/* Resume / Edit Draft Button */}
-                        {(b.status === "DRAFT" || b.status === "PENDING") && onResumeDraft && (
-                          <button
-                            type="button"
-                            onClick={() => onResumeDraft(b)}
-                            className="p-1.5 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:border-[var(--text-muted)] hover:text-[var(--text-primary)] transition"
-                            title="Resume / Edit Draft Bill"
-                          >
-                            <FileEdit className="h-4 w-4" />
-                          </button>
-                        )}
-                        
-                        {/* Delete Draft Button */}
-                        {onDeleteBill && b.status !== "PAID" && b.status !== "COMPLETED" && b.status !== "PARTIALLY_REFUNDED" && b.status !== "REFUNDED" && (
-                          <button
-                            type="button"
-                            onClick={() => setBillToDelete(b)}
-                            className="p-1.5 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:border-red-500/50 hover:text-red-400 transition"
-                            title="Delete Bill Permanently"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        )}
+                          {/* 1. Edit Button */}
+                          {(b.status === "PAID" || b.status === "COMPLETED") && onEditCompletedBill ? (
+                            <button
+                              type="button"
+                              onClick={() => onEditCompletedBill(b)}
+                              className="flex items-center gap-1 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-xs font-bold text-[var(--text-secondary)] hover:border-[var(--text-muted)] hover:text-[var(--text-primary)] transition cursor-pointer shrink-0"
+                              title="Edit this completed bill (Voids old bill)"
+                            >
+                              <FileEdit className="h-3.5 w-3.5" />
+                              <span>Edit</span>
+                            </button>
+                          ) : (b.status === "DRAFT" || b.status === "PENDING") && onResumeDraft ? (
+                            <button
+                              type="button"
+                              onClick={() => onResumeDraft(b)}
+                              className="flex items-center gap-1 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-xs font-bold text-[var(--text-secondary)] hover:border-[var(--text-muted)] hover:text-[var(--text-primary)] transition cursor-pointer shrink-0"
+                              title="Resume / Edit Draft Bill"
+                            >
+                              <FileEdit className="h-3.5 w-3.5" />
+                              <span>Edit</span>
+                            </button>
+                          ) : null}
 
-                        {/* Apply Discount Button */}
-                        {b.status !== "PAID" && b.status !== "COMPLETED" && b.status !== "PARTIALLY_REFUNDED" && b.status !== "REFUNDED" && (
-                          <button
-                            type="button"
-                            onClick={() => onOpenDiscountModal(b)}
-                            className="p-1.5 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:border-[var(--text-muted)] hover:text-[var(--text-primary)] transition"
-                            title="Apply Discount"
-                          >
-                            <Percent className="h-4 w-4" />
-                          </button>
-                        )}
-
-                        {/* Edit Completed Bill Button */}
-                        {(b.status === "PAID" || b.status === "COMPLETED") && onEditCompletedBill && (
-                          <button
-                            type="button"
-                            onClick={() => onEditCompletedBill(b)}
-                            className="flex items-center gap-1.5 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-1.5 text-xs font-bold text-[var(--text-secondary)] hover:border-[var(--text-muted)] hover:text-[var(--text-primary)] transition"
-                            title="Edit this completed bill (Voids old bill)"
-                          >
-                            <FileEdit className="h-4 w-4" />
-                            <span>Edit Bill</span>
-                          </button>
-                        )}
-
-                        {/* View / Download PDF Receipt Buttons */}
+                          {/* 2. View Button */}
                           <button
                             type="button"
                             onClick={() => {
                               generateReceiptPDF(b as any, restaurant?.name || "RESTAURANT", menuItemsMap, restaurant || {}, "view");
                             }}
-                            className="p-1.5 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:border-[var(--text-muted)] hover:text-[var(--text-primary)] transition"
+                            className="p-1.5 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:border-[var(--text-muted)] hover:text-[var(--text-primary)] transition cursor-pointer shrink-0"
                             title="View PDF Bill"
                           >
                             <Eye className="h-4 w-4" />
                           </button>
+
+                          {/* 3. Direct Print Button */}
                           <button
                             type="button"
                             onClick={() => {
-                              generateReceiptPDF(b as any, restaurant?.name || "RESTAURANT", menuItemsMap, restaurant || {}, "download");
+                              generateReceiptPDF(b as any, restaurant?.name || "RESTAURANT", menuItemsMap, restaurant || {}, "print");
                             }}
-                            className="flex items-center gap-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-strong)] px-3 py-1.5 text-xs font-bold text-[var(--text-primary)] hover:border-[var(--text-muted)] transition"
+                            className="p-1.5 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:border-emerald-500 hover:text-emerald-500 transition cursor-pointer shrink-0"
+                            title="Print Bill Directly"
                           >
-                            <Download className="h-4 w-4" />
-                            <span>Bill</span>
+                            <Printer className="h-4 w-4" />
                           </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              generateA4InvoicePDF(b as any, restaurant?.name || "RESTAURANT", menuItemsMap, restaurant || {}, "download");
-                            }}
-                            className="flex items-center gap-1.5 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-1.5 text-xs font-bold text-[var(--text-primary)] hover:border-[var(--text-muted)] transition"
-                          >
-                            <Download className="h-4 w-4" />
-                            <span>Invoice</span>
-                          </button>
+
+                          {/* 4. More Button with Dropdown Popup */}
+                          <div className="relative inline-block text-left">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveDropdownBillId(activeDropdownBillId === b.id ? null : b.id);
+                              }}
+                              className={`flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-bold transition cursor-pointer shrink-0 ${
+                                activeDropdownBillId === b.id
+                                  ? "border-[var(--accent-brand)] text-[var(--accent-brand)] bg-[var(--accent-brand)]/10"
+                                  : "border-[var(--border-strong)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:border-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                              }`}
+                              title="More options"
+                            >
+                              <MoreHorizontal className="h-3.5 w-3.5" />
+                              <span>More</span>
+                              <ChevronDown className={`h-3 w-3 transition-transform ${activeDropdownBillId === b.id ? "rotate-180" : ""}`} />
+                            </button>
+
+                            {/* Dropdown Popup Menu */}
+                            {activeDropdownBillId === b.id && (
+                              <div
+                                onClick={(e) => e.stopPropagation()}
+                                className="absolute right-0 top-full mt-1.5 w-52 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] p-1.5 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-100 divide-y divide-[var(--border-subtle)]"
+                              >
+                                <div className="py-1">
+                                  <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
+                                    Bill Actions
+                                  </div>
+
+                                  {/* View Bill */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveDropdownBillId(null);
+                                      generateReceiptPDF(b as any, restaurant?.name || "RESTAURANT", menuItemsMap, restaurant || {}, "view");
+                                    }}
+                                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-surface-elevated)] transition text-left cursor-pointer"
+                                  >
+                                    <Eye className="h-4 w-4 text-sky-500 shrink-0" />
+                                    <span>View Bill</span>
+                                  </button>
+
+                                  {/* Edit Bill */}
+                                  {(b.status === "PAID" || b.status === "COMPLETED") && onEditCompletedBill && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setActiveDropdownBillId(null);
+                                        onEditCompletedBill(b);
+                                      }}
+                                      className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-surface-elevated)] transition text-left cursor-pointer"
+                                    >
+                                      <FileEdit className="h-4 w-4 text-amber-500 shrink-0" />
+                                      <span>Edit Bill</span>
+                                    </button>
+                                  )}
+
+                                  {(b.status === "DRAFT" || b.status === "PENDING") && onResumeDraft && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setActiveDropdownBillId(null);
+                                        onResumeDraft(b);
+                                      }}
+                                      className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-surface-elevated)] transition text-left cursor-pointer"
+                                    >
+                                      <FileEdit className="h-4 w-4 text-amber-500 shrink-0" />
+                                      <span>Edit Draft Bill</span>
+                                    </button>
+                                  )}
+
+                                  {/* Print Bill */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveDropdownBillId(null);
+                                      generateReceiptPDF(b as any, restaurant?.name || "RESTAURANT", menuItemsMap, restaurant || {}, "print");
+                                    }}
+                                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-surface-elevated)] transition text-left cursor-pointer"
+                                  >
+                                    <Printer className="h-4 w-4 text-emerald-500 shrink-0" />
+                                    <span>Print Bill</span>
+                                  </button>
+                                </div>
+
+                                <div className="py-1">
+                                  {/* Download Bill */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveDropdownBillId(null);
+                                      generateReceiptPDF(b as any, restaurant?.name || "RESTAURANT", menuItemsMap, restaurant || {}, "download");
+                                    }}
+                                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-surface-elevated)] transition text-left cursor-pointer"
+                                  >
+                                    <Download className="h-4 w-4 text-blue-500 shrink-0" />
+                                    <span>Download Bill</span>
+                                  </button>
+
+                                  {/* Download Invoice */}
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setActiveDropdownBillId(null);
+                                      generateA4InvoicePDF(b as any, restaurant?.name || "RESTAURANT", menuItemsMap, restaurant || {}, "download");
+                                    }}
+                                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-surface-elevated)] transition text-left cursor-pointer"
+                                  >
+                                    <FileText className="h-4 w-4 text-purple-500 shrink-0" />
+                                    <span>Download Invoice</span>
+                                  </button>
+                                </div>
+
+                                {b.status !== "PAID" && b.status !== "COMPLETED" && b.status !== "PARTIALLY_REFUNDED" && b.status !== "REFUNDED" && (
+                                  <div className="py-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setActiveDropdownBillId(null);
+                                        onOpenDiscountModal(b);
+                                      }}
+                                      className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-surface-elevated)] transition text-left cursor-pointer"
+                                    >
+                                      <Percent className="h-4 w-4 text-orange-500 shrink-0" />
+                                      <span>Apply Discount</span>
+                                    </button>
+                                    {onDeleteBill && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setActiveDropdownBillId(null);
+                                          setBillToDelete(b);
+                                        }}
+                                        className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-semibold text-rose-500 hover:bg-rose-500/10 transition text-left cursor-pointer"
+                                      >
+                                        <Trash2 className="h-4 w-4 text-rose-500 shrink-0" />
+                                        <span>Delete Draft</span>
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </td>
                     </tr>
