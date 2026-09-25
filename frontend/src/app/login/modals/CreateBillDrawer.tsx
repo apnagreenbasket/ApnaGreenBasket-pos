@@ -1242,6 +1242,10 @@ export function CreateBillDrawer({
     0
   );
 
+  const totalItemCount = draftCartItems.length;
+  const totalItemQty = draftCartItems.reduce((acc, item) => acc + (Number(item.quantity) || 0), 0);
+  const formattedTotalQty = Number.isInteger(totalItemQty) ? totalItemQty : parseFloat(totalItemQty.toFixed(3));
+
   const totalMrp = draftCartItems.reduce(
     (acc, item) => acc + ((item.mrp || item.unit_price) * item.quantity),
     0
@@ -1940,7 +1944,17 @@ export function CreateBillDrawer({
                   No items in bill yet. Scan a barcode or click products on the left.
                 </div>
               ) : (
-                draftCartItems.map((ci, idx) => {
+                <>
+                  <div className="flex items-center justify-between pb-1.5 px-1 text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)] border-b border-[var(--border-subtle)]">
+                    <div className="flex items-center gap-2">
+                      <span>Billed Items</span>
+                      <span className="text-[10px] font-mono font-bold text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-full normal-case">
+                        {totalItemCount} {totalItemCount === 1 ? "Item" : "Items"} ({formattedTotalQty} Qty)
+                      </span>
+                    </div>
+                    <span>Price</span>
+                  </div>
+                  {draftCartItems.map((ci, idx) => {
                   const originalItem = menuItems.find(m => m.id === ci.menu_item_id);
                   const variant = ci.variant_id ? variantsByItem[originalItem?.id || ""]?.find(v => v.id === ci.variant_id) : undefined;
                   const currentBatch = originalItem?.active_batches?.find(b => b.id === ci.selected_batch_id) || originalItem?.active_batches?.[0];
@@ -2289,14 +2303,22 @@ export function CreateBillDrawer({
                     </button>
                   </div>
                   );
-                })
+                })}
+              </>
               )}
             </div>
 
             {/* Footer: Hardcoded Fixed Bottom Summary & Action Buttons */}
             <div className="flex-shrink-0 p-4 border-t border-[var(--border-subtle)] bg-[var(--bg-surface)] space-y-3 font-mono shadow-lg">
               <div className="flex items-center justify-between text-xl font-bold font-sans">
-                <span className="text-[var(--text-primary)] font-black">Grand Total Payable:</span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[var(--text-primary)] font-black">Grand Total Payable:</span>
+                  {totalItemCount > 0 && (
+                    <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20 font-mono tracking-normal">
+                      {totalItemCount} {totalItemCount === 1 ? "Item" : "Items"} ({formattedTotalQty} Qty)
+                    </span>
+                  )}
+                </div>
                 <span className="font-mono text-3xl font-black text-sky-400">
                   ₹{grandTotalPayable.toFixed(2)}
                 </span>

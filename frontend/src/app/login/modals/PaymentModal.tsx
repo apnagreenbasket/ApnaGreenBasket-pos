@@ -184,6 +184,14 @@ export function PaymentModal({
     return paymentTargetBill.total_amount || 0;
   }, [paymentTargetBill]);
 
+  const { totalItemCount, totalQuantity } = useMemo(() => {
+    const items = paymentTargetBill?.items || [];
+    const count = items.length;
+    const qty = items.reduce((sum: number, it: any) => sum + (Number(it.quantity) || 1), 0);
+    return { totalItemCount: count, totalQuantity: qty };
+  }, [paymentTargetBill?.items]);
+  const formattedTotalQty = Number.isInteger(totalQuantity) ? totalQuantity : parseFloat(totalQuantity.toFixed(3));
+
   const calculatedDiscountRupees = useMemo(() => {
     if (!paymentTargetBill) return 0;
     const type = paymentTargetBill.discount_type;
@@ -837,9 +845,16 @@ export function PaymentModal({
             {/* Top Customer Info & Order Header */}
             <div className="space-y-2 flex-shrink-0">
               <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">
-                  Order Summary
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">
+                    Order Summary
+                  </span>
+                  {totalItemCount > 0 && (
+                    <span className="text-[10px] font-mono font-bold text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-full">
+                      {totalItemCount} {totalItemCount === 1 ? "Item" : "Items"} ({formattedTotalQty} Qty)
+                    </span>
+                  )}
+                </div>
                 <span className="text-[11px] font-mono font-bold text-[var(--accent-brand)] bg-[var(--accent-brand)]/10 px-2.5 py-0.5 rounded-md">
                   {paymentTargetBill.source ? paymentTargetBill.source.toUpperCase() : "POS BILL"}
                 </span>
@@ -926,7 +941,14 @@ export function PaymentModal({
             {paymentTargetBill.items && paymentTargetBill.items.length > 0 ? (
               <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-1.5">
                 <div className="sticky top-0 bg-[var(--bg-surface)] py-1 flex items-center justify-between px-3 text-[10px] uppercase font-bold text-[var(--text-muted)] border-b border-[var(--border-subtle)] z-10">
-                  <span>Item Description</span>
+                  <div className="flex items-center gap-2">
+                    <span>Item Description</span>
+                    {totalItemCount > 0 && (
+                      <span className="text-[9px] font-mono font-bold text-sky-400 bg-sky-500/10 border border-sky-500/20 px-1.5 py-0.2 rounded-full normal-case">
+                        {totalItemCount} {totalItemCount === 1 ? "item" : "items"} • {formattedTotalQty} qty
+                      </span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-6 font-mono">
                     <span className="w-16 text-right">MRP</span>
                     <span className="w-20 text-right">Selling Price</span>
@@ -976,7 +998,9 @@ export function PaymentModal({
             {/* Bottom Fixed Footer: Grand Total Box */}
             <div className="flex-shrink-0 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] p-3 space-y-1">
               <div className="flex justify-between text-xs text-[var(--text-muted)] font-mono">
-                <span className="font-sans">Subtotal</span>
+                <span className="font-sans">
+                  Subtotal {totalItemCount > 0 && `(${totalItemCount} ${totalItemCount === 1 ? "item" : "items"} • ${formattedTotalQty} qty)`}
+                </span>
                 <span>₹{subtotalAmount.toFixed(2)}</span>
               </div>
 
@@ -1046,7 +1070,14 @@ export function PaymentModal({
 
 
               <div className="flex justify-between items-center border-t border-[var(--border-subtle)] pt-2 text-base font-bold font-mono text-[var(--text-primary)]">
-                <span className="font-sans font-black text-xs uppercase tracking-wider">Grand Total Payable:</span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-sans font-black text-xs uppercase tracking-wider">Grand Total Payable:</span>
+                  {totalItemCount > 0 && (
+                    <span className="text-[10px] font-mono font-bold text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded-md border border-sky-500/20 font-sans tracking-normal">
+                      {totalItemCount} {totalItemCount === 1 ? "Item" : "Items"} ({formattedTotalQty} Qty)
+                    </span>
+                  )}
+                </div>
                 <span className={`text-xl font-black ${editingCompletedBill && paymentEditMode === "ADJUST" ? "text-[var(--text-muted)] line-through" : "text-sky-400"}`}>₹{grandTotal.toFixed(2)}</span>
               </div>
 

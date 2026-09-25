@@ -94,16 +94,16 @@ export async function generateReceiptPDF(
     storeDetails = storeDetailsOrAction;
   }
 
-  // Pure Monospaced Courier Thermal POS Format (80mm Paper)
+  // Pure Monospaced Courier Thermal POS Format (Standard 72mm Thermal Print Head for 80mm Paper)
   const doc = new jsPDF({
     orientation: "portrait",
     unit: "mm",
-    format: [80, 297], // Extended length to accommodate more content
+    format: [72, 297], // 72mm matches the exact physical 576-dot thermal print head of 80mm POS printers
   });
 
-  const pageWidth = doc.internal.pageSize.getWidth(); // 80mm
-  const margin = 6;
-  const contentWidth = pageWidth - margin * 2; // 68mm safe printable width for thermal printers
+  const pageWidth = doc.internal.pageSize.getWidth(); // 72mm
+  const margin = 4;
+  const contentWidth = pageWidth - margin * 2; // 64mm safe printable width to prevent physical clipping
 
   let y = 8;
 
@@ -249,11 +249,34 @@ export async function generateReceiptPDF(
   y += 3.5;
   const guestName = (order as any).customer?.name || (order as any).customer_name || "Walk-In";
   const guestPhone = (order as any).customer?.phone || (order as any).customer_phone;
-  if (guestPhone) {
-    doc.text(`Customer: ${guestName}`, margin, y, { maxWidth: 38 });
-    doc.text(`Mob: ${guestPhone}`, pageWidth - margin, y, { align: "right" });
+  const mobText = guestPhone ? `Mob: ${guestPhone}` : "";
+  const mobWidth = mobText ? doc.getTextWidth(mobText) : 0;
+  const availCustWidth = mobText ? Math.max(25, contentWidth - mobWidth - 2) : contentWidth;
+
+  const fullCustText = `Customer: ${guestName}`;
+  let custLines: string[];
+  if (!mobText) {
+    custLines = doc.splitTextToSize(fullCustText, contentWidth);
   } else {
-    doc.text(`Customer: ${guestName}`, margin, y, { maxWidth: contentWidth });
+    const lines1 = doc.splitTextToSize(fullCustText, availCustWidth);
+    if (lines1.length <= 1) {
+      custLines = lines1;
+    } else {
+      const firstLine = lines1[0];
+      const remainder = fullCustText.slice(firstLine.length).trim();
+      const restLines = doc.splitTextToSize(remainder, contentWidth);
+      custLines = [firstLine, ...restLines];
+    }
+  }
+
+  doc.text(custLines[0], margin, y);
+  if (mobText) {
+    doc.text(mobText, pageWidth - margin, y, { align: "right" });
+  }
+
+  for (let i = 1; i < custLines.length; i++) {
+    y += 3.5;
+    doc.text(custLines[i], margin, y);
   }
 
   const custGstin = (order as any).customer_gstin || (order as any).customer?.gstin;
@@ -263,15 +286,21 @@ export async function generateReceiptPDF(
     doc.text(`GSTIN   : ${custGstin}`, margin, y);
   }
   if (custLegalName && custLegalName !== guestName) {
-    y += 3.5;
-    doc.text(`Legal   : ${custLegalName}`, margin, y);
+    const legalLines = doc.splitTextToSize(`Legal   : ${custLegalName}`, contentWidth);
+    for (const line of legalLines) {
+      y += 3.5;
+      doc.text(line, margin, y);
+    }
   }
 
   const isInterstate = Boolean((order as any).is_interstate);
   const placeOfSupply = (order as any).place_of_supply || getOutletField("place_of_supply");
   if (placeOfSupply) {
-    y += 3.5;
-    doc.text(`Place of Supply: ${placeOfSupply}${isInterstate ? " (Inter-State)" : ""}`, margin, y);
+    const posLines = doc.splitTextToSize(`Place of Supply: ${placeOfSupply}${isInterstate ? " (Inter-State)" : ""}`, contentWidth);
+    for (const line of posLines) {
+      y += 3.5;
+      doc.text(line, margin, y);
+    }
   } else if (isInterstate) {
     y += 3.5;
     doc.text(`Supply Type    : Inter-State (IGST)`, margin, y);
@@ -387,11 +416,11 @@ export async function generateReceiptPDF(
       fillColor: false,
     },
     columnStyles: {
-      0: { cellWidth: 22, halign: "left" },
-      1: { cellWidth: 12, halign: "center" },
+      0: { cellWidth: 20, halign: "left" },
+      1: { cellWidth: 11, halign: "center" },
       2: { cellWidth: 11, halign: "right" },
       3: { cellWidth: 11, halign: "right" },
-      4: { cellWidth: 12, halign: "right" },
+      4: { cellWidth: 11, halign: "right" },
     },
   });
 
@@ -735,14 +764,14 @@ export async function generateReceiptPDF(
     doc.setFontSize(6.5);
     if (isInterstateOrder) {
       doc.text("HSN/SAC", margin, summaryY);
-      doc.text("Taxable", 36, summaryY, { align: "right" });
-      doc.text("Rate", 52, summaryY, { align: "right" });
+      doc.text("Taxable", 32, summaryY, { align: "right" });
+      doc.text("Rate", 48, summaryY, { align: "right" });
       doc.text("IGST Amt", pageWidth - margin, summaryY, { align: "right" });
     } else {
       doc.text("HSN/SAC", margin, summaryY);
-      doc.text("Taxable", 29, summaryY, { align: "right" });
-      doc.text("CGST", 43, summaryY, { align: "right" });
-      doc.text("SGST", 57, summaryY, { align: "right" });
+      doc.text("Taxable", 26, summaryY, { align: "right" });
+      doc.text("CGST", 40, summaryY, { align: "right" });
+      doc.text("SGST", 54, summaryY, { align: "right" });
       doc.text("Total Tax", pageWidth - margin, summaryY, { align: "right" });
     }
     summaryY += 1.8;
@@ -765,14 +794,14 @@ export async function generateReceiptPDF(
       doc.text(displayHsn, margin, summaryY);
 
       if (isInterstateOrder) {
-        doc.text(grp.base.toFixed(2), 36, summaryY, { align: "right" });
-        doc.text(`${grp.rate.toFixed(1).replace(/\.0$/, "")}%`, 52, summaryY, { align: "right" });
+        doc.text(grp.base.toFixed(2), 32, summaryY, { align: "right" });
+        doc.text(`${grp.rate.toFixed(1).replace(/\.0$/, "")}%`, 48, summaryY, { align: "right" });
         doc.text(grp.tax.toFixed(2), pageWidth - margin, summaryY, { align: "right" });
       } else {
         const halfTax = grp.tax / 2;
-        doc.text(grp.base.toFixed(2), 29, summaryY, { align: "right" });
-        doc.text(halfTax.toFixed(2), 43, summaryY, { align: "right" });
-        doc.text(halfTax.toFixed(2), 57, summaryY, { align: "right" });
+        doc.text(grp.base.toFixed(2), 26, summaryY, { align: "right" });
+        doc.text(halfTax.toFixed(2), 40, summaryY, { align: "right" });
+        doc.text(halfTax.toFixed(2), 54, summaryY, { align: "right" });
         doc.text(grp.tax.toFixed(2), pageWidth - margin, summaryY, { align: "right" });
       }
       summaryY += 3.8;
@@ -787,13 +816,13 @@ export async function generateReceiptPDF(
     doc.text("Total", margin, summaryY);
 
     if (isInterstateOrder) {
-      doc.text(totHsnBase.toFixed(2), 36, summaryY, { align: "right" });
+      doc.text(totHsnBase.toFixed(2), 32, summaryY, { align: "right" });
       doc.text(totHsnTax.toFixed(2), pageWidth - margin, summaryY, { align: "right" });
     } else {
       const halfTot = totHsnTax / 2;
-      doc.text(totHsnBase.toFixed(2), 29, summaryY, { align: "right" });
-      doc.text(halfTot.toFixed(2), 43, summaryY, { align: "right" });
-      doc.text(halfTot.toFixed(2), 57, summaryY, { align: "right" });
+      doc.text(totHsnBase.toFixed(2), 26, summaryY, { align: "right" });
+      doc.text(halfTot.toFixed(2), 40, summaryY, { align: "right" });
+      doc.text(halfTot.toFixed(2), 54, summaryY, { align: "right" });
       doc.text(totHsnTax.toFixed(2), pageWidth - margin, summaryY, { align: "right" });
     }
 
@@ -1069,12 +1098,12 @@ export async function generateReturnReceiptPDF(
   const doc = new jsPDF({
     orientation: "portrait",
     unit: "mm",
-    format: [80, 297],
+    format: [72, 297],
   });
 
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const margin = 6;
-  const contentWidth = pageWidth - margin * 2; // 68mm safe printable width for thermal printers
+  const pageWidth = doc.internal.pageSize.getWidth(); // 72mm
+  const margin = 4;
+  const contentWidth = pageWidth - margin * 2; // 64mm safe printable width for thermal printers
   let y = 8;
 
   const drawDashedLine = (posY: number) => {
@@ -1216,11 +1245,34 @@ export async function generateReturnReceiptPDF(
   y += 3.5;
   const guestName = returnData.customer_name || "Walk-In";
   const guestPhone = returnData.customer_phone;
-  if (guestPhone) {
-    doc.text(`Customer  : ${guestName}`, margin, y, { maxWidth: 38 });
-    doc.text(`Mob: ${guestPhone}`, pageWidth - margin, y, { align: "right" });
+  const mobText = guestPhone ? `Mob: ${guestPhone}` : "";
+  const mobWidth = mobText ? doc.getTextWidth(mobText) : 0;
+  const availCustWidth = mobText ? Math.max(25, contentWidth - mobWidth - 2) : contentWidth;
+
+  const fullCustText = `Customer  : ${guestName}`;
+  let custLines: string[];
+  if (!mobText) {
+    custLines = doc.splitTextToSize(fullCustText, contentWidth);
   } else {
-    doc.text(`Customer  : ${guestName}`, margin, y, { maxWidth: contentWidth });
+    const lines1 = doc.splitTextToSize(fullCustText, availCustWidth);
+    if (lines1.length <= 1) {
+      custLines = lines1;
+    } else {
+      const firstLine = lines1[0];
+      const remainder = fullCustText.slice(firstLine.length).trim();
+      const restLines = doc.splitTextToSize(remainder, contentWidth);
+      custLines = [firstLine, ...restLines];
+    }
+  }
+
+  doc.text(custLines[0], margin, y);
+  if (mobText) {
+    doc.text(mobText, pageWidth - margin, y, { align: "right" });
+  }
+
+  for (let i = 1; i < custLines.length; i++) {
+    y += 3.5;
+    doc.text(custLines[i], margin, y);
   }
   
   // Determine if interstate based strictly on original bill if present; fallback to outlet settings
@@ -1239,8 +1291,11 @@ export async function generateReturnReceiptPDF(
     getOutletField("place_of_supply");
 
   if (placeOfSupply) {
-    y += 3.5;
-    doc.text(`Place of Supply: ${placeOfSupply}${isInterstateOrder ? " (Inter-State)" : ""}`, margin, y);
+    const posLines = doc.splitTextToSize(`Place of Supply: ${placeOfSupply}${isInterstateOrder ? " (Inter-State)" : ""}`, contentWidth);
+    for (const line of posLines) {
+      y += 3.5;
+      doc.text(line, margin, y);
+    }
   } else if (isInterstateOrder) {
     y += 3.5;
     doc.text(`Supply Type    : Inter-State (IGST)`, margin, y);
@@ -1298,11 +1353,11 @@ export async function generateReturnReceiptPDF(
       fillColor: false,
     },
     columnStyles: {
-      0: { cellWidth: 22, halign: "left" },
-      1: { cellWidth: 12, halign: "center" },
+      0: { cellWidth: 20, halign: "left" },
+      1: { cellWidth: 11, halign: "center" },
       2: { cellWidth: 11, halign: "right" },
       3: { cellWidth: 11, halign: "right" },
-      4: { cellWidth: 12, halign: "right" },
+      4: { cellWidth: 11, halign: "right" },
     },
   });
 
@@ -1355,7 +1410,7 @@ export async function generateReturnReceiptPDF(
         fillColor: false,
       },
       columnStyles: {
-        0: { cellWidth: 32, halign: "left" },
+        0: { cellWidth: 28, halign: "left" },
         1: { cellWidth: 14, halign: "center" },
         2: { cellWidth: 11, halign: "right" },
         3: { cellWidth: 11, halign: "right" },
@@ -1572,14 +1627,14 @@ export async function generateReturnReceiptPDF(
     doc.setFontSize(6.5);
     if (isInterstateOrder) {
       doc.text("HSN/SAC", margin, summaryY);
-      doc.text("Taxable", 36, summaryY, { align: "right" });
-      doc.text("Rate", 52, summaryY, { align: "right" });
+      doc.text("Taxable", 32, summaryY, { align: "right" });
+      doc.text("Rate", 48, summaryY, { align: "right" });
       doc.text("IGST Amt", pageWidth - margin, summaryY, { align: "right" });
     } else {
       doc.text("HSN/SAC", margin, summaryY);
-      doc.text("Taxable", 29, summaryY, { align: "right" });
-      doc.text("CGST", 43, summaryY, { align: "right" });
-      doc.text("SGST", 57, summaryY, { align: "right" });
+      doc.text("Taxable", 26, summaryY, { align: "right" });
+      doc.text("CGST", 40, summaryY, { align: "right" });
+      doc.text("SGST", 54, summaryY, { align: "right" });
       doc.text("Total Tax", pageWidth - margin, summaryY, { align: "right" });
     }
     summaryY += 1.8;
@@ -1602,14 +1657,14 @@ export async function generateReturnReceiptPDF(
       doc.text(displayHsn, margin, summaryY);
 
       if (isInterstateOrder) {
-        doc.text(grp.base.toFixed(2), 36, summaryY, { align: "right" });
-        doc.text(`${grp.rate.toFixed(1).replace(/\.0$/, "")}%`, 52, summaryY, { align: "right" });
+        doc.text(grp.base.toFixed(2), 32, summaryY, { align: "right" });
+        doc.text(`${grp.rate.toFixed(1).replace(/\.0$/, "")}%`, 48, summaryY, { align: "right" });
         doc.text(grp.tax.toFixed(2), pageWidth - margin, summaryY, { align: "right" });
       } else {
         const halfTax = grp.tax / 2;
-        doc.text(grp.base.toFixed(2), 29, summaryY, { align: "right" });
-        doc.text(halfTax.toFixed(2), 43, summaryY, { align: "right" });
-        doc.text(halfTax.toFixed(2), 57, summaryY, { align: "right" });
+        doc.text(grp.base.toFixed(2), 26, summaryY, { align: "right" });
+        doc.text(halfTax.toFixed(2), 40, summaryY, { align: "right" });
+        doc.text(halfTax.toFixed(2), 54, summaryY, { align: "right" });
         doc.text(grp.tax.toFixed(2), pageWidth - margin, summaryY, { align: "right" });
       }
       summaryY += 3.8;
@@ -1624,13 +1679,13 @@ export async function generateReturnReceiptPDF(
     doc.text("Total", margin, summaryY);
 
     if (isInterstateOrder) {
-      doc.text(totHsnBase.toFixed(2), 36, summaryY, { align: "right" });
+      doc.text(totHsnBase.toFixed(2), 32, summaryY, { align: "right" });
       doc.text(totHsnTax.toFixed(2), pageWidth - margin, summaryY, { align: "right" });
     } else {
       const halfTot = totHsnTax / 2;
-      doc.text(totHsnBase.toFixed(2), 29, summaryY, { align: "right" });
-      doc.text(halfTot.toFixed(2), 43, summaryY, { align: "right" });
-      doc.text(halfTot.toFixed(2), 57, summaryY, { align: "right" });
+      doc.text(totHsnBase.toFixed(2), 26, summaryY, { align: "right" });
+      doc.text(halfTot.toFixed(2), 40, summaryY, { align: "right" });
+      doc.text(halfTot.toFixed(2), 54, summaryY, { align: "right" });
       doc.text(totHsnTax.toFixed(2), pageWidth - margin, summaryY, { align: "right" });
     }
 
