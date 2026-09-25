@@ -304,12 +304,11 @@ export function InventoryTab({
     }
   }, [localError]);
 
-  // Global Barcode Listener for Inventory Tab
   useBarcodeScanner({
     onScan: (barcode) => {
       setSearchQuery(barcode);
     },
-    enabled: activeSubTab === "items", // only listen when looking at the products table
+    enabled: activeSubTab === "items" && !isEditOpen && !isRegisterModalOpen, // only listen when looking at products table and no modal is open
   });
 
   // Prefill Item state for adding a batch to an existing product

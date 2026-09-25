@@ -76,17 +76,24 @@ export function useBarcodeScanner({
           // because it had a timeDiff > 150ms. We restore the input to its exact state from before the scan.
           if (document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLTextAreaElement) {
             const el = document.activeElement as HTMLInputElement | HTMLTextAreaElement;
-            const newValue = initialInputValueRef.current;
-            
-            const prototype = Object.getPrototypeOf(el);
-            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
-            
-            if (nativeInputValueSetter) {
-              nativeInputValueSetter.call(el, newValue);
-              el.dispatchEvent(new Event('input', { bubbles: true }));
-            } else {
-              el.value = newValue;
-              el.dispatchEvent(new Event('input', { bubbles: true }));
+            const isDedicatedBarcodeInput =
+              el.getAttribute("data-barcode-input") === "true" ||
+              el.name === "barcode" ||
+              Boolean(el.placeholder && el.placeholder.toLowerCase().includes("barcode"));
+
+            if (!isDedicatedBarcodeInput) {
+              const newValue = initialInputValueRef.current;
+              
+              const prototype = Object.getPrototypeOf(el);
+              const nativeInputValueSetter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
+              
+              if (nativeInputValueSetter) {
+                nativeInputValueSetter.call(el, newValue);
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+              } else {
+                el.value = newValue;
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+              }
             }
             
             // Blur to stop any weird UI focus issues after scanning

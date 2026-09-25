@@ -18,6 +18,7 @@ import {
   Scale,
 } from "lucide-react";
 import type { InventoryItem } from "@/types";
+import { useBarcodeScanner } from "@/hooks/useBarcodeScanner";
 
 interface EditInventoryModalProps {
   isOpen: boolean;
@@ -98,6 +99,17 @@ export function EditInventoryModal({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Directly capture hardware scanner input into the Barcode field while Edit modal is open
+  useBarcodeScanner({
+    onScan: (scannedCode) => {
+      const clean = scannedCode.trim();
+      if (clean) {
+        setBarcode(clean);
+      }
+    },
+    enabled: isOpen,
+  });
 
   // Populate state when item opens
   useEffect(() => {
@@ -361,7 +373,12 @@ export function EditInventoryModal({
               {/* Barcode */}
               <div>
                 <label className="block text-[11px] font-semibold text-[var(--text-muted)] mb-1 flex items-center justify-between">
-                  <span>Barcode (EAN / UPC)</span>
+                  <span className="flex items-center gap-1.5">
+                    <span>Barcode (EAN / UPC)</span>
+                    <span className="text-[9px] px-1.5 py-0.5 text-emerald-400 font-semibold bg-emerald-500/10 border border-emerald-500/20 rounded-md">
+                      Scanner Ready
+                    </span>
+                  </span>
                   {barcode && (
                     <button
                       type="button"
@@ -375,12 +392,14 @@ export function EditInventoryModal({
                 <div className="relative">
                   <input
                     type="text"
+                    name="barcode"
+                    data-barcode-input="true"
                     value={barcode}
                     onChange={(e) => setBarcode(e.target.value)}
                     placeholder="Scan or enter barcode"
                     className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] pl-8 pr-3 py-1.5 font-mono text-xs text-[var(--text-primary)] focus:border-amber-400 focus:outline-none"
                   />
-                  <Barcode className="absolute left-2.5 top-2 h-3.5 w-3.5 text-[var(--text-muted)]" />
+                  <Barcode className="absolute left-2.5 top-2 h-3.5 w-3.5 text-amber-400" />
                 </div>
               </div>
 

@@ -3,6 +3,7 @@ import { Barcode, CheckCircle2, Package, Sparkles, X, Building2, Plus, Search, P
 import type { InventoryUnit, InventoryItem, Supplier } from "@/types";
 import { formatLocalDate } from "@/lib/api";
 import { parseBarcodeMask, generateItemPlu } from "../barcodeUtils";
+import { useBarcodeScanner } from "@/hooks/useBarcodeScanner";
 
 interface BarcodeRegisterModalProps {
   isOpen: boolean;
@@ -99,6 +100,17 @@ export function BarcodeRegisterModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Directly capture hardware scanner input while Register modal is open
+  useBarcodeScanner({
+    onScan: (scannedCode) => {
+      const clean = scannedCode.trim();
+      if (clean) {
+        setCustomBarcode(clean);
+      }
+    },
+    enabled: isOpen,
+  });
+
   // Close modal on Escape key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -116,7 +128,11 @@ export function BarcodeRegisterModal({
     setName(itm.name);
     setCategory(itm.category || categories[0] || "General");
     setUnit(itm.unit || "pcs");
-    if (itm.barcode) setCustomBarcode(itm.barcode);
+    // Preserve scanned / entered barcode when associating with an existing item.
+    // Only copy barcode from existing item if customBarcode is currently empty.
+    if (!customBarcode.trim() && itm.barcode) {
+      setCustomBarcode(itm.barcode);
+    }
     if (itm.cost_per_unit != null) setCostPerUnit(String(itm.cost_per_unit));
 
     if (itm.mrp != null) {
@@ -477,6 +493,9 @@ export function BarcodeRegisterModal({
             <span className="flex items-center gap-1.5">
               <Barcode className="h-4 w-4 text-[var(--accent-brand)]" />
               Scanned / Item Barcode
+              <span className="text-[10px] font-medium text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-full border border-emerald-500/20">
+                Scanner Ready
+              </span>
             </span>
             <button
               type="button"
@@ -494,11 +513,33 @@ export function BarcodeRegisterModal({
           </label>
           <input
             type="text"
+            name="barcode"
+            data-barcode-input="true"
             placeholder="Scan or type barcode (Optional)"
             value={customBarcode}
             onChange={(e) => setCustomBarcode(e.target.value)}
             className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3 py-2 text-xs font-mono font-bold text-[var(--accent-brand)] focus:border-[var(--accent-brand)] focus:outline-none placeholder:font-sans placeholder:font-normal placeholder:text-[var(--text-muted)]"
           />
+          {selectedItemId && (() => {
+            const selectedItem = items.find((i) => i.id === selectedItemId);
+            if (!selectedItem) return null;
+            if (customBarcode.trim() && selectedItem.barcode && selectedItem.barcode !== customBarcode.trim()) {
+              return (
+                <p className="mt-1 text-[11px] text-amber-400 font-medium flex items-center gap-1">
+                  <span>ℹ️</span> This will update & replace existing barcode (
+                  <span className="font-mono line-through opacity-75">{selectedItem.barcode}</span> ➔ <span className="font-mono font-bold text-amber-300">{customBarcode.trim()}</span>)
+                </p>
+              );
+            }
+            if (customBarcode.trim() && !selectedItem.barcode) {
+              return (
+                <p className="mt-1 text-[11px] text-emerald-400 font-medium flex items-center gap-1">
+                  <span>✓</span> Will associate this new barcode (<span className="font-mono font-bold">{customBarcode.trim()}</span>) with {selectedItem.name}
+                </p>
+              );
+            }
+            return null;
+          })()}
         </div>
 
         {error && (
@@ -514,7 +555,7 @@ export function BarcodeRegisterModal({
               <span>Product / Item Name *</span>
               {selectedItemId && (
                 <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
-                  Adding batch to existing item
+                  {customBarcode.trim() ? "Linking barcode to existing item" : "Adding batch to existing item"}
                 </span>
               )}
             </label>

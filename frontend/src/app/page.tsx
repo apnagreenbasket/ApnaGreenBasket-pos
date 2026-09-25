@@ -370,7 +370,11 @@ export default function AdminDashboardPage() {
         inventoryState.handleBarcodeScan(barcode);
       }
     },
-    enabled: !!accessToken && activeTab === "inventory" && !inventoryState.isRegisterModalOpen,
+    enabled:
+      !!accessToken &&
+      activeTab === "inventory" &&
+      !inventoryState.isRegisterModalOpen &&
+      !inventoryState.isEditItemModalOpen,
   });
 
   if (!isMounted) return null;
