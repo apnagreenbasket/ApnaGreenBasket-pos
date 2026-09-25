@@ -5,13 +5,41 @@ import {
 } from "lucide-react";
 import { getApiBaseUrl } from "@/lib/api";
 import { 
-  generateAnalyticsPdfReport, 
-  generateSalesPdfReport, 
-  generateCategoryWiseSalesPdfReport,
+  formatReportDateRange,
+  generateDashboardPdfReport,
+  generateAnalyticsPdfReport,
+  generateSalesSummaryPdfReport,
+  generateCategorySalesPdfReport,
   generateFlatItemSalesPdfReport,
-  generateInventoryPdfReport, 
-  generateCustomersPdfReport, 
-  generateFinancialPdfReport, 
+  generateCategoryWiseSalesPdfReport,
+  generateAovPdfReport,
+  generatePaymentMixPdfReport,
+  generateDiscountPdfReport,
+  generateSalesMasterPdfReport,
+  generateSalesPdfReport,
+  generateInventorySummaryPdfReport,
+  generateStockMovementPdfReport,
+  generateStockIntakePdfReport,
+  generateWastagePdfReport,
+  generatePurchaseReturnPdfReport,
+  generateSupplierSpendPdfReport,
+  generateInventoryMasterPdfReport,
+  generateInventoryPdfReport,
+  generateCustomerSpendsPdfReport,
+  generateNewCustomersPdfReport,
+  generateCustomerReturnsPdfReport,
+  generateCreditDebitPdfReport,
+  generateLoyaltyPdfReport,
+  generateAbandonedCartPdfReport,
+  generateCustomersMasterPdfReport,
+  generateCustomersPdfReport,
+  generateOutletEarningsPdfReport,
+  generateProfitMarginPdfReport,
+  generateBillProfitPdfReport,
+  generateTaxSummaryPdfReport,
+  generateCashDenominationPdfReport,
+  generateFinancialMasterPdfReport,
+  generateFinancialPdfReport,
   generateDayBookPdfReport 
 } from "@/lib/pdfGenerator";
 import type { RestaurantProfile } from "../adminTypes";
@@ -150,35 +178,56 @@ export function AnalyticsTab(props: AnalyticsTabProps) {
           <button
             onClick={() => {
               if (!props.restaurant) return;
+              const dateRangeLabel = formatReportDateRange(props.datePreset, props.customFromDate, props.customToDate);
               
               if (props.activeTab === "dashboard") {
-                if (props.kpiData && props.topItemsData && props.funnelData) {
-                  generateAnalyticsPdfReport(props.restaurant, props.datePreset, props.kpiData, props.topItemsData.items, props.funnelData.stages);
-                }
+                generateDashboardPdfReport(
+                  props.restaurant,
+                  dateRangeLabel,
+                  props.kpiData,
+                  props.topItemsData,
+                  props.peakHoursData
+                );
               } else if (props.activeTab === "sales") {
-                if (props.activeSalesSubTab === "item" && props.itemSalesData?.items) {
-                  const overallStats = {
-                    totalRevenue: props.itemSalesData.total_revenue ?? props.itemSalesData.items.reduce((a: number, b: any) => a + (b.revenue || 0), 0),
-                    totalCogs: props.itemSalesData.total_cogs ?? props.itemSalesData.items.reduce((a: number, b: any) => a + (b.cogs ?? ((b.cost_per_unit || 0) * (b.quantity_sold || 0))), 0),
-                    totalProfit: props.itemSalesData.total_profit ?? 0,
-                    overallMargin: props.itemSalesData.overall_margin_pct ?? 0,
-                    totalUnits: props.itemSalesData.total_units_sold ?? props.itemSalesData.items.reduce((a: number, b: any) => a + (b.quantity_sold || 0), 0),
-                  };
-
+                if (props.activeSalesSubTab === "summary") {
+                  generateSalesSummaryPdfReport(props.restaurant, dateRangeLabel, props.itemSalesData);
+                } else if (props.activeSalesSubTab === "category") {
+                  generateCategorySalesPdfReport(props.restaurant, dateRangeLabel, props.categorySalesData);
+                } else if (props.activeSalesSubTab === "item" && props.itemSalesData?.items) {
                   const filterCatName = props.itemSalesCategoryId 
                     ? categoryOptions.find(c => c.id === props.itemSalesCategoryId)?.name 
                     : undefined;
 
-                  if (itemViewMode === "flat" || props.itemSalesCategoryId) {
+                  if (props.itemSalesCategoryId) {
+                    const filteredItems = props.itemSalesData.items.filter((it: any) => it.category_id === props.itemSalesCategoryId);
+                    const overallStats = {
+                      totalRevenue: filteredItems.reduce((a: number, b: any) => a + (b.revenue || 0), 0),
+                      totalCogs: filteredItems.reduce((a: number, b: any) => a + (b.cogs ?? ((b.cost_per_unit || 0) * (b.quantity_sold || 0))), 0),
+                      totalProfit: filteredItems.reduce((a: number, b: any) => a + (b.estimated_profit !== null && b.estimated_profit !== undefined ? b.estimated_profit : ((b.revenue || 0) - (b.cogs ?? ((b.cost_per_unit || 0) * (b.quantity_sold || 0))))), 0),
+                      overallMargin: 0,
+                      totalUnits: filteredItems.reduce((a: number, b: any) => a + (b.quantity_sold || 0), 0),
+                    };
+                    overallStats.overallMargin = overallStats.totalRevenue > 0 ? (overallStats.totalProfit / overallStats.totalRevenue) * 100 : 0;
+                    const sortedItems = [...filteredItems].sort((a: any, b: any) => (b.revenue || 0) - (a.revenue || 0));
+                    generateFlatItemSalesPdfReport(props.restaurant, dateRangeLabel, sortedItems, overallStats, filterCatName);
+                  } else if (itemViewMode === "flat") {
+                    const overallStats = {
+                      totalRevenue: props.itemSalesData.total_revenue ?? props.itemSalesData.items.reduce((a: number, b: any) => a + (b.revenue || 0), 0),
+                      totalCogs: props.itemSalesData.total_cogs ?? props.itemSalesData.items.reduce((a: number, b: any) => a + (b.cogs ?? ((b.cost_per_unit || 0) * (b.quantity_sold || 0))), 0),
+                      totalProfit: props.itemSalesData.total_profit ?? 0,
+                      overallMargin: props.itemSalesData.overall_margin_pct ?? 0,
+                      totalUnits: props.itemSalesData.total_units_sold ?? props.itemSalesData.items.reduce((a: number, b: any) => a + (b.quantity_sold || 0), 0),
+                    };
                     const sortedItems = [...props.itemSalesData.items].sort((a: any, b: any) => (b.revenue || 0) - (a.revenue || 0));
-                    generateFlatItemSalesPdfReport(
-                      props.restaurant,
-                      props.datePreset.replace(/_/g, " ").toUpperCase(),
-                      sortedItems,
-                      overallStats,
-                      filterCatName
-                    );
+                    generateFlatItemSalesPdfReport(props.restaurant, dateRangeLabel, sortedItems, overallStats);
                   } else {
+                    const overallStats = {
+                      totalRevenue: props.itemSalesData.total_revenue ?? props.itemSalesData.items.reduce((a: number, b: any) => a + (b.revenue || 0), 0),
+                      totalCogs: props.itemSalesData.total_cogs ?? props.itemSalesData.items.reduce((a: number, b: any) => a + (b.cogs ?? ((b.cost_per_unit || 0) * (b.quantity_sold || 0))), 0),
+                      totalProfit: props.itemSalesData.total_profit ?? 0,
+                      overallMargin: props.itemSalesData.overall_margin_pct ?? 0,
+                      totalUnits: props.itemSalesData.total_units_sold ?? props.itemSalesData.items.reduce((a: number, b: any) => a + (b.quantity_sold || 0), 0),
+                    };
                     const groupsMap = new Map<string, any[]>();
                     props.itemSalesData.items.forEach((it: any) => {
                       const catName = it.category_name?.trim() || "Uncategorized";
@@ -202,55 +251,97 @@ export function AnalyticsTab(props: AnalyticsTabProps) {
                       return { categoryName, items, totalQty, totalRevenue, totalCogs, totalProfit, marginPct };
                     }).sort((a, b) => b.totalRevenue - a.totalRevenue);
 
-                    generateCategoryWiseSalesPdfReport(
-                      props.restaurant,
-                      props.datePreset.replace(/_/g, " ").toUpperCase(),
-                      categoryGroups,
-                      overallStats
-                    );
+                    generateCategoryWiseSalesPdfReport(props.restaurant, dateRangeLabel, categoryGroups, overallStats);
                   }
+                } else if (props.activeSalesSubTab === "aov") {
+                  generateAovPdfReport(props.restaurant, dateRangeLabel, props.aovData);
+                } else if (props.activeSalesSubTab === "payment_mix") {
+                  generatePaymentMixPdfReport(props.restaurant, dateRangeLabel, props.paymentMixData);
+                } else if (props.activeSalesSubTab === "discount") {
+                  generateDiscountPdfReport(props.restaurant, dateRangeLabel, props.discountData);
                 } else {
-                  const isAll = props.activeSalesSubTab === "master_view";
-                  generateSalesPdfReport(props.restaurant, props.datePreset, 
-                      isAll || props.activeSalesSubTab === "category" ? props.categorySalesData : null, 
-                      isAll || props.activeSalesSubTab === "item" ? props.itemSalesData : null, 
-                      isAll || props.activeSalesSubTab === "aov" ? props.aovData : null, 
-                      isAll || props.activeSalesSubTab === "payment_mix" ? props.paymentMixData : null, 
-                      isAll || props.activeSalesSubTab === "discount" ? props.discountData : null
-                  );
+                  // master_view
+                  generateSalesMasterPdfReport(props.restaurant, dateRangeLabel, {
+                    itemSalesData: props.itemSalesData,
+                    categorySalesData: props.categorySalesData,
+                    aovData: props.aovData,
+                    paymentMixData: props.paymentMixData,
+                    discountData: props.discountData,
+                  });
                 }
               } else if (props.activeTab === "inventory") {
-                const isAll = props.activeInventorySubTab === "master_view" || props.activeInventorySubTab === "summary";
-                generateInventoryPdfReport(
-                    props.restaurant, 
-                    props.datePreset, 
-                    isAll || props.activeInventorySubTab === "summary" ? props.inventorySummaryData : null,
-                    isAll || props.activeInventorySubTab === "stock_movement" ? props.stockMovementData : null, 
-                    isAll || props.activeInventorySubTab === "intake" ? props.stockIntakeData : null, 
-                    isAll || props.activeInventorySubTab === "wastage" ? props.wastageData : null, 
-                    isAll || props.activeInventorySubTab === "purchase_returns" ? props.purchaseReturnData : null, 
-                    isAll || props.activeInventorySubTab === "supplier_spend" ? props.supplierSpendData : null
-                );
+                if (props.activeInventorySubTab === "summary") {
+                  generateInventorySummaryPdfReport(props.restaurant, dateRangeLabel, props.inventorySummaryData);
+                } else if (props.activeInventorySubTab === "stock_movement") {
+                  generateStockMovementPdfReport(props.restaurant, dateRangeLabel, props.stockMovementData);
+                } else if (props.activeInventorySubTab === "intake") {
+                  generateStockIntakePdfReport(props.restaurant, dateRangeLabel, props.stockIntakeData);
+                } else if (props.activeInventorySubTab === "wastage") {
+                  generateWastagePdfReport(props.restaurant, dateRangeLabel, props.wastageData);
+                } else if (props.activeInventorySubTab === "purchase_returns") {
+                  generatePurchaseReturnPdfReport(props.restaurant, dateRangeLabel, props.purchaseReturnData);
+                } else if (props.activeInventorySubTab === "supplier_spend") {
+                  generateSupplierSpendPdfReport(props.restaurant, dateRangeLabel, props.supplierSpendData);
+                } else {
+                  // master_view
+                  generateInventoryMasterPdfReport(props.restaurant, dateRangeLabel, {
+                    inventorySummaryData: props.inventorySummaryData,
+                    stockMovementData: props.stockMovementData,
+                    stockIntakeData: props.stockIntakeData,
+                    wastageData: props.wastageData,
+                    purchaseReturnData: props.purchaseReturnData,
+                    supplierSpendData: props.supplierSpendData,
+                  });
+                }
               } else if (props.activeTab === "customers") {
-                const isAll = props.activeCustomersSubTab === "master_view";
-                generateCustomersPdfReport(props.restaurant, props.datePreset, 
-                    isAll || props.activeCustomersSubTab === "new_customers" ? props.newCustomerData : null, 
-                    isAll || props.activeCustomersSubTab === "returns" ? props.customerReturnData : null, 
-                    isAll || props.activeCustomersSubTab === "loyalty" ? props.loyaltyData : null, 
-                    isAll || props.activeCustomersSubTab === "abandoned_carts" ? props.abandonedCartData : null
-                );
+                if (props.activeCustomersSubTab === "customer_spends") {
+                  generateCustomerSpendsPdfReport(props.restaurant, dateRangeLabel, props.customerSpendsData);
+                } else if (props.activeCustomersSubTab === "new_customers") {
+                  generateNewCustomersPdfReport(props.restaurant, dateRangeLabel, props.newCustomerData);
+                } else if (props.activeCustomersSubTab === "returns") {
+                  generateCustomerReturnsPdfReport(props.restaurant, dateRangeLabel, props.customerReturnData);
+                } else if (props.activeCustomersSubTab === "credit_debit") {
+                  generateCreditDebitPdfReport(props.restaurant, dateRangeLabel, props.creditDebitData);
+                } else if (props.activeCustomersSubTab === "loyalty") {
+                  generateLoyaltyPdfReport(props.restaurant, dateRangeLabel, props.loyaltyData);
+                } else if (props.activeCustomersSubTab === "abandoned_carts") {
+                  generateAbandonedCartPdfReport(props.restaurant, dateRangeLabel, props.abandonedCartData);
+                } else {
+                  // master_view
+                  generateCustomersMasterPdfReport(props.restaurant, dateRangeLabel, {
+                    customerSpendsData: props.customerSpendsData,
+                    newCustomerData: props.newCustomerData,
+                    customerReturnData: props.customerReturnData,
+                    creditDebitData: props.creditDebitData,
+                    loyaltyData: props.loyaltyData,
+                    abandonedCartData: props.abandonedCartData,
+                  });
+                }
               } else if (props.activeTab === "financial") {
-                const isAll = props.activeFinancialSubTab === "master_view";
-                generateFinancialPdfReport(props.restaurant, props.datePreset, 
-                    isAll || props.activeFinancialSubTab === "profit_margin" ? props.profitData : null, 
-                    isAll || props.activeFinancialSubTab === "bill_profit" ? props.billProfitData : null, 
-                    isAll || props.activeFinancialSubTab === "tax_summary" ? props.taxSummaryData : null, 
-                    isAll || props.activeFinancialSubTab === "cash_denominations" ? props.cashDenomData : null,
-                    isAll || props.activeFinancialSubTab === "outlet_earnings" ? props.outletEarningsData : null
-                );
+                if (props.activeFinancialSubTab === "outlet_earnings") {
+                  generateOutletEarningsPdfReport(props.restaurant, dateRangeLabel, props.outletEarningsData);
+                } else if (props.activeFinancialSubTab === "profit_margin") {
+                  generateProfitMarginPdfReport(props.restaurant, dateRangeLabel, props.profitData);
+                } else if (props.activeFinancialSubTab === "bill_profit") {
+                  generateBillProfitPdfReport(props.restaurant, dateRangeLabel, props.billProfitData);
+                } else if (props.activeFinancialSubTab === "tax_summary") {
+                  generateTaxSummaryPdfReport(props.restaurant, dateRangeLabel, props.taxSummaryData, props.gstr1HsnData);
+                } else if (props.activeFinancialSubTab === "cash_denominations") {
+                  generateCashDenominationPdfReport(props.restaurant, dateRangeLabel, props.cashDenomData);
+                } else {
+                  // master_view
+                  generateFinancialMasterPdfReport(props.restaurant, dateRangeLabel, {
+                    outletEarningsData: props.outletEarningsData,
+                    profitMarginData: props.profitData,
+                    billProfitData: props.billProfitData,
+                    taxSummaryData: props.taxSummaryData,
+                    gstr1HsnData: props.gstr1HsnData,
+                    cashDenomData: props.cashDenomData,
+                  });
+                }
               } else if (props.activeTab === "day_book") {
                 if (props.dayBookData) {
-                  generateDayBookPdfReport(props.restaurant, props.dayBookDate, props.dayBookData);
+                  generateDayBookPdfReport(props.restaurant, props.dayBookDate || "Today", props.dayBookData);
                 }
               }
             }}
