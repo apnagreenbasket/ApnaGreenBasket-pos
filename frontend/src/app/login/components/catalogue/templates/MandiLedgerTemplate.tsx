@@ -332,7 +332,9 @@ export function MandiLedgerTemplate({ batch, pageNumber, totalPages, outletInfo 
         <tr>
           <td style={{ padding: 0 }}>
             <div style={{ padding: "16px 0" }}>
-              {batch.categories.map((cat) => (
+              {batch.categories
+                .filter((cat) => cat.items && cat.items.length > 0)
+                .map((cat) => (
                 <div key={cat.id} style={{ display: "block", margin: "0 28px 16px" }}>
                   {/* Vertical Category Rail */}
                   <div

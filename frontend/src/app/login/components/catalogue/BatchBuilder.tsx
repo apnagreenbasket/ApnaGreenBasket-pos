@@ -356,10 +356,14 @@ export function BatchBuilder({
     import("react-dom/client").then(({ createRoot }) => {
       const container = printWindow.document.getElementById("catalogue-root");
       if (!container) return;
+      const printableBatch = {
+        ...batch,
+        categories: batch.categories.filter((cat) => cat.items && cat.items.length > 0),
+      };
       const root = createRoot(container);
       root.render(
         React.createElement(TemplateComponent, {
-          batch,
+          batch: printableBatch,
           pageNumber: 1,
           totalPages,
           outletInfo,
@@ -407,11 +411,15 @@ export function BatchBuilder({
     try {
       const TemplateComponent = templateRegistry[batch.template];
       const { createRoot } = await import("react-dom/client");
-      const root = createRoot(container);
+      const printableBatch = {
+        ...batch,
+        categories: batch.categories.filter((cat) => cat.items && cat.items.length > 0),
+      };
 
+      const root = createRoot(container);
       root.render(
         React.createElement(TemplateComponent, {
-          batch,
+          batch: printableBatch,
           pageNumber: 1,
           totalPages: 1,
           outletInfo,

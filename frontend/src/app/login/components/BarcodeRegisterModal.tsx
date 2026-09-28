@@ -62,6 +62,23 @@ export function BarcodeRegisterModal({
   const [selectedItemId, setSelectedItemId] = useState<string | undefined>(undefined);
   const [name, setName] = useState("");
   const [isItemDropdownOpen, setIsItemDropdownOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
+
+  const filteredItems = useMemo(() => {
+    if (!name.trim()) return [];
+    const q = name.trim().toLowerCase();
+    return items
+      .filter((itm) => itm.name.toLowerCase().includes(q))
+      .slice(0, 8);
+  }, [items, name]);
+
+  useEffect(() => {
+    if (filteredItems.length > 0 && isItemDropdownOpen) {
+      setHighlightedIndex(0);
+    } else {
+      setHighlightedIndex(-1);
+    }
+  }, [filteredItems, isItemDropdownOpen]);
 
   const [category, setCategory] = useState(categories[0] || "General");
   const [categorySearch, setCategorySearch] = useState("");
@@ -130,7 +147,7 @@ export function BarcodeRegisterModal({
   }, [onClose]);
 
   // Auto-populate item fields from an existing InventoryItem instance
-  const populateFromItem = (itm: InventoryItem) => {
+  const populateFromItem = (itm: InventoryItem, shouldFocusQty: boolean = true) => {
     setSelectedItemId(itm.id);
     setName(itm.name);
     setCategory(itm.category || categories[0] || "General");
@@ -224,12 +241,18 @@ export function BarcodeRegisterModal({
       setAlternateUnits([]);
     }
     setIsItemDropdownOpen(false);
+    if (shouldFocusQty) {
+      setTimeout(() => {
+        initialQtyRef.current?.focus();
+        initialQtyRef.current?.select();
+      }, 50);
+    }
   };
 
   useEffect(() => {
     if (isOpen) {
       if (prefillItem) {
-        populateFromItem(prefillItem);
+        populateFromItem(prefillItem, false);
       } else {
         setSelectedItemId(undefined);
         setCustomBarcode(barcode);
@@ -509,11 +532,8 @@ export function BarcodeRegisterModal({
               <h2 className="text-base font-bold text-[var(--text-primary)]">
                 {customBarcode.trim() ? "New Barcode Scanned!" : "Register Inventory Product & Batch"}
               </h2>
-              <p className="text-xs text-[var(--text-secondary)] flex items-center gap-1.5 flex-wrap">
-                <span>Inward stock with automatic cost calculation, MRP & tax rates.</span>
-                <span className="hidden sm:inline-flex items-center text-[10px] font-mono font-medium text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
-                  ⚡ Name ➔ Enter ➔ Qty ➔ Enter ➔ MRP ➔ Enter (Save)
-                </span>
+              <p className="text-xs text-[var(--text-secondary)]">
+                Inward stock with automatic cost calculation, MRP & tax rates.
               </p>
             </div>
           </div>
@@ -619,17 +639,60 @@ export function BarcodeRegisterModal({
                 setIsItemDropdownOpen(true);
               }}
               onKeyDown={(e) => {
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  if (!isItemDropdownOpen) {
+                    setIsItemDropdownOpen(true);
+                  }
+                  if (filteredItems.length > 0) {
+                    setHighlightedIndex((prev) => (prev < filteredItems.length - 1 ? prev + 1 : prev));
+                  }
+                  return;
+                }
+                if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  if (filteredItems.length > 0) {
+                    setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : 0));
+                  }
+                  return;
+                }
                 if (e.key === "Enter") {
                   e.preventDefault();
-                  if (!selectedItemId && name.trim()) {
-                    const trimmed = name.trim().toLowerCase();
-                    const exactMatch = items.find(
-                      (i) => i.name.toLowerCase() === trimmed
-                    );
-                    if (exactMatch) {
-                      populateFromItem(exactMatch);
+
+                  // 1. If an item was already selected: advance to quantity
+                  if (selectedItemId) {
+                    setIsItemDropdownOpen(false);
+                    initialQtyRef.current?.focus();
+                    initialQtyRef.current?.select();
+                    return;
+                  }
+
+                  // 2. If dropdown is open and has matching items:
+                  if (isItemDropdownOpen && filteredItems.length > 0) {
+                    const targetItem =
+                      highlightedIndex >= 0 && highlightedIndex < filteredItems.length
+                        ? filteredItems[highlightedIndex]
+                        : filteredItems.find(
+                            (i) => i.name.toLowerCase() === name.trim().toLowerCase()
+                          ) || filteredItems[0];
+                    if (targetItem) {
+                      populateFromItem(targetItem, true);
+                      return;
                     }
                   }
+
+                  // 3. If typed name exactly matches an existing item:
+                  if (name.trim()) {
+                    const exactMatch = items.find(
+                      (i) => i.name.toLowerCase() === name.trim().toLowerCase()
+                    );
+                    if (exactMatch) {
+                      populateFromItem(exactMatch, true);
+                      return;
+                    }
+                  }
+
+                  // 4. Otherwise it's a new product: proceed to quantity
                   setIsItemDropdownOpen(false);
                   initialQtyRef.current?.focus();
                   initialQtyRef.current?.select();
@@ -643,7 +706,7 @@ export function BarcodeRegisterModal({
                       (i) => i.name.toLowerCase() === name.trim().toLowerCase()
                     );
                     if (exactMatch) {
-                      populateFromItem(exactMatch);
+                      populateFromItem(exactMatch, false);
                     }
                   }
                 }, 200);
@@ -652,19 +715,24 @@ export function BarcodeRegisterModal({
             />
 
             {/* Existing Items Auto-suggest Dropdown */}
-            {isItemDropdownOpen && name.trim() && (
+            {isItemDropdownOpen && name.trim() && filteredItems.length > 0 && (
               <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-48 overflow-y-auto rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] py-1 shadow-2xl">
-                {items
-                  .filter((itm) => itm.name.toLowerCase().includes(name.trim().toLowerCase()))
-                  .slice(0, 8)
-                  .map((itm) => (
+                {filteredItems.map((itm, idx) => {
+                  const isHighlighted = idx === highlightedIndex;
+                  return (
                     <button
                       key={itm.id}
                       type="button"
-                      onMouseDown={() => {
-                        populateFromItem(itm);
+                      onMouseEnter={() => setHighlightedIndex(idx)}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        populateFromItem(itm, true);
                       }}
-                      className="w-full px-3 py-2 text-left text-xs hover:bg-[var(--accent-brand)]/15 transition flex items-center justify-between border-b border-[var(--border-subtle)] last:border-0"
+                      className={`w-full px-3 py-2 text-left text-xs transition flex items-center justify-between border-b border-[var(--border-subtle)] last:border-0 ${
+                        isHighlighted
+                          ? "bg-[var(--accent-brand)]/20 text-[var(--text-primary)]"
+                          : "hover:bg-[var(--accent-brand)]/15 text-[var(--text-primary)]"
+                      }`}
                     >
                       <div>
                         <p className="font-bold text-[var(--text-primary)]">{itm.name}</p>
@@ -672,11 +740,18 @@ export function BarcodeRegisterModal({
                           Stock: {Number(itm.current_stock).toFixed(2)} {itm.unit} • {itm.category}
                         </p>
                       </div>
-                      <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
-                        Select Existing
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          isHighlighted
+                            ? "text-white bg-emerald-500 shadow-sm"
+                            : "text-emerald-400 bg-emerald-500/10"
+                        }`}
+                      >
+                        Select Existing (↵)
                       </span>
                     </button>
-                  ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -879,6 +954,13 @@ export function BarcodeRegisterModal({
                   placeholder={isBatchInward ? "e.g. 1000 (Required)" : "e.g. 1000"}
                   value={totalBilledAmount}
                   onChange={(e) => setTotalBilledAmount(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      mrpRef.current?.focus();
+                      mrpRef.current?.select();
+                    }
+                  }}
                   className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-2.5 py-1.5 text-xs font-mono text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none"
                 />
               </div>
@@ -1036,6 +1118,18 @@ export function BarcodeRegisterModal({
                   setSellingPrice(e.target.value);
                   setRetailMarginPct(""); // clear margin if manual override
                   setRetailExact("");
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    if (formRef.current) {
+                      if (typeof formRef.current.requestSubmit === "function") {
+                        formRef.current.requestSubmit();
+                      } else {
+                        handleSubmit(new Event("submit", { cancelable: true }) as any);
+                      }
+                    }
+                  }
                 }}
                 className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3 py-2 text-xs font-mono text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none"
               />

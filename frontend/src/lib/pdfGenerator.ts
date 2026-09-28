@@ -273,16 +273,6 @@ export async function generateReceiptPDF(
   }
   
   doc.text(`Bill No : #${invoiceNo}`, margin, y);
-
-  const barcodeValue = String(invoiceNo).replace(/^#/, "").trim();
-  if (barcodeValue) {
-    const bcWidth = 46;
-    const bcHeight = 7.5;
-    const drew = drawBarcodeImage(doc, barcodeValue, (pageWidth - bcWidth) / 2, y + 1.2, bcWidth, bcHeight);
-    if (drew) {
-      y += bcHeight + 1.8;
-    }
-  }
   
   y += 3.5;
   doc.text(`Date    : ${orderDateStr || "N/A"}`, margin, y);
@@ -947,6 +937,17 @@ export async function generateReceiptPDF(
 
   summaryY += 3.5;
   doc.text("*** HAVE A GREAT DAY ***", pageWidth / 2, summaryY, { align: "center" });
+
+  const barcodeValue = String(invoiceNo).replace(/^#/, "").trim();
+  if (barcodeValue) {
+    summaryY += 3;
+    const bcWidth = 32;
+    const bcHeight = 6;
+    const drew = drawBarcodeImage(doc, barcodeValue, (pageWidth - bcWidth) / 2, summaryY, bcWidth, bcHeight);
+    if (drew) {
+      summaryY += bcHeight;
+    }
+  }
   
   summaryY += 5; // End margin
   
@@ -1275,16 +1276,6 @@ export async function generateReturnReceiptPDF(
   }
   
   doc.text(`Return No : #${invoiceNo}`, margin, y);
-
-  const barcodeValue = String(invoiceNo).replace(/^#/, "").trim();
-  if (barcodeValue) {
-    const bcWidth = 46;
-    const bcHeight = 7.5;
-    const drew = drawBarcodeImage(doc, barcodeValue, (pageWidth - bcWidth) / 2, y + 1.2, bcWidth, bcHeight);
-    if (drew) {
-      y += bcHeight + 1.8;
-    }
-  }
   
   y += 3.5;
   const origBill = returnData.original_bill_number || (returnData.order_id ? `#${returnData.order_id.slice(0, 8).toUpperCase()}` : "Direct Return");
@@ -1817,6 +1808,17 @@ export async function generateReturnReceiptPDF(
 
   summaryY += 3.5;
   doc.text("Thank you for shopping with us!", pageWidth / 2, summaryY, { align: "center" });
+
+  const barcodeValue = String(invoiceNo).replace(/^#/, "").trim();
+  if (barcodeValue) {
+    summaryY += 3;
+    const bcWidth = 32;
+    const bcHeight = 6;
+    const drew = drawBarcodeImage(doc, barcodeValue, (pageWidth - bcWidth) / 2, summaryY, bcWidth, bcHeight);
+    if (drew) {
+      summaryY += bcHeight;
+    }
+  }
   
   summaryY += 5;
   

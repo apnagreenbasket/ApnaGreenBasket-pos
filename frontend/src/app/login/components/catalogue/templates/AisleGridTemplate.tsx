@@ -101,6 +101,7 @@ function Topbar({ outletInfo }: Pick<TemplateProps, "outletInfo">) {
 
 /* ── Aisle section ─────────────────────────────────────────────── */
 function AisleSection({ category, index }: { category: CatalogueCategory; index: number }) {
+  if (!category.items || category.items.length === 0) return null;
   const accent = getAccent(index);
   const aisleNum = String(index + 1).padStart(2, "0");
 
@@ -356,9 +357,11 @@ export function AisleGridTemplate({ batch, pageNumber, totalPages, outletInfo }:
 
       {/* Body — aisle sections */}
       <div style={{ flex: 1, overflow: "hidden", padding: "8px 0 4px" }}>
-        {batch.categories.map((cat, i) => (
-          <AisleSection key={cat.id} category={cat} index={i} />
-        ))}
+        {batch.categories
+          .filter((cat) => cat.items && cat.items.length > 0)
+          .map((cat, i) => (
+            <AisleSection key={cat.id} category={cat} index={i} />
+          ))}
       </div>
 
       <AisleFooter pageNumber={pageNumber} totalPages={totalPages} />
