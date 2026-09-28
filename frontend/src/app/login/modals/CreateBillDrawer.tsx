@@ -1305,14 +1305,14 @@ export function CreateBillDrawer({
           {/* Left Column: Product Catalog Picker */}
           <div className="p-4 space-y-3 flex flex-col h-full overflow-hidden">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 flex-shrink-0">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-shrink-0">
                 <span className="text-sm font-bold uppercase tracking-wider text-[var(--text-muted)]">
-                  Products Catalog
+                  Product
                 </span>
               </div>
 
               {/* Retail vs Wholesale Pricing Mode Toggle */}
-              <div className="flex items-center gap-1 rounded-xl bg-[var(--bg-surface-elevated)] p-1 border border-[var(--border-strong)]">
+              <div className="flex items-center gap-1 rounded-xl bg-[var(--bg-surface-elevated)] p-1 border border-[var(--border-strong)] flex-shrink-0">
                 <button
                   type="button"
                   onClick={() => setPricingMode("RETAIL")}
@@ -1337,7 +1337,7 @@ export function CreateBillDrawer({
                 </button>
               </div>
 
-              <div className="relative flex-1 max-w-[200px]">
+              <div className="relative flex-1 min-w-[140px]">
                 <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-[var(--text-muted)]" />
                 <input
                   ref={searchInputRef}

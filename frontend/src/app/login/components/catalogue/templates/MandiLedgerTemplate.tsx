@@ -11,6 +11,7 @@
 
 import React from "react";
 import type { TemplateProps, CatalogueCategory, CatalogueItem } from "./templateRegistry";
+import { getOptimizedImageUrl } from "../imageOptimizer";
 
 /* ── colour tokens ─────────────────────────────────────────────── */
 const C = {
@@ -54,7 +55,7 @@ function Masthead({ outletInfo }: Pick<TemplateProps, "outletInfo">) {
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           {outletInfo.logo_url && (
             <img
-              src={outletInfo.logo_url}
+              src={getOptimizedImageUrl(outletInfo.logo_url, 150, 90)}
               alt=""
               style={{ width: 56, height: 56, borderRadius: 8, objectFit: "cover", border: `2px solid ${C.turmeric}` }}
             />
@@ -179,7 +180,7 @@ function ProductCard({ item, showEveningPrice }: { item: CatalogueItem; showEven
       <div style={{ width: "100%", height: 150, background: C.lineLight, position: "relative" }}>
         {item.image_url ? (
           <img
-            src={item.image_url}
+            src={getOptimizedImageUrl(item.image_url, 450, 85)}
             alt=""
             style={{
               width: "100%",

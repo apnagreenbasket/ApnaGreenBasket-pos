@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Barcode, CheckCircle2, Package, Sparkles, X, Building2, Plus, Search, Percent, Trash2 } from "lucide-react";
 import type { InventoryUnit, InventoryItem, Supplier } from "@/types";
 import { formatLocalDate } from "@/lib/api";
@@ -99,6 +99,13 @@ export function BarcodeRegisterModal({
   const [supplierId, setSupplierId] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Shortcut navigation refs
+  const nameRef = useRef<HTMLInputElement>(null);
+  const initialQtyRef = useRef<HTMLInputElement>(null);
+  const mrpMarginRef = useRef<HTMLInputElement>(null);
+  const mrpRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
 
   // Directly capture hardware scanner input while Register modal is open
   useBarcodeScanner({
@@ -262,6 +269,10 @@ export function BarcodeRegisterModal({
       setShelfLifeValue("");
       setShelfLifeUnit("DAYS");
       setError(null);
+      setTimeout(() => {
+        nameRef.current?.focus();
+        nameRef.current?.select();
+      }, 50);
     }
   }, [isOpen, barcode, categories, prefillItem]);
 
@@ -372,10 +383,11 @@ export function BarcodeRegisterModal({
       return;
     }
 
-    const billed = parseFloat(totalBilledAmount);
-    const sorted = parseFloat(sortedQuantity);
     const initial = initialStock.trim() === "" ? 0 : parseFloat(initialStock);
-    const sellPriceNum = parseFloat(sellingPrice);
+    const sorted = parseFloat(sortedQuantity);
+    const effQty = !isNaN(sorted) && sorted > 0 ? sorted : initial;
+    let billed = parseFloat(totalBilledAmount);
+    let sellPriceNum = parseFloat(sellingPrice);
     const mrpNum = parseFloat(mrp);
 
     if (isNaN(initial) || initial < 0 || (!isNaN(sorted) && sorted < 0) || (!isNaN(billed) && billed < 0)) {
@@ -385,17 +397,41 @@ export function BarcodeRegisterModal({
 
     const isCreatingBatch = initial > 0 || (!isNaN(sorted) && sorted > 0);
 
-    // If initial qty > 0 (condition of creating a batch), force compulsory values:
-    // 1. Total Billed amount
-    // 2. Retail Price (or derived from retail margin)
+    // If initial qty > 0 (condition of creating a batch):
     if (isCreatingBatch) {
-      if (isNaN(billed) || billed <= 0) {
-        setError("Total Billed amount (₹) is compulsory when inwarding stock with initial quantity > 0");
-        return;
-      }
+      // 1. If retail price was not entered, default to MRP if available
       if (isNaN(sellPriceNum) || sellPriceNum <= 0) {
-        setError("Retail Price (₹) or Retail Margin (%) is compulsory when inwarding stock with initial quantity > 0");
-        return;
+        if (!isNaN(mrpNum) && mrpNum > 0) {
+          sellPriceNum = mrpNum;
+          setSellingPrice(String(mrpNum));
+        } else {
+          setError("Retail Price (₹) or MRP (₹) is compulsory when inwarding stock with initial quantity > 0");
+          return;
+        }
+      }
+
+      // 2. If total billed amount was not entered, derive unit cost from MRP / margin or costPerUnit
+      if (isNaN(billed) || billed <= 0) {
+        let derivedUnitCost = parseFloat(costPerUnit) || 0;
+        if (derivedUnitCost <= 0 && !isNaN(mrpNum) && mrpNum > 0) {
+          const mrpMargin = parseFloat(mrpMarginPct);
+          if (!isNaN(mrpMargin) && mrpMargin > 0) {
+            derivedUnitCost = marginType === "MARKUP"
+              ? mrpNum / (1 + mrpMargin / 100)
+              : mrpNum * (1 - mrpMargin / 100);
+          } else {
+            derivedUnitCost = sellPriceNum > 0 ? sellPriceNum : mrpNum;
+          }
+        }
+
+        if (derivedUnitCost > 0 && effQty > 0) {
+          billed = parseFloat((derivedUnitCost * effQty).toFixed(2));
+          setTotalBilledAmount(String(billed));
+          setCostPerUnit(derivedUnitCost.toFixed(2));
+        } else {
+          setError("Total Billed amount (₹) is compulsory when inwarding stock with initial quantity > 0");
+          return;
+        }
       }
     }
 
@@ -422,7 +458,7 @@ export function BarcodeRegisterModal({
         sorted_quantity: !isNaN(sorted) && sorted > 0 ? sorted : undefined,
         total_billed_amount: !isNaN(billed) && billed > 0 ? billed : undefined,
         cost_per_unit: finalCost,
-        selling_price: sellingPrice.trim() ? parseFloat(sellingPrice) : undefined,
+        selling_price: !isNaN(sellPriceNum) && sellPriceNum > 0 ? sellPriceNum : (sellingPrice.trim() ? parseFloat(sellingPrice) : undefined),
         mrp: mrp.trim() ? parseFloat(mrp) : undefined,
         wholesale_price: wholesalePrice.trim() ? parseFloat(wholesalePrice) : undefined,
         margin_type: marginType,
@@ -473,8 +509,11 @@ export function BarcodeRegisterModal({
               <h2 className="text-base font-bold text-[var(--text-primary)]">
                 {customBarcode.trim() ? "New Barcode Scanned!" : "Register Inventory Product & Batch"}
               </h2>
-              <p className="text-xs text-[var(--text-secondary)]">
-                Inward stock with automatic cost calculation, MRP & tax rates.
+              <p className="text-xs text-[var(--text-secondary)] flex items-center gap-1.5 flex-wrap">
+                <span>Inward stock with automatic cost calculation, MRP & tax rates.</span>
+                <span className="hidden sm:inline-flex items-center text-[10px] font-mono font-medium text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                  ⚡ Name ➔ Enter ➔ Qty ➔ Enter ➔ MRP ➔ Enter (Save)
+                </span>
               </p>
             </div>
           </div>
@@ -518,6 +557,13 @@ export function BarcodeRegisterModal({
             placeholder="Scan or type barcode (Optional)"
             value={customBarcode}
             onChange={(e) => setCustomBarcode(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                nameRef.current?.focus();
+                nameRef.current?.select();
+              }
+            }}
             className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3 py-2 text-xs font-mono font-bold text-[var(--accent-brand)] focus:border-[var(--accent-brand)] focus:outline-none placeholder:font-sans placeholder:font-normal placeholder:text-[var(--text-muted)]"
           />
           {selectedItemId && (() => {
@@ -548,7 +594,7 @@ export function BarcodeRegisterModal({
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-3.5">
+        <form ref={formRef} onSubmit={handleSubmit} className="space-y-3.5">
           {/* Product Name with Existing Item Auto-Suggest */}
           <div className="relative">
             <label className="block text-xs font-semibold text-[var(--text-primary)] mb-1 flex items-center justify-between">
@@ -560,6 +606,7 @@ export function BarcodeRegisterModal({
               )}
             </label>
             <input
+              ref={nameRef}
               type="text"
               autoFocus
               required
@@ -570,6 +617,23 @@ export function BarcodeRegisterModal({
                 setName(e.target.value);
                 setSelectedItemId(undefined);
                 setIsItemDropdownOpen(true);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  if (!selectedItemId && name.trim()) {
+                    const trimmed = name.trim().toLowerCase();
+                    const exactMatch = items.find(
+                      (i) => i.name.toLowerCase() === trimmed
+                    );
+                    if (exactMatch) {
+                      populateFromItem(exactMatch);
+                    }
+                  }
+                  setIsItemDropdownOpen(false);
+                  initialQtyRef.current?.focus();
+                  initialQtyRef.current?.select();
+                }
               }}
               onBlur={() => {
                 setTimeout(() => {
@@ -786,12 +850,20 @@ export function BarcodeRegisterModal({
                   Initial Qty
                 </label>
                 <input
+                  ref={initialQtyRef}
                   type="number"
                   step="any"
                   min="0"
                   placeholder="0"
                   value={initialStock}
                   onChange={(e) => setInitialStock(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      mrpRef.current?.focus();
+                      mrpRef.current?.select();
+                    }
+                  }}
                   className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-2.5 py-1.5 text-xs font-mono text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none"
                 />
               </div>
@@ -866,11 +938,19 @@ export function BarcodeRegisterModal({
                   MRP Margin (%)
                 </label>
                 <input
+                  ref={mrpMarginRef}
                   type="number"
                   step="any"
                   placeholder="e.g. 30"
                   value={mrpMarginPct}
                   onChange={(e) => setMrpMarginPct(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      mrpRef.current?.focus();
+                      mrpRef.current?.select();
+                    }
+                  }}
                   className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-xs font-mono text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none"
                 />
               </div>
@@ -910,6 +990,7 @@ export function BarcodeRegisterModal({
                 MRP (₹)
               </label>
               <input
+                ref={mrpRef}
                 type="number"
                 step="0.01"
                 min="0"
@@ -919,6 +1000,18 @@ export function BarcodeRegisterModal({
                   setMrp(e.target.value);
                   setMrpMarginPct(""); // clear margin if manual override
                   setMrpExact("");
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    if (formRef.current) {
+                      if (typeof formRef.current.requestSubmit === "function") {
+                        formRef.current.requestSubmit();
+                      } else {
+                        handleSubmit(new Event("submit", { cancelable: true }) as any);
+                      }
+                    }
+                  }
                 }}
                 className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3 py-2 text-xs font-mono text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none"
               />

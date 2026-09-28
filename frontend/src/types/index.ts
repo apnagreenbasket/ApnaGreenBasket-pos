@@ -569,6 +569,41 @@ export interface TaxableBillsResponse {
   bills: TaxableBillRow[];
 }
 
+export interface ServiceChargeBillRow {
+  order_id: string;
+  basket_number: string;
+  invoice_no?: string | null;
+  created_at: string;
+  customer_name?: string | null;
+  customer_phone?: string | null;
+  payment_method?: string | null;
+  items_count: number;
+  subtotal_amount: number;
+  delivery_charge: number;
+  handling_charge: number;
+  total_charges: number;
+  discount_amount: number;
+  total_amount: number;
+}
+
+export interface ServiceChargesSummaryResponse {
+  from_date: string;
+  to_date: string;
+  bills_with_charges_count: number;
+  bills_with_charges_turnover: number;
+  bills_with_charges_subtotal: number;
+  total_delivery_charges: number;
+  total_handling_charges: number;
+  total_combined_charges: number;
+  handling_only_count: number;
+  delivery_only_count: number;
+  both_charges_count: number;
+  zero_charges_count: number;
+  zero_charges_turnover: number;
+  total_bills: number;
+  bills: ServiceChargeBillRow[];
+}
+
 export interface DiscountedBillDetail {
   order_id: string;
   bill_number: string;
@@ -671,6 +706,7 @@ export type FinancialSubTab =
   | "profit_margin"
   | "bill_profit"
   | "tax_summary"
+  | "service_charges"
   | "cash_denominations"
   | "outlet_earnings";
 
@@ -805,5 +841,7 @@ export interface CustomerSpendsReportResponse {
   from_date: string;
   to_date: string;
 }
+
+declare module "jsbarcode";
 
 

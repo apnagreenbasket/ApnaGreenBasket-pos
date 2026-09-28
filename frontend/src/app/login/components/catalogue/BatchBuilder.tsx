@@ -12,6 +12,7 @@ import {
   ArrowLeft,
   Save,
   Eye,
+  FileDown,
   Printer,
   Plus,
   FolderPlus,
@@ -22,6 +23,8 @@ import {
   Copy,
   ListPlus,
 } from "lucide-react";
+import jsPDF from "jspdf";
+import { getOptimizedImageUrl } from "./imageOptimizer";
 import type { AdminMenuItem, AdminCategory } from "../../adminTypes";
 import type {
   CatalogueBatch,
@@ -48,6 +51,17 @@ interface BatchBuilderProps {
 
 type SubView = "main" | "add-from-category" | "add-custom" | "pick-items" | "review-items";
 
+function isItemInStock(item: AdminMenuItem | undefined): boolean {
+  if (!item) return false;
+  if (item.is_available === false) return false;
+  if (item.is_out_of_stock === true) return false;
+  if (item.current_stock !== undefined && item.current_stock !== null && item.current_stock !== "") {
+    const stockVal = parseFloat(String(item.current_stock));
+    if (!isNaN(stockVal) && stockVal <= 0) return false;
+  }
+  return true;
+}
+
 function resolveItemForPrint(item: AdminMenuItem): CatalogueItem {
   const mrp = item.mrp ? parseFloat(String(item.mrp)) : 0;
   const price = parseFloat(String(item.price)) || 0;
@@ -56,7 +70,7 @@ function resolveItemForPrint(item: AdminMenuItem): CatalogueItem {
   return {
     id: item.id,
     name_en: item.name,
-    image_url: item.image_url || "",
+    image_url: item.image_url ? getOptimizedImageUrl(item.image_url, 450, 85) : "",
     mrp,
     price,
     discount_pct: disc,
@@ -80,91 +94,148 @@ export function BatchBuilder({
   const [newSectionName, setNewSectionName] = useState("");
   const [pickFromCatIds, setPickFromCatIds] = useState<string[]>([]);
   const [statusMsg, setStatusMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isFetchingLive, setIsFetchingLive] = useState(false);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   const menuItemMap = useMemo(() => new Map(menuItems.map((i) => [i.id, i])), [menuItems]);
 
+  const handleSyncCapacity = useCallback(async () => {
+    setIsSyncing(true);
+    setStatusMsg(null);
+    try {
+      let freshMenuItems: AdminMenuItem[] = menuItems;
+      try {
+        const res = await apiRequest<any>("/api/admin/menu-items");
+        if (res) {
+          freshMenuItems = res.items || res;
+        }
+      } catch (err) {
+        console.warn("Could not fetch fresh menu items, using cached items", err);
+      }
 
-  const handleSyncCapacity = useCallback(() => {
-    setBatch((prev) => {
-      let changed = false;
-      const newCategories = prev.categories.map((cat) => {
-        if (!cat.source_category_id) return cat;
+      const freshMap = new Map(freshMenuItems.map((i) => [i.id, i]));
 
-        const availableItems = menuItems.filter(
-          (mi) => mi.category_id === cat.source_category_id && mi.is_available
-        );
+      setBatch((prev) => {
+        let changed = false;
+        const newCategories = prev.categories.map((cat) => {
+          // Remove existing items that are out of stock (<= 0 or unavailable)
+          const validExistingItems = cat.items.filter((item) => {
+            const freshItem = freshMap.get(item.id);
+            if (!freshItem || !isItemInStock(freshItem)) {
+              changed = true;
+              return false;
+            }
+            return true;
+          });
 
-        const currentItemIds = new Set(cat.items.map((i) => i.id));
-        const newItemsToAdd = availableItems
-          .filter((mi) => !currentItemIds.has(mi.id))
-          .map(resolveItemForPrint);
+          // If not linked to a source category, keep in-stock items
+          if (!cat.source_category_id) {
+            if (validExistingItems.length !== cat.items.length) {
+              changed = true;
+            }
+            return { ...cat, items: validExistingItems };
+          }
 
-        if (newItemsToAdd.length > 0) {
-          changed = true;
+          // Pull in available in-stock items from source category
+          const availableInStockItems = freshMenuItems.filter(
+            (mi) => mi.category_id === cat.source_category_id && isItemInStock(mi)
+          );
+
+          const currentItemIds = new Set(validExistingItems.map((i) => i.id));
+          const newItemsToAdd = availableInStockItems
+            .filter((mi) => !currentItemIds.has(mi.id))
+            .map(resolveItemForPrint);
+
+          if (newItemsToAdd.length > 0 || validExistingItems.length !== cat.items.length) {
+            changed = true;
+          }
+
           return {
             ...cat,
-            items: [...cat.items, ...newItemsToAdd],
+            items: [...validExistingItems, ...newItemsToAdd],
           };
+        });
+
+        if (changed) {
+          setStatusMsg({ type: "ok", text: "Synced capacity: in-stock items updated, out-of-stock removed." });
+          setTimeout(() => setStatusMsg(null), 3000);
+          return { ...prev, categories: newCategories };
+        } else {
+          setStatusMsg({ type: "ok", text: "All linked sections are already at full capacity with in-stock items." });
+          setTimeout(() => setStatusMsg(null), 3000);
+          return prev;
         }
-        return cat;
       });
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [menuItems]);
 
-      if (changed) {
-        setStatusMsg({ type: "ok", text: "Synced capacity: new items pulled into linked sections." });
-        return { ...prev, categories: newCategories };
-      } else {
-        setStatusMsg({ type: "ok", text: "All linked sections are already at full capacity." });
-        return prev;
-      }
-    });
-  }, [menuItems, setBatch]);
-
-  const handleFetchLiveCopy = useCallback(() => {
-    setBatch((prev) => {
-      let changed = false;
-      const newCategories = prev.categories.map((cat) => {
-        const newItems = cat.items
-          .map((item) => {
-            const freshItem = menuItemMap.get(item.id);
-            // Drop items that are deleted or unavailable
-            if (!freshItem || !freshItem.is_available) {
-              changed = true;
-              return null;
-            }
-            
-            const resolved = resolveItemForPrint(freshItem);
-            if (
-              resolved.price !== item.price ||
-              resolved.mrp !== item.mrp ||
-              resolved.evening_price !== item.evening_price ||
-              resolved.name_en !== item.name_en ||
-              resolved.name_hi !== item.name_hi ||
-              resolved.image_url !== item.image_url
-            ) {
-              changed = true;
-              return { ...item, ...resolved };
-            }
-            return item;
-          })
-          .filter(Boolean) as CatalogueItem[]; // Remove nulls (dropped items)
-          
-        if (newItems.length !== cat.items.length) {
-          changed = true;
+  const handleFetchLiveCopy = useCallback(async () => {
+    setIsFetchingLive(true);
+    setStatusMsg(null);
+    try {
+      let freshMenuItems: AdminMenuItem[] = menuItems;
+      try {
+        const res = await apiRequest<any>("/api/admin/menu-items");
+        if (res) {
+          freshMenuItems = res.items || res;
         }
-        return { ...cat, items: newItems };
-      });
-
-      if (changed) {
-        setStatusMsg({ type: "ok", text: "Live copy fetched & updated!" });
-        setTimeout(() => setStatusMsg(null), 2000);
-        return { ...prev, categories: newCategories };
-      } else {
-        setStatusMsg({ type: "ok", text: "Already up to date!" });
-        setTimeout(() => setStatusMsg(null), 2000);
-        return prev;
+      } catch (err) {
+        console.warn("Could not fetch fresh menu items, using cached items", err);
       }
-    });
-  }, [menuItemMap]);
+
+      const freshMap = new Map(freshMenuItems.map((i) => [i.id, i]));
+
+      setBatch((prev) => {
+        let changed = false;
+        const newCategories = prev.categories.map((cat) => {
+          const newItems = cat.items
+            .map((item) => {
+              const freshItem = freshMap.get(item.id);
+              // Drop items that are deleted, unavailable, or out of stock (<= 0)
+              if (!freshItem || !isItemInStock(freshItem)) {
+                changed = true;
+                return null;
+              }
+
+              const resolved = resolveItemForPrint(freshItem);
+              if (
+                resolved.price !== item.price ||
+                resolved.mrp !== item.mrp ||
+                resolved.evening_price !== item.evening_price ||
+                resolved.name_en !== item.name_en ||
+                resolved.name_hi !== item.name_hi ||
+                resolved.image_url !== item.image_url
+              ) {
+                changed = true;
+                return { ...item, ...resolved };
+              }
+              return item;
+            })
+            .filter(Boolean) as CatalogueItem[];
+
+          if (newItems.length !== cat.items.length) {
+            changed = true;
+          }
+          return { ...cat, items: newItems };
+        });
+
+        if (changed) {
+          setStatusMsg({ type: "ok", text: "Live copy fetched & updated (out-of-stock items removed)!" });
+          setTimeout(() => setStatusMsg(null), 3000);
+          return { ...prev, categories: newCategories };
+        } else {
+          setStatusMsg({ type: "ok", text: "All items are already up to date and in stock!" });
+          setTimeout(() => setStatusMsg(null), 3000);
+          return prev;
+        }
+      });
+    } finally {
+      setIsFetchingLive(false);
+    }
+  }, [menuItems]);
 
   // ── helpers ──────────────────────────────────────────────────────
   const updateField = <K extends keyof CatalogueBatch>(key: K, val: CatalogueBatch[K]) => {
@@ -304,6 +375,117 @@ export function BatchBuilder({
     });
   };
 
+  // ── Automatic Save PDF ───────────────────────────────────────────
+  const handleSavePdf = async () => {
+    if (typeof window === "undefined") return;
+    setIsGeneratingPdf(true);
+    setStatusMsg({ type: "ok", text: "Preparing PDF for download..." });
+
+    // Inject fonts if not already in document
+    const fontId = "catalogue-fonts-" + batch.template;
+    if (!document.getElementById(fontId)) {
+      const link = document.createElement("link");
+      link.id = fontId;
+      link.rel = "stylesheet";
+      link.href =
+        batch.template === "mandi-ledger"
+          ? "https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,600;0,700;1,400;1,600;1,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap"
+          : "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap";
+      document.head.appendChild(link);
+    }
+
+    const container = document.createElement("div");
+    container.id = "catalogue-pdf-render-target";
+    container.style.position = "fixed";
+    container.style.left = "-9999px";
+    container.style.top = "0";
+    container.style.width = "794px";
+    container.style.background = "#fff";
+    container.style.zIndex = "-9999";
+    document.body.appendChild(container);
+
+    try {
+      const TemplateComponent = templateRegistry[batch.template];
+      const { createRoot } = await import("react-dom/client");
+      const root = createRoot(container);
+
+      root.render(
+        React.createElement(TemplateComponent, {
+          batch,
+          pageNumber: 1,
+          totalPages: 1,
+          outletInfo,
+        })
+      );
+
+      // Give React DOM a moment to mount
+      await new Promise((r) => setTimeout(r, 600));
+
+      // Wait for images to load
+      const images = Array.from(container.querySelectorAll("img"));
+      await Promise.all(
+        images.map(
+          (img) =>
+            new Promise<void>((resolve) => {
+              if (img.complete && img.naturalWidth !== 0) return resolve();
+              img.onload = () => resolve();
+              img.onerror = () => resolve();
+              setTimeout(resolve, 2500);
+            })
+        )
+      );
+
+      const doc = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+        compress: true,
+      });
+
+      const safeFileName = `${(batch.name || "Catalogue").replace(/[/\\?%*:|"<>]/g, "_").trim()}.pdf`;
+
+      await new Promise<void>((resolve, reject) => {
+        doc.html(container, {
+          callback: (pdf) => {
+            try {
+              pdf.save(safeFileName);
+              resolve();
+            } catch (err) {
+              reject(err);
+            }
+          },
+          margin: [0, 0, 0, 0],
+          autoPaging: true,
+          width: 210,
+          windowWidth: 794,
+          html2canvas: {
+            scale: 1.5,
+            useCORS: true,
+            allowTaint: false,
+            logging: false,
+          },
+        });
+      });
+
+      root.unmount();
+      if (document.body.contains(container)) {
+        document.body.removeChild(container);
+      }
+
+      setStatusMsg({ type: "ok", text: "PDF downloaded successfully!" });
+      setTimeout(() => setStatusMsg(null), 3000);
+    } catch (err: any) {
+      console.error("PDF generation error:", err);
+      if (document.body.contains(container)) {
+        document.body.removeChild(container);
+      }
+      setStatusMsg({ type: "err", text: "Could not generate PDF. Please try again or use Preview." });
+      setTimeout(() => setStatusMsg(null), 4000);
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
   // 🔸 Add Section flows 🔸🔸🔸🔸🔸🔸🔸🔸🔸🔸🔸🔸🔸🔸🔸🔸🔸🔸🔸🔸🔸🔸🔸🔸
   const handleAddFromCategory = () => {
     if (pickFromCatIds.length === 0) return;
@@ -315,7 +497,7 @@ export function BatchBuilder({
       if (!cat) continue;
 
       const catItems: CatalogueItem[] = menuItems
-        .filter((mi) => mi.category_id === catId)
+        .filter((mi) => mi.category_id === catId && isItemInStock(mi))
         .map(resolveItemForPrint);
 
       newSections.push({
@@ -624,16 +806,20 @@ export function BatchBuilder({
           <button
             type="button"
             onClick={handleSyncCapacity}
-            className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-xs font-bold text-emerald-600 hover:bg-emerald-500/20 transition"
+            disabled={isSyncing}
+            className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-xs font-bold text-emerald-600 hover:bg-emerald-500/20 disabled:opacity-50 transition"
           >
-            <ListPlus className="h-3.5 w-3.5" /> Sync Capacity
+            {isSyncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ListPlus className="h-3.5 w-3.5" />}
+            {isSyncing ? "Syncing..." : "Sync Capacity"}
           </button>
           <button
             type="button"
             onClick={handleFetchLiveCopy}
-            className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-xs font-bold text-sky-600 hover:bg-sky-500/20 transition"
+            disabled={isFetchingLive}
+            className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-xs font-bold text-sky-600 hover:bg-sky-500/20 disabled:opacity-50 transition"
           >
-            <RefreshCw className="h-3.5 w-3.5" /> Fetch Live Copy
+            {isFetchingLive ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+            {isFetchingLive ? "Fetching..." : "Fetch Live Copy"}
           </button>
           <button
             type="button"
@@ -664,10 +850,17 @@ export function BatchBuilder({
           </button>
           <button
             type="button"
-            onClick={() => handlePrintOrPreview(true)}
-            className="flex items-center gap-1.5 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-4 py-2.5 text-xs font-bold text-[var(--text-primary)] hover:border-[var(--accent-brand)] transition"
+            onClick={handleSavePdf}
+            disabled={isGeneratingPdf}
+            className="flex items-center gap-1.5 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-4 py-2.5 text-xs font-bold text-[var(--text-primary)] hover:border-[var(--accent-brand)] disabled:opacity-50 transition"
+            title="Download PDF directly to your computer"
           >
-            <Printer className="h-3.5 w-3.5" /> Print
+            {isGeneratingPdf ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-[var(--accent-brand)]" />
+            ) : (
+              <FileDown className="h-3.5 w-3.5 text-emerald-500" />
+            )}
+            {isGeneratingPdf ? "Saving PDF..." : "Save PDF"}
           </button>
         </div>
       </div>

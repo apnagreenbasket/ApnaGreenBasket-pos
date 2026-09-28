@@ -70,6 +70,7 @@ import { LoyaltyReport } from "./analytics/LoyaltyReport";
 import { AbandonedCartReport } from "./analytics/AbandonedCartReport";
 import { CashDenominationReport } from "./analytics/CashDenominationReport";
 import { TaxSummaryReport } from "./analytics/TaxSummaryReport";
+import { ServiceChargesReport } from "./analytics/ServiceChargesReport";
 import { OutletEarningsReport } from "./analytics/OutletEarningsReport";
 
 type AnalyticsTabProps = {
@@ -326,6 +327,8 @@ export function AnalyticsTab(props: AnalyticsTabProps) {
                   generateBillProfitPdfReport(props.restaurant, dateRangeLabel, props.billProfitData);
                 } else if (props.activeFinancialSubTab === "tax_summary") {
                   generateTaxSummaryPdfReport(props.restaurant, dateRangeLabel, props.taxSummaryData, props.gstr1HsnData);
+                } else if (props.activeFinancialSubTab === "service_charges") {
+                  alert("Please use the 'Download Service Report (.csv)' button inside the Service & Handling Charges tab for complete bill-wise audit exports.");
                 } else if (props.activeFinancialSubTab === "cash_denominations") {
                   generateCashDenominationPdfReport(props.restaurant, dateRangeLabel, props.cashDenomData);
                 } else {
@@ -549,13 +552,13 @@ export function AnalyticsTab(props: AnalyticsTabProps) {
           {props.activeTab === "financial" && (
             <div className="space-y-4">
               <div className="flex gap-2">
-                {["master_view", "outlet_earnings", "profit_margin", "bill_profit", "tax_summary", "cash_denominations"].map(sub => (
+                {["master_view", "outlet_earnings", "profit_margin", "bill_profit", "tax_summary", "service_charges", "cash_denominations"].map(sub => (
                   <button
                     key={sub}
                     onClick={() => props.setActiveFinancialSubTab(sub)}
                     className={`px-3 py-1 text-xs rounded-full font-bold uppercase ${props.activeFinancialSubTab === sub ? "bg-zinc-800 text-white" : "bg-zinc-100 text-zinc-600 dark:bg-zinc-900 dark:text-zinc-400"}`}
                   >
-                    {sub.replace("_", " ")}
+                    {sub.replace(/_/g, " ")}
                   </button>
                 ))}
               </div>
@@ -566,6 +569,7 @@ export function AnalyticsTab(props: AnalyticsTabProps) {
                   <ProfitMarginReport data={props.profitData} />
                   <BillProfitReport data={props.billProfitData} isLoading={props.isLoading} restaurant={props.restaurant} />
                   <TaxSummaryReport data={props.taxSummaryData} gstr1Data={props.gstr1HsnData} isLoading={props.isLoading} fromDate={props.customFromDate} toDate={props.customToDate} restaurant={props.restaurant} />
+                  <ServiceChargesReport isLoading={props.isLoading} fromDate={props.customFromDate} toDate={props.customToDate} restaurant={props.restaurant} />
                   <CashDenominationReport data={props.cashDenomData} isLoading={props.isLoading} />
                 </div>
               )}
@@ -573,6 +577,7 @@ export function AnalyticsTab(props: AnalyticsTabProps) {
               {props.activeFinancialSubTab === "profit_margin" && <ProfitMarginReport data={props.profitData} />}
               {props.activeFinancialSubTab === "bill_profit" && <BillProfitReport data={props.billProfitData} isLoading={props.isLoading} restaurant={props.restaurant} />}
               {props.activeFinancialSubTab === "tax_summary" && <TaxSummaryReport data={props.taxSummaryData} gstr1Data={props.gstr1HsnData} isLoading={props.isLoading} fromDate={props.customFromDate} toDate={props.customToDate} restaurant={props.restaurant} />}
+              {props.activeFinancialSubTab === "service_charges" && <ServiceChargesReport isLoading={props.isLoading} fromDate={props.customFromDate} toDate={props.customToDate} restaurant={props.restaurant} />}
               {props.activeFinancialSubTab === "cash_denominations" && <CashDenominationReport data={props.cashDenomData} isLoading={props.isLoading} />}
             </div>
           )}

@@ -28,10 +28,12 @@ import {
   Play,
 } from "lucide-react";
 import type { AdminMenuItem } from "../adminTypes";
-import type { ManualBill, ItemReturnLedgerResponse, ItemReturnLedgerRow } from "@/types";
+import type { ManualBill, ItemReturnLedgerResponse, ItemReturnLedgerRow, BillingDateRangeMode } from "@/types";
 import { getUnitFactor, getUnallocatedBatchStock, type DraftCartItem } from "./CreateBillDrawer";
 import { generateReturnReceiptPDF } from "@/lib/pdfGenerator";
-import { apiRequest , parseUTCDate} from "../adminUtils";
+import { apiRequest, parseUTCDate, formatLocalDate } from "../adminUtils";
+import { BillingDateRangeFilter } from "../components/BillingDateRangeFilter";
+import { useBarcodeScanner } from "@/hooks/useBarcodeScanner";
 
 type DirectReturnItem = {
   menu_item_id: string;
@@ -193,11 +195,99 @@ export function CustomerReturnsModal({
     }
   }, [isOpen, initialTab]);
 
+  // Modal Date Range Filter State (Synced with POS billing date picker format)
+  const [modalDateRangeMode, setModalDateRangeMode] = useState<BillingDateRangeMode>(
+    (dateRangeMode as BillingDateRangeMode) || "today"
+  );
+  const [modalCustomStartDate, setModalCustomStartDate] = useState<string>(
+    startDate || formatLocalDate()
+  );
+  const [modalCustomEndDate, setModalCustomEndDate] = useState<string>(
+    endDate || formatLocalDate()
+  );
+
+  useEffect(() => {
+    if (isOpen) {
+      if (dateRangeMode) setModalDateRangeMode(dateRangeMode as BillingDateRangeMode);
+      if (startDate) setModalCustomStartDate(startDate);
+      if (endDate) setModalCustomEndDate(endDate);
+    }
+  }, [isOpen, dateRangeMode, startDate, endDate]);
+
+  // Compute active start & end dates based on modalDateRangeMode
+  const { modalComputedStartDate, modalComputedEndDate } = useMemo(() => {
+    const today = new Date();
+    let start = new Date(today);
+    let end = new Date(today);
+
+    if (modalDateRangeMode === "today") {
+      // today
+    } else if (modalDateRangeMode === "yesterday") {
+      start.setDate(today.getDate() - 1);
+      end.setDate(today.getDate() - 1);
+    } else if (modalDateRangeMode === "last2days") {
+      start.setDate(today.getDate() - 1);
+    } else if (modalDateRangeMode === "week") {
+      const day = today.getDay();
+      const diff = (day === 0 ? -6 : 1) - day;
+      start.setDate(today.getDate() + diff);
+    } else if (modalDateRangeMode === "last7" || (modalDateRangeMode as string) === "last_7") {
+      start.setDate(today.getDate() - 6);
+    } else if (modalDateRangeMode === "this_month" || (modalDateRangeMode as string) === "thisMonth") {
+      start = new Date(today.getFullYear(), today.getMonth(), 1);
+    } else if (modalDateRangeMode === "last30" || (modalDateRangeMode as string) === "last_30") {
+      start.setDate(today.getDate() - 29);
+    } else if (modalDateRangeMode === "custom") {
+      return {
+        modalComputedStartDate: modalCustomStartDate,
+        modalComputedEndDate: modalCustomEndDate,
+      };
+    }
+
+    return {
+      modalComputedStartDate: formatLocalDate(start),
+      modalComputedEndDate: formatLocalDate(end),
+    };
+  }, [modalDateRangeMode, modalCustomStartDate, modalCustomEndDate]);
+
+  // Bills fetched for the selected date range in the modal
+  const [modalBills, setModalBills] = useState<ManualBill[]>(billsList || []);
+  const [isLoadingModalBills, setIsLoadingModalBills] = useState(false);
+
+  const fetchModalBills = async (sDate: string, eDate: string) => {
+    setIsLoadingModalBills(true);
+    try {
+      const bills = await apiRequest<ManualBill[]>(
+        `/api/billing/bills?start_date=${sDate}&end_date=${eDate}&status=PAID,COMPLETED,PARTIALLY_REFUNDED&limit=250`
+      );
+      if (Array.isArray(bills)) {
+        setModalBills(bills);
+      }
+    } catch (err) {
+      console.error("Error loading bills for return modal:", err);
+    } finally {
+      setIsLoadingModalBills(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      void fetchModalBills(modalComputedStartDate, modalComputedEndDate);
+    }
+  }, [isOpen, modalComputedStartDate, modalComputedEndDate]);
+
   // Search queries
   const [customerSearch, setCustomerSearch] = useState("");
   const [invoiceSearch, setInvoiceSearch] = useState("");
+  const invoiceInputRef = useRef<HTMLInputElement>(null);
   const [serverSearchedBills, setServerSearchedBills] = useState<ManualBill[]>([]);
   const [isSearchingServerBills, setIsSearchingServerBills] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (isOpen && lookupTab === "INVOICE_NO") {
+      setTimeout(() => invoiceInputRef.current?.focus(), 100);
+    }
+  }, [isOpen, lookupTab]);
 
   // Mode: Bill-referenced return vs Direct un-billed return
   const [returnMode, setReturnMode] = useState<"BILL_REFERENCED" | "DIRECT_UNBILLED">("BILL_REFERENCED");
@@ -864,18 +954,18 @@ export function CustomerReturnsModal({
 
   // Active Date Filter Label
   const activeDateFilterLabel = useMemo(() => {
-    if (dateRangeMode === "today") return "Today Only";
-    if (dateRangeMode === "yesterday") return "Yesterday";
-    if (dateRangeMode === "last2days") return "Last 2 Days";
-    if (dateRangeMode === "week") return "This Week";
-    if (dateRangeMode === "last7" || (dateRangeMode as string) === "last_7") return "Last 7 Days";
-    if (dateRangeMode === "this_month" || (dateRangeMode as string) === "thisMonth") return "This Month";
-    if (dateRangeMode === "last30" || (dateRangeMode as string) === "last_30") return "Last 30 Days";
-    if (startDate && endDate) {
-      return startDate === endDate ? startDate : `${startDate} to ${endDate}`;
+    if (modalDateRangeMode === "today") return "Today Only";
+    if (modalDateRangeMode === "yesterday") return "Yesterday";
+    if (modalDateRangeMode === "last2days") return "Last 2 Days";
+    if (modalDateRangeMode === "week") return "This Week";
+    if (modalDateRangeMode === "last7" || (modalDateRangeMode as string) === "last_7") return "Last 7 Days";
+    if (modalDateRangeMode === "this_month" || (modalDateRangeMode as string) === "thisMonth") return "This Month";
+    if (modalDateRangeMode === "last30" || (modalDateRangeMode as string) === "last_30") return "Last 30 Days";
+    if (modalComputedStartDate && modalComputedEndDate) {
+      return modalComputedStartDate === modalComputedEndDate ? modalComputedStartDate : `${modalComputedStartDate} to ${modalComputedEndDate}`;
     }
     return "Active Period";
-  }, [dateRangeMode, startDate, endDate]);
+  }, [modalDateRangeMode, modalComputedStartDate, modalComputedEndDate]);
 
   // Universal 30-Day Bounded Bill Search Fallback (Industry Standard Limit 50)
   useEffect(() => {
@@ -923,7 +1013,7 @@ export function CustomerReturnsModal({
       }
       void fetchReturnsHistory();
     }
-  }, [isOpen, startDate, endDate, isAdminRole, isPunchedIn]);
+  }, [isOpen, modalComputedStartDate, modalComputedEndDate, isAdminRole, isPunchedIn]);
 
   useEffect(() => {
     if (isOpen && lookupTab === "RETURN_HISTORY") {
@@ -935,7 +1025,7 @@ export function CustomerReturnsModal({
       void fetchReturnsHistory();
       void fetchItemLedger();
     }
-  }, [isOpen, lookupTab, startDate, endDate, isAdminRole, isPunchedIn]);
+  }, [isOpen, lookupTab, modalComputedStartDate, modalComputedEndDate, isAdminRole, isPunchedIn]);
 
   // Self-healing catalog fetch: Ensure exchange items are always available even if prop is empty
   useEffect(() => {
@@ -1010,8 +1100,8 @@ export function CustomerReturnsModal({
     setIsLoadingHistory(true);
     try {
       const params = new URLSearchParams();
-      if (startDate) params.set("start_date", startDate);
-      if (endDate) params.set("end_date", endDate);
+      if (modalComputedStartDate) params.set("start_date", modalComputedStartDate);
+      if (modalComputedEndDate) params.set("end_date", modalComputedEndDate);
       const qs = params.toString();
       const url = qs ? `/api/billing/returns?${qs}` : "/api/billing/returns";
       const data = await apiRequest<any[]>(url);
@@ -1033,8 +1123,8 @@ export function CustomerReturnsModal({
       const params = new URLSearchParams();
       if (searchQuery.trim()) params.set("search", searchQuery.trim());
       if (reasonFilter && reasonFilter !== "ALL") params.set("reason", reasonFilter);
-      if (startDate) params.set("from_date", startDate);
-      if (endDate) params.set("to_date", endDate);
+      if (modalComputedStartDate) params.set("from_date", modalComputedStartDate);
+      if (modalComputedEndDate) params.set("to_date", modalComputedEndDate);
       params.set("page_size", "200");
       const data = await apiRequest<ItemReturnLedgerResponse>(`/api/billing/returns/item-ledger?${params.toString()}`);
       setItemLedgerData(data);
@@ -1052,8 +1142,8 @@ export function CustomerReturnsModal({
       const params = new URLSearchParams();
       if (itemLedgerSearch.trim()) params.set("search", itemLedgerSearch.trim());
       if (itemLedgerReason && itemLedgerReason !== "ALL") params.set("reason", itemLedgerReason);
-      if (startDate) params.set("from_date", startDate);
-      if (endDate) params.set("to_date", endDate);
+      if (modalComputedStartDate) params.set("from_date", modalComputedStartDate);
+      if (modalComputedEndDate) params.set("to_date", modalComputedEndDate);
       params.set("export", "csv");
 
       const token = typeof window !== "undefined" ? window.localStorage.getItem("agb_access_token") : null;
@@ -1143,15 +1233,18 @@ export function CustomerReturnsModal({
     }
   };
 
-  // Merge active date bills with 30-day server-searched bills (deduplicating by ID)
+  // Merge active date bills (modalBills / billsList) with server-searched bills (deduplicating by ID)
   const combinedBills = useMemo(() => {
     const map = new Map<string, ManualBill>();
-    (billsList || []).forEach((b) => map.set(b.id, b));
+    (modalBills || []).forEach((b) => map.set(b.id, b));
+    (billsList || []).forEach((b) => {
+      if (!map.has(b.id)) map.set(b.id, b);
+    });
     serverSearchedBills.forEach((b) => {
       if (!map.has(b.id)) map.set(b.id, b);
     });
     return Array.from(map.values());
-  }, [billsList, serverSearchedBills]);
+  }, [modalBills, billsList, serverSearchedBills]);
 
   // Filter bills by customer search
   const filteredUserBills = useMemo(() => {
@@ -1167,14 +1260,94 @@ export function CustomerReturnsModal({
     });
   }, [combinedBills, customerSearch]);
 
-  // Filter bill by invoice ID
+  // Filter bill by invoice ID (supports scan with/without #, invoice_no, and basket_number)
   const matchingInvoiceBill = useMemo(() => {
     if (!invoiceSearch.trim()) return false;
-    const q = invoiceSearch.toLowerCase().trim();
+    const q = invoiceSearch.replace(/^#/, "").toLowerCase().trim();
     return (combinedBills || []).find((b) => {
-      return b.id.toLowerCase().includes(q) || (b.basket_number && b.basket_number.toLowerCase().includes(q));
+      const idL = b.id.toLowerCase();
+      const invL = ((b as any).invoice_no || "").toLowerCase();
+      const bskL = (b.basket_number || "").toLowerCase();
+      return (
+        idL === q ||
+        idL.startsWith(q) ||
+        idL.includes(q) ||
+        invL === q ||
+        invL.includes(q) ||
+        bskL === q ||
+        bskL.includes(q)
+      );
     });
   }, [combinedBills, invoiceSearch]);
+
+  // Fast Invoice / Bill lookup and auto-select on barcode scan or Enter
+  const handleInvoiceScanOrSubmit = async (queryVal?: string) => {
+    const raw = (queryVal !== undefined ? queryVal : invoiceSearch).trim();
+    if (!raw) return;
+    const clean = raw.replace(/^#/, "").toLowerCase().trim();
+    if (!clean) return;
+
+    // 1. Search in local combinedBills
+    const localMatch = (combinedBills || []).find((b) => {
+      const idL = b.id.toLowerCase();
+      const invL = ((b as any).invoice_no || "").toLowerCase();
+      const bskL = (b.basket_number || "").toLowerCase();
+      return (
+        idL === clean ||
+        idL.startsWith(clean) ||
+        idL.includes(clean) ||
+        invL === clean ||
+        invL.includes(clean) ||
+        bskL === clean
+      );
+    });
+
+    if (localMatch) {
+      setReturnMode("BILL_REFERENCED");
+      setSelectedBill(localMatch);
+      setReturnItemsMap({});
+      setReturnItemsUnitMap({});
+      return;
+    }
+
+    // 2. Fallback to API query (past 90 days to catch any returnable bill)
+    setIsSearchingServerBills(true);
+    try {
+      const today = new Date();
+      const ninetyDaysAgo = new Date();
+      ninetyDaysAgo.setDate(today.getDate() - 90);
+      const sDate = ninetyDaysAgo.toISOString().slice(0, 10);
+      const eDate = today.toISOString().slice(0, 10);
+
+      const serverResults = await apiRequest<ManualBill[]>(
+        `/api/billing/bills?search=${encodeURIComponent(clean)}&start_date=${sDate}&end_date=${eDate}&status=PAID,COMPLETED,PARTIALLY_REFUNDED&limit=20`
+      );
+
+      if (Array.isArray(serverResults) && serverResults.length > 0) {
+        const exact = serverResults.find((b) => {
+          const idL = b.id.toLowerCase();
+          const invL = ((b as any).invoice_no || "").toLowerCase();
+          return idL === clean || idL.startsWith(clean) || invL === clean;
+        }) || serverResults[0];
+
+        setServerSearchedBills((prev) => {
+          const exists = prev.some((b) => b.id === exact.id);
+          return exists ? prev : [exact, ...prev];
+        });
+        setReturnMode("BILL_REFERENCED");
+        setSelectedBill(exact);
+        setReturnItemsMap({});
+        setReturnItemsUnitMap({});
+      } else {
+        setError(`Bill "#${raw}" not found in system.`);
+      }
+    } catch (err) {
+      console.error("Error looking up bill by barcode:", err);
+      setError(`Failed to find bill "#${raw}".`);
+    } finally {
+      setIsSearchingServerBills(false);
+    }
+  };
 
   // Exchange Items Autocomplete Filter
   const exchangeFilteredMenuItems = useMemo(() => {
@@ -1374,7 +1547,134 @@ export function CustomerReturnsModal({
     handleExchangeItemQuantityChange(index, newQty);
   };
 
-  const handleAddExchangeItem = (m: AdminMenuItem) => {
+  // Barcode decoding logic for Exchange items (Exact match + Weighing scale barcodes)
+  const processExchangeBarcodeScan = (barcode: string) => {
+    const bcode = barcode.trim().toLowerCase();
+    const catalog = activeCatalog || menuItems || [];
+
+    // 1. Direct exact barcode match
+    let match = catalog.find(
+      (m) => m.barcode && m.barcode.trim().toLowerCase() === bcode
+    );
+    let scannedQuantity = 1;
+
+    // 2. Weighing scale barcode format support
+    const format = restaurant?.weighing_scale_barcode_format || "21_5I_5W_GRAMS";
+
+    if (!match && format.startsWith("CUSTOM:")) {
+      const maskStr = format.replace("CUSTOM:", "").replace(/\s/g, "").toUpperCase();
+      if (bcode.length === maskStr.length) {
+        let pluStr = "";
+        let weightStr = "";
+        let priceStr = "";
+
+        for (let i = 0; i < maskStr.length; i++) {
+          if (maskStr[i] === "I") pluStr += bcode[i];
+          else if (maskStr[i] === "W") weightStr += bcode[i];
+          else if (maskStr[i] === "P") priceStr += bcode[i];
+        }
+
+        if (pluStr) {
+          const pluStrParsed = parseInt(pluStr, 10).toString();
+          match = catalog.find((m) => m.barcode === pluStr || m.barcode === pluStrParsed);
+          if (match) {
+            if (weightStr) {
+              const weightGrams = parseInt(weightStr, 10);
+              if (!isNaN(weightGrams)) {
+                scannedQuantity = weightGrams / 1000;
+              }
+            } else if (priceStr) {
+              const totalPrice = parseInt(priceStr, 10);
+              if (!isNaN(totalPrice)) {
+                const unitPrice = parseFloat(match.price) || 1;
+                scannedQuantity = totalPrice / unitPrice;
+              }
+            }
+          }
+        }
+      }
+    } else if (!match && bcode.length === 13) {
+      if (format === "21_5I_5W_GRAMS" && bcode.startsWith("21")) {
+        const plu = bcode.substring(2, 7);
+        const pluStr = parseInt(plu, 10).toString();
+        const weightGrams = parseInt(bcode.substring(7, 12), 10);
+        match = catalog.find((m) => m.barcode === plu || m.barcode === pluStr);
+        if (match && !isNaN(weightGrams)) {
+          scannedQuantity = weightGrams / 1000;
+        }
+      } else if (format === "21_5I_5P_INR" && bcode.startsWith("21")) {
+        const plu = bcode.substring(2, 7);
+        const pluStr = parseInt(plu, 10).toString();
+        const totalPrice = parseInt(bcode.substring(7, 12), 10);
+        match = catalog.find((m) => m.barcode === plu || m.barcode === pluStr);
+        if (match && !isNaN(totalPrice)) {
+          const unitPrice = parseFloat(match.price) || 1;
+          scannedQuantity = totalPrice / unitPrice;
+        }
+      } else if (format === "20_6I_4W_GRAMS" && bcode.startsWith("20")) {
+        const plu = bcode.substring(2, 8);
+        const pluStr = parseInt(plu, 10).toString();
+        const weightGrams = parseInt(bcode.substring(8, 12), 10);
+        match = catalog.find((m) => m.barcode === plu || m.barcode === pluStr);
+        if (match && !isNaN(weightGrams)) {
+          scannedQuantity = weightGrams / 1000;
+        }
+      }
+    } else if (!match && bcode.length === 10) {
+      if (format === "03_3I_5W_GRAMS" && bcode.startsWith("03")) {
+        const plu = bcode.substring(2, 5);
+        const pluStr = parseInt(plu, 10).toString();
+        const weightGrams = parseInt(bcode.substring(5, 10), 10);
+        match = catalog.find((m) => m.barcode === plu || m.barcode === pluStr);
+        if (match && !isNaN(weightGrams)) {
+          scannedQuantity = weightGrams / 1000;
+        }
+      }
+    }
+
+    return { match, scannedQuantity };
+  };
+
+  const handleScanExchangeBarcode = async (barcode: string) => {
+    const trimmed = barcode.trim();
+    if (!trimmed) return;
+
+    let { match, scannedQuantity } = processExchangeBarcodeScan(trimmed);
+
+    if (!match) {
+      try {
+        const fetchedItem = await apiRequest<AdminMenuItem>(
+          `/api/admin/menu-items/barcode/${encodeURIComponent(trimmed)}`
+        );
+        if (fetchedItem) {
+          match = fetchedItem;
+          setLocalCatalogItems((prev) => {
+            const exists = prev.some((m) => m.id === fetchedItem.id);
+            return exists ? prev : [fetchedItem, ...prev];
+          });
+        }
+      } catch (e) {
+        // Fallback: search by name
+        const nameMatch = (activeCatalog || menuItems || []).find((m) =>
+          m.name.toLowerCase().includes(trimmed.toLowerCase())
+        );
+        if (nameMatch) {
+          match = nameMatch;
+        }
+      }
+    }
+
+    if (match) {
+      handleAddExchangeItem(match, scannedQuantity);
+      setExchangeSearchQuery("");
+      setShowExchangePicker(false);
+    } else {
+      setError(`No product found for barcode "${trimmed}".`);
+    }
+  };
+
+  const handleAddExchangeItem = (m: AdminMenuItem, initialQty: number = 1) => {
+    const qtyToAdd = Math.max(0.001, initialQty || 1);
     const activeBatches = m.active_batches || [];
     const oldestBatch = activeBatches[0];
     const initialUnit = (m as any).unit || m.unit_label || "piece";
@@ -1393,7 +1693,7 @@ export function CustomerReturnsModal({
     // If item already exists in exchange list:
     const existingIndex = exchangeItems.findIndex((it) => it.menu_item_id === m.id && !it.allow_oversell);
     if (existingIndex >= 0) {
-      handleExchangeItemQuantityChange(existingIndex, exchangeItems[existingIndex].quantity + 1);
+      handleExchangeItemQuantityChange(existingIndex, exchangeItems[existingIndex].quantity + qtyToAdd);
       return;
     }
 
@@ -1414,7 +1714,7 @@ export function CustomerReturnsModal({
       mrp: lineMrp,
       tax_rate: m.tax_rate ? Number(m.tax_rate) : 0,
       hsn_code: (m as any).hsn_code || null,
-      quantity: 1,
+      quantity: qtyToAdd,
       selected_unit: initialUnit,
       pricing_type: "RETAIL",
       is_complimentary: false,
@@ -1881,6 +2181,51 @@ export function CustomerReturnsModal({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen]);
 
+  // Hardware barcode scanner support (USB / Bluetooth wedge)
+  useBarcodeScanner({
+    enabled: isOpen,
+    onScan: async (scannedBarcode) => {
+      const bcode = scannedBarcode.trim();
+      if (!bcode) return;
+
+      // Case 1: If on bill lookup screen (or no bill selected yet):
+      if (!selectedBill && returnMode === "BILL_REFERENCED") {
+        setLookupTab("INVOICE_NO");
+        setInvoiceSearch(bcode);
+        void handleInvoiceScanOrSubmit(bcode);
+        return;
+      }
+
+      // Case 2: If a bill is selected (or in return processing), check if scanned code is a product for exchange!
+      const { match: productMatch } = processExchangeBarcodeScan(bcode);
+      if (productMatch) {
+        void handleScanExchangeBarcode(bcode);
+        return;
+      }
+
+      // Case 3: Could it be a bill barcode scanned to switch to another bill?
+      const cleanB = bcode.replace(/^#/, "").toLowerCase();
+      const billMatch = (combinedBills || []).find((b) => {
+        const idL = b.id.toLowerCase();
+        const invL = ((b as any).invoice_no || "").toLowerCase();
+        return idL === cleanB || idL.startsWith(cleanB) || invL === cleanB;
+      });
+
+      if (billMatch) {
+        setLookupTab("INVOICE_NO");
+        setInvoiceSearch(bcode);
+        setReturnMode("BILL_REFERENCED");
+        setSelectedBill(billMatch);
+        setReturnItemsMap({});
+        setReturnItemsUnitMap({});
+        return;
+      }
+
+      // Case 4: Try server lookup for exchange product
+      void handleScanExchangeBarcode(bcode);
+    },
+  });
+
   if (!isOpen) return null;
 
   return (
@@ -1896,10 +2241,16 @@ export function CustomerReturnsModal({
             <div className="min-w-0">
               <div className="flex items-center gap-2.5 flex-wrap">
                 <h2 className="font-display text-xl font-black tracking-tight text-[var(--text-primary)] truncate">Customer Returns & Exchanges</h2>
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-sky-500/10 border border-sky-500/30 text-xs font-semibold text-sky-400 shrink-0">
-                  <Calendar className="h-3.5 w-3.5" />
-                  <span>POS Filter: {activeDateFilterLabel}</span>
-                </span>
+                <div className="relative z-30 shrink-0">
+                  <BillingDateRangeFilter
+                    dateRangeMode={modalDateRangeMode}
+                    setDateRangeMode={setModalDateRangeMode}
+                    customStartDate={modalCustomStartDate}
+                    setCustomStartDate={setModalCustomStartDate}
+                    customEndDate={modalCustomEndDate}
+                    setCustomEndDate={setModalCustomEndDate}
+                  />
+                </div>
               </div>
               <p className="text-xs text-[var(--text-secondary)] mt-0.5 tracking-wide truncate">
                 Process returns, issue store credit, or direct exchange.
@@ -2116,19 +2467,50 @@ export function CustomerReturnsModal({
             {lookupTab === "INVOICE_NO" && (
               <div className="space-y-1 flex-shrink-0">
                 <div className="relative">
-                  <Barcode className="absolute left-3.5 top-3 h-4 w-4 text-[var(--text-muted)]" />
+                  <Barcode className="absolute left-3.5 top-3 h-4 w-4 text-sky-400" />
                   <input
+                    ref={invoiceInputRef}
                     type="text"
-                    placeholder="Enter or scan Bill / Invoice ID (e.g. 59C8D...)"
+                    placeholder="Scan receipt barcode or enter Bill # (e.g. 2AA9ABD1)..."
                     value={invoiceSearch}
-                    onChange={(e) => setInvoiceSearch(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setInvoiceSearch(val);
+                      const clean = val.replace(/^#/, "").trim().toLowerCase();
+                      if (clean.length >= 6) {
+                        const matched = (combinedBills || []).find((b) => {
+                          const idLower = b.id.toLowerCase();
+                          const invLower = ((b as any).invoice_no || "").toLowerCase();
+                          const bskLower = (b.basket_number || "").toLowerCase();
+                          return (
+                            idLower === clean ||
+                            idLower.startsWith(clean) ||
+                            invLower === clean ||
+                            bskLower === clean
+                          );
+                        });
+                        if (matched && selectedBill?.id !== matched.id) {
+                          setReturnMode("BILL_REFERENCED");
+                          setSelectedBill(matched);
+                          setReturnItemsMap({});
+                          setReturnItemsUnitMap({});
+                        }
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        void handleInvoiceScanOrSubmit();
+                      }
+                    }}
+                    autoFocus
                     className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] py-2.5 pl-10 pr-3.5 text-sm font-mono text-[var(--text-primary)] focus:border-sky-400 outline-none"
                   />
                 </div>
                 <div className="flex items-center justify-between text-[11px] text-[var(--text-muted)] pt-0.5 px-1">
                   <span className="flex items-center gap-1.5">
-                    <span>🔍 Searching returnable bills from the last 30 days</span>
-                    {isSearchingServerBills && <RefreshCw className="h-3 w-3 animate-spin text-sky-400 inline" />}
+                    <span>🔍 Scan barcode or press Enter to auto-select</span>
+                    {(isSearchingServerBills || isLoadingModalBills) && <RefreshCw className="h-3 w-3 animate-spin text-sky-400 inline" />}
                   </span>
                   {serverSearchedBills.length > 0 && (
                     <span className="text-sky-400 font-bold font-mono text-[10px] bg-sky-500/10 px-1.5 py-0.5 rounded border border-sky-500/20">
@@ -3064,11 +3446,17 @@ export function CustomerReturnsModal({
                         <Search className="absolute left-3.5 top-3.5 h-4 w-4 text-[var(--text-muted)]" />
                         <input
                           type="text"
-                          placeholder="Search items by name, barcode, or category to exchange..."
+                          placeholder="Scan barcode or search items to exchange..."
                           value={exchangeSearchQuery}
                           onChange={(e) => {
                             setExchangeSearchQuery(e.target.value);
                             setShowExchangePicker(true);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              void handleScanExchangeBarcode(exchangeSearchQuery);
+                            }
                           }}
                           onFocus={() => setShowExchangePicker(true)}
                           className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] py-3 pl-10 pr-4 text-sm font-medium text-[var(--text-primary)] focus:border-emerald-400 outline-none"

@@ -12,6 +12,7 @@
 
 import React from "react";
 import type { TemplateProps, CatalogueCategory, CatalogueItem } from "./templateRegistry";
+import { getOptimizedImageUrl } from "../imageOptimizer";
 
 /* ── colour tokens ─────────────────────────────────────────────── */
 const C = {
@@ -46,7 +47,7 @@ function Topbar({ outletInfo }: Pick<TemplateProps, "outletInfo">) {
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           {outletInfo.logo_url && (
             <img
-              src={outletInfo.logo_url}
+              src={getOptimizedImageUrl(outletInfo.logo_url, 150, 90)}
               alt=""
               style={{ width: 40, height: 40, borderRadius: 8, objectFit: "cover" }}
             />
@@ -211,7 +212,7 @@ function AisleCard({ item, accent }: { item: CatalogueItem; accent: string }) {
       <div style={{ display: "flex", gap: 7, alignItems: "flex-start" }}>
         {item.image_url ? (
           <img
-            src={item.image_url}
+            src={getOptimizedImageUrl(item.image_url, 150, 85)}
             alt=""
             style={{
               width: 36,

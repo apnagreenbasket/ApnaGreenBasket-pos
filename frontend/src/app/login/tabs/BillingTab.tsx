@@ -31,12 +31,15 @@ import {
   MoreHorizontal,
   ChevronDown,
   FileText,
+  Loader2,
+  Barcode,
 } from "lucide-react";
 import { generateReceiptPDF, generateBillsHistoryPdfReport } from "@/lib/pdfGenerator";
 import { generateA4InvoicePDF } from "@/lib/invoiceGenerator";
 import type { DiscountApproval, ManualBill, RolePermissions } from "@/types";
 import type { RestaurantProfile, AdminMenuItem } from "../adminTypes";
 import { apiRequest , parseUTCDate} from "../adminUtils";
+import { useBarcodeScanner } from "@/hooks/useBarcodeScanner";
 import { CustomerReturnsModal } from "../modals/CustomerReturnsModal";
 import { ReturnSuccessModal } from "../modals/ReturnSuccessModal";
 import { DeleteBillModal } from "../modals/DeleteBillModal";
@@ -142,10 +145,68 @@ export function BillingTab({
   }, [menuItems]);
 
   const [error, setError] = useState<string | null>(null);
+  const [serverSearchedBills, setServerSearchedBills] = useState<ManualBill[]>([]);
+  const [isSearchingServerBills, setIsSearchingServerBills] = useState(false);
+
+  // Auto-search across all past bills if local date filter doesn't find the scanned bill ID
+  useEffect(() => {
+    const raw = billingSearchQuery.trim();
+    const clean = raw.replace(/^#/, "").toLowerCase();
+    if (clean.length < 3) {
+      setServerSearchedBills([]);
+      return;
+    }
+
+    // Check if query already matches anything in billsList
+    const hasLocalMatch = billsList.some((b) => {
+      const idL = b.id.toLowerCase();
+      const invL = ((b as any).invoice_no || "").toLowerCase();
+      const bskL = (b.basket_number || "").toLowerCase();
+      return idL.includes(clean) || invL.includes(clean) || bskL.includes(clean);
+    });
+
+    if (hasLocalMatch) {
+      setServerSearchedBills([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsSearchingServerBills(true);
+      try {
+        const results = await apiRequest<ManualBill[]>(
+          `/api/billing/bills?search=${encodeURIComponent(clean)}&limit=25`
+        );
+        if (Array.isArray(results)) {
+          setServerSearchedBills(results);
+        }
+      } catch (err) {
+        console.error("Error searching past bills:", err);
+      } finally {
+        setIsSearchingServerBills(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [billingSearchQuery, billsList]);
+
+  // Combined bills list: local bills for date range + server-searched bills (deduplicated)
+  const combinedBillsList = useMemo(() => {
+    if (serverSearchedBills.length === 0) return billsList;
+    const map = new Map<string, ManualBill>();
+    billsList.forEach((b) => map.set(b.id, b));
+    serverSearchedBills.forEach((b) => {
+      if (!map.has(b.id)) map.set(b.id, b);
+    });
+    return Array.from(map.values());
+  }, [billsList, serverSearchedBills]);
 
   const filteredBills = useMemo(() => {
-    return billsList.filter((b) => {
-      if (billingStatusFilter !== "ALL") {
+    const raw = billingSearchQuery.trim();
+    const cleanQ = raw.replace(/^#/, "").toLowerCase();
+    const hasSearch = Boolean(cleanQ);
+
+    return combinedBillsList.filter((b) => {
+      if (!hasSearch && billingStatusFilter !== "ALL") {
         const s = (b.status || "").toUpperCase();
         const ds = (b.discount_status || "").toUpperCase();
         if (billingStatusFilter === "DRAFT") {
@@ -168,17 +229,19 @@ export function BillingTab({
           return false;
         }
       }
-      if (billingSearchQuery) {
-        const q = billingSearchQuery.toLowerCase();
-        return (
-          b.id.toLowerCase().includes(q) ||
-          b.basket_number.toLowerCase().includes(q) ||
-          (b.customer_name && b.customer_name.toLowerCase().includes(q))
-        );
+      if (hasSearch) {
+        const idMatch = b.id.toLowerCase().includes(cleanQ);
+        const invMatch = (b as any).invoice_no ? (b as any).invoice_no.toLowerCase().includes(cleanQ) : false;
+        const basketMatch = b.basket_number ? b.basket_number.toLowerCase().includes(cleanQ) : false;
+        const nameMatch = b.customer_name ? b.customer_name.toLowerCase().includes(raw.toLowerCase()) : false;
+        const phoneMatch = b.customer_phone ? b.customer_phone.includes(cleanQ) : false;
+
+        return idMatch || invMatch || basketMatch || nameMatch || phoneMatch;
       }
       return true;
     });
-  }, [billsList, billingStatusFilter, billingSearchQuery]);
+  }, [combinedBillsList, billingStatusFilter, billingSearchQuery]);
+
 
   const handleExportBillsPdf = () => {
     if (filteredBills.length === 0) {
@@ -266,6 +329,21 @@ export function BillingTab({
   const [drawerTxNotes, setDrawerTxNotes] = useState("");
   const [isSubmittingTx, setIsSubmittingTx] = useState(false);
 
+  // Hardware barcode scanner support on POS Billing Tab
+  useBarcodeScanner({
+    enabled: !returnsModalOpen && !billToDelete && !showReturnSuccessModal && !drawerTxModalOpen,
+    onScan: (barcode: string) => {
+      const clean = barcode.replace(/^#/, "").trim();
+      if (!clean) return;
+      setBillingSearchQuery(clean);
+      const input = document.getElementById("billing-search-input") as HTMLInputElement | null;
+      if (input) {
+        input.focus();
+        input.select();
+      }
+    },
+  });
+
   const fetchLiveDrawer = async () => {
     try {
       const data = await apiRequest<{
@@ -279,10 +357,79 @@ export function BillingTab({
   };
 
   useEffect(() => {
-    if (showDenomWidget) {
+    if (showDenomWidget || drawerTxModalOpen) {
       void fetchLiveDrawer();
     }
-  }, [showDenomWidget]);
+  }, [showDenomWidget, drawerTxModalOpen]);
+
+  // One-click select all available drawer notes & amount for evening closing drop
+  const handleSelectExactAll = () => {
+    if (!liveDrawerData?.denominations) return;
+    const newDenoms: Record<number, number> = { 500: 0, 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0, 1: 0 };
+    Object.entries(liveDrawerData.denominations).forEach(([d, count]) => {
+      const denomNum = Number(d);
+      if (denomNum in newDenoms && count > 0) {
+        newDenoms[denomNum] = count;
+      }
+    });
+    setDrawerTxDenoms(newDenoms);
+    // Note: drawerTxNotes is left untouched so the user can enter/select reason manually
+  };
+
+  // Keyboard shortcut handler for 3x3 notes grid inside drawer modal (Numpad 1-9 & Digits 1-9)
+  useEffect(() => {
+    if (!drawerTxModalOpen) return;
+
+    const handleDrawerKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) {
+        return;
+      }
+
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setDrawerTxModalOpen(false);
+        return;
+      }
+
+      if (e.key === "Backspace" || e.key === "Delete") {
+        e.preventDefault();
+        setDrawerTxDenoms({ 500: 0, 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0, 1: 0 });
+        return;
+      }
+
+      const numpadMap: Record<string, number> = {
+        "Numpad7": 500, "Digit7": 500,
+        "Numpad8": 200, "Digit8": 200,
+        "Numpad9": 100, "Digit9": 100,
+        "Numpad4": 50,  "Digit4": 50,
+        "Numpad5": 20,  "Digit5": 20,
+        "Numpad6": 10,  "Digit6": 10,
+        "Numpad1": 5,   "Digit1": 5,
+        "Numpad2": 2,   "Digit2": 2,
+        "Numpad3": 1,   "Digit3": 1,
+      };
+
+      const denom = numpadMap[e.code];
+      if (denom) {
+        e.preventDefault();
+        const isNumpadShifted = e.code.startsWith("Numpad") && !/^\d$/.test(e.key);
+        const isRemoveAction = e.shiftKey || isNumpadShifted;
+
+        setDrawerTxDenoms((prev) => {
+          const curCount = prev[denom] || 0;
+          if (isRemoveAction) {
+            return { ...prev, [denom]: Math.max(0, curCount - 1) };
+          } else {
+            return { ...prev, [denom]: curCount + 1 };
+          }
+        });
+      }
+    };
+
+    window.addEventListener("keydown", handleDrawerKeyDown);
+    return () => window.removeEventListener("keydown", handleDrawerKeyDown);
+  }, [drawerTxModalOpen]);
 
   const handleDrawerTxSubmit = async () => {
     setIsSubmittingTx(true);
@@ -618,16 +765,43 @@ export function BillingTab({
           </div>
 
           <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-            <div className="relative min-w-[200px] flex-1">
+            <div className="relative min-w-[220px] flex-1">
               <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-[var(--text-muted)]" />
               <input
                 id="billing-search-input"
                 type="text"
                 value={billingSearchQuery}
                 onChange={(e) => setBillingSearchQuery(e.target.value)}
-                placeholder="Search by Bill ID or Basket... (/)"
-                className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] py-1.5 pl-8 pr-3 text-xs"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    const clean = billingSearchQuery.replace(/^#/, "").trim();
+                    if (clean !== billingSearchQuery) {
+                      setBillingSearchQuery(clean);
+                    }
+                  }
+                }}
+                placeholder="Scan bill barcode or search Bill ID / Basket... (/)"
+                className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] py-1.5 pl-8 pr-16 text-xs font-mono text-[var(--text-primary)] focus:border-sky-400 outline-none"
               />
+              <div className="absolute right-2 top-2 flex items-center gap-1.5">
+                {isSearchingServerBills && (
+                  <RefreshCw className="h-3 w-3 animate-spin text-sky-400" />
+                )}
+                {billingSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setBillingSearchQuery("")}
+                    className="text-[var(--text-muted)] hover:text-[var(--text-primary)] p-0.5 cursor-pointer"
+                    title="Clear search"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+                <span title="Barcode scanner active" className="inline-flex items-center">
+                  <Barcode className="h-3.5 w-3.5 text-sky-400/80" />
+                </span>
+              </div>
             </div>
 
             <button
@@ -906,7 +1080,19 @@ export function BillingTab({
                             <Printer className="h-4 w-4" />
                           </button>
 
-                          {/* 4. More Button with Dropdown Popup */}
+                          {/* 4. Direct Download Button */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              generateReceiptPDF(b as any, restaurant?.name || "RESTAURANT", menuItemsMap, restaurant || {}, "download");
+                            }}
+                            className="p-1.5 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:border-blue-500 hover:text-blue-500 transition cursor-pointer shrink-0"
+                            title="Download Bill PDF"
+                          >
+                            <Download className="h-4 w-4" />
+                          </button>
+
+                          {/* 5. More Button with Dropdown Popup */}
                           <div className="relative inline-block text-left">
                             <button
                               type="button"
@@ -1108,74 +1294,182 @@ export function BillingTab({
       )}
 
       {drawerTxModalOpen && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-[var(--bg-surface)] rounded-2xl shadow-xl flex flex-col h-full border border-[var(--border-strong)] relative overflow-hidden">
-            <div className="flex items-center justify-between border-b border-[var(--border-subtle)] p-4">
-              <h2 className={`text-sm font-bold ${drawerTxType === "MANUAL_DEPOSIT" ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {drawerTxType === "MANUAL_DEPOSIT" ? "Add Cash to Drawer" : "Withdraw Cash from Drawer"}
-              </h2>
-              <button onClick={() => setDrawerTxModalOpen(false)} className="rounded-md p-1.5 hover:bg-[var(--bg-surface-elevated)] transition-colors">
-                <X className="h-4 w-4 text-[var(--text-muted)]" />
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-md bg-[var(--bg-surface)] rounded-2xl shadow-2xl flex flex-col h-full border border-[var(--border-strong)] relative overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-[var(--border-subtle)] p-4 bg-[var(--bg-surface-elevated)]">
+              <div>
+                <h2 className={`text-sm font-bold flex items-center gap-1.5 flex-wrap ${drawerTxType === "MANUAL_DEPOSIT" ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  <span>{drawerTxType === "MANUAL_DEPOSIT" ? "Add Cash to Drawer" : "Withdraw Cash from Drawer"}</span>
+                  <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded-md bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-primary)]">
+                    (Avl : ₹{liveDrawerData ? liveDrawerData.total_balance.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"})
+                  </span>
+                </h2>
+                <p className="text-[10px] text-[var(--text-muted)] mt-0.5">
+                  {drawerTxType === "MANUAL_DEPOSIT" ? "Deposit morning float or additional cash" : "Withdraw cash drop for safe storage or day closing"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDrawerTxModalOpen(false)}
+                className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+              >
+                <X className="h-4 w-4" />
               </button>
             </div>
             
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase text-[var(--text-muted)]">Notes Tapped</label>
-                <div className="grid grid-cols-5 gap-1.5">
-                  {[500, 200, 100, 50, 20, 10, 5, 2, 1].map((d) => {
-                    const count = drawerTxDenoms[d] || 0;
-                    return (
-                      <button
-                        key={`tx-${d}`}
-                        onClick={() => setDrawerTxDenoms({ ...drawerTxDenoms, [d]: count + 1 })}
-                        className={`relative rounded-lg py-1 px-1 text-center font-mono text-xs font-bold border transition ${
-                          count > 0 ? (drawerTxType === "MANUAL_DEPOSIT" ? "border-emerald-500 bg-emerald-500 text-white" : "border-rose-500 bg-rose-500 text-white") : "border-[var(--border-strong)] bg-transparent text-[var(--text-muted)]"
-                        }`}
-                      >
-                        ₹{d}
-                        {count > 0 && (
-                          <span className="absolute -top-1.5 -right-1.5 flex h-[18px] w-[18px] items-center justify-center rounded-full bg-slate-900 text-white text-[10px] font-black border border-white">
-                            {count}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
+              {/* Quick Auto-Tap / Exact Actions Bar */}
+              <div className="flex items-center justify-between gap-2 overflow-x-auto pb-0.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] uppercase font-bold text-[var(--text-muted)] whitespace-nowrap">
+                    Notes Tapped:
+                  </span>
+                  <span className="text-[9px] font-mono text-[var(--text-muted)] bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] px-1.5 py-0.5 rounded">
+                    kbd active (1-9)
+                  </span>
                 </div>
-                {Object.values(drawerTxDenoms).some(c => c > 0) && (
-                  <div className="flex gap-2 text-[10px] mt-2">
-                    <button onClick={() => setDrawerTxDenoms({500:0,200:0,100:0,50:0,20:0,10:0,5:0,2:0,1:0})} className="text-rose-400 font-bold underline">Clear All</button>
-                  </div>
-                )}
+
+                <div className="flex items-center gap-1.5">
+                  {drawerTxType === "MANUAL_WITHDRAWAL" && (
+                    <button
+                      type="button"
+                      onClick={handleSelectExactAll}
+                      className="rounded-lg bg-rose-500/15 border border-rose-500/40 px-2.5 py-1 text-xs font-mono font-bold text-rose-400 hover:bg-rose-500/25 transition whitespace-nowrap cursor-pointer active:scale-95 flex items-center gap-1 shadow-xs"
+                      title="Select all notes and coins currently in drawer to withdraw for evening closing"
+                    >
+                      <span>Exact ₹{liveDrawerData ? liveDrawerData.total_balance.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"}</span>
+                    </button>
+                  )}
+                  {Object.values(drawerTxDenoms).some(c => c > 0) && (
+                    <button
+                      type="button"
+                      onClick={() => setDrawerTxDenoms({ 500: 0, 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0, 1: 0 })}
+                      className="text-rose-400 hover:text-rose-300 font-bold text-[11px] underline cursor-pointer px-1"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase text-[var(--text-muted)]">Reason / Note</label>
+              {/* 3x3 Grid of 9 Denominations (identical to POS Billing Process Payment) */}
+              <div className="grid grid-cols-3 gap-2">
+                {[500, 200, 100, 50, 20, 10, 5, 2, 1].map((d) => {
+                  const count = drawerTxDenoms[d] || 0;
+                  const isDeposit = drawerTxType === "MANUAL_DEPOSIT";
+                  return (
+                    <div
+                      key={`tx-${d}`}
+                      className={`relative rounded-xl flex font-mono transition font-black border-2 select-none shadow-xs ${
+                        count > 0
+                          ? isDeposit
+                            ? "border-emerald-500 bg-emerald-500 text-white shadow-md"
+                            : "border-rose-500 bg-rose-500 text-white shadow-md"
+                          : "border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] text-[var(--text-primary)] hover:border-[var(--text-muted)] hover:bg-[var(--bg-surface)]"
+                      }`}
+                    >
+                      {count > 0 && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDrawerTxDenoms((prev) => ({ ...prev, [d]: Math.max(0, count - 1) }));
+                          }}
+                          className="flex items-center justify-center px-2 hover:bg-black/20 transition-colors border-r border-white/20 rounded-l-lg cursor-pointer"
+                          title={`Remove 1× ₹${d}`}
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setDrawerTxDenoms((prev) => ({ ...prev, [d]: count + 1 }))}
+                        className="flex-1 py-3 px-2 text-center text-sm font-bold cursor-pointer"
+                        title={`Add ₹${d} (Key: ${d === 500 ? 7 : d === 200 ? 8 : d === 100 ? 9 : d === 50 ? 4 : d === 20 ? 5 : d === 10 ? 6 : d === 5 ? 1 : d === 2 ? 2 : 3})`}
+                      >
+                        ₹{d}
+                      </button>
+                      {count > 0 && (
+                        <span className="absolute -top-1.5 -right-1.5 flex h-[22px] w-[22px] items-center justify-center rounded-full bg-slate-900 text-white text-xs font-black border border-white pointer-events-none shadow-xs">
+                          {count}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Active Notes Breakdown Chips */}
+              {Object.entries(drawerTxDenoms).filter(([_, c]) => c > 0).length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-[var(--border-subtle)]">
+                  <span className="text-[10px] uppercase font-bold text-[var(--text-muted)] mr-1">
+                    Selected Breakdown:
+                  </span>
+                  {Object.entries(drawerTxDenoms)
+                    .filter(([_, c]) => c > 0)
+                    .sort(([a], [b]) => Number(b) - Number(a))
+                    .map(([denomStr, count]) => (
+                      <span
+                        key={denomStr}
+                        className="inline-flex items-center gap-1 rounded-md bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] px-2 py-0.5 text-xs font-mono font-bold text-[var(--text-primary)]"
+                      >
+                        <span>{count}×</span>
+                        <span className={drawerTxType === "MANUAL_DEPOSIT" ? "text-emerald-400" : "text-rose-400"}>₹{denomStr}</span>
+                        <span className="text-[var(--text-muted)] font-normal">(=₹{Number(denomStr) * count})</span>
+                      </span>
+                    ))}
+                </div>
+              )}
+
+              {/* Reason / Note Input */}
+              <div className="space-y-1.5 pt-1">
+                <label className="text-[10px] font-bold uppercase text-[var(--text-muted)] flex items-center justify-between">
+                  <span>Reason / Note</span>
+                  <span className="text-[10px] text-[var(--text-muted)] font-normal">(Optional manual entry)</span>
+                </label>
                 <input
                   type="text"
                   value={drawerTxNotes}
                   onChange={(e) => setDrawerTxNotes(e.target.value)}
-                  placeholder={drawerTxType === "MANUAL_DEPOSIT" ? "e.g. Morning Float" : "e.g. End of day drop"}
-                  className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] p-2.5 text-xs focus:border-sky-500 outline-none"
+                  placeholder={drawerTxType === "MANUAL_DEPOSIT" ? "e.g. Morning Float, Customer change refill" : "e.g. End of day drop, Supplier cash payment"}
+                  className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] p-2.5 text-xs focus:border-sky-500 outline-none text-[var(--text-primary)] placeholder-[var(--text-muted)]"
                 />
               </div>
 
+              {/* Total Amount Summary */}
               <div className="flex justify-between items-center text-sm font-mono font-bold mt-4 pt-4 border-t border-[var(--border-subtle)]">
-                <span>Total Amount:</span>
-                <span className={drawerTxType === "MANUAL_DEPOSIT" ? "text-emerald-400" : "text-rose-400"}>
-                  ₹{Object.entries(drawerTxDenoms).reduce((sum, [d, c]) => sum + Number(d)*c, 0).toFixed(2)}
+                <span className="text-xs uppercase font-bold text-[var(--text-secondary)]">Total Amount to {drawerTxType === "MANUAL_DEPOSIT" ? "Add" : "Withdraw"}:</span>
+                <span className={`text-xl font-black ${drawerTxType === "MANUAL_DEPOSIT" ? "text-emerald-400" : "text-rose-400"}`}>
+                  ₹{Object.entries(drawerTxDenoms).reduce((sum, [d, c]) => sum + Number(d)*c, 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
             </div>
 
-            <div className="p-4 border-t border-[var(--border-subtle)] flex gap-2">
+            <div className="p-4 border-t border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] flex gap-2">
               <button
+                type="button"
+                onClick={() => setDrawerTxModalOpen(false)}
+                className="w-1/3 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] py-2.5 text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-surface-elevated)] transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
                 disabled={isSubmittingTx || Object.values(drawerTxDenoms).every(c => c === 0)}
                 onClick={handleDrawerTxSubmit}
-                className="w-full rounded-xl bg-[var(--accent-brand)] py-2.5 text-xs font-bold text-white shadow-sm hover:bg-opacity-90 disabled:opacity-50"
+                className={`w-2/3 rounded-xl py-2.5 text-xs font-bold text-white shadow-sm hover:opacity-90 disabled:opacity-50 transition cursor-pointer flex items-center justify-center gap-2 ${
+                  drawerTxType === "MANUAL_DEPOSIT" ? "bg-emerald-600 hover:bg-emerald-500" : "bg-rose-600 hover:bg-rose-500"
+                }`}
               >
-                {isSubmittingTx ? "Processing..." : "Submit Transaction"}
+                {isSubmittingTx ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Processing...</span>
+                  </>
+                ) : (
+                  <span>Submit {drawerTxType === "MANUAL_DEPOSIT" ? "Deposit" : "Withdrawal"}</span>
+                )}
               </button>
             </div>
           </div>

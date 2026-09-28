@@ -3,6 +3,37 @@ import autoTable from "jspdf-autotable";
 import { parseUTCDate } from "./api";
 import { OrderResponse } from "@/types";
 import QRCode from "qrcode";
+import JsBarcode from "jsbarcode";
+
+// Safe 1D Barcode Renderer for Thermal Receipts (Code 128)
+function drawBarcodeImage(
+  doc: jsPDF,
+  text: string,
+  x: number,
+  y: number,
+  width: number,
+  height: number
+): boolean {
+  if (!text || typeof document === "undefined") return false;
+  try {
+    const canvas = document.createElement("canvas");
+    JsBarcode(canvas, text, {
+      format: "CODE128",
+      width: 2,
+      height: 38,
+      displayValue: false,
+      margin: 0,
+      background: "#ffffff",
+      lineColor: "#000000",
+    });
+    const dataUrl = canvas.toDataURL("image/png");
+    doc.addImage(dataUrl, "PNG", x, y, width, height);
+    return true;
+  } catch (err) {
+    console.warn("Failed to generate receipt barcode for:", text, err);
+    return false;
+  }
+}
 
 // Thermal Receipt Data Types
 
@@ -242,6 +273,16 @@ export async function generateReceiptPDF(
   }
   
   doc.text(`Bill No : #${invoiceNo}`, margin, y);
+
+  const barcodeValue = String(invoiceNo).replace(/^#/, "").trim();
+  if (barcodeValue) {
+    const bcWidth = 46;
+    const bcHeight = 7.5;
+    const drew = drawBarcodeImage(doc, barcodeValue, (pageWidth - bcWidth) / 2, y + 1.2, bcWidth, bcHeight);
+    if (drew) {
+      y += bcHeight + 1.8;
+    }
+  }
   
   y += 3.5;
   doc.text(`Date    : ${orderDateStr || "N/A"}`, margin, y);
@@ -1234,6 +1275,16 @@ export async function generateReturnReceiptPDF(
   }
   
   doc.text(`Return No : #${invoiceNo}`, margin, y);
+
+  const barcodeValue = String(invoiceNo).replace(/^#/, "").trim();
+  if (barcodeValue) {
+    const bcWidth = 46;
+    const bcHeight = 7.5;
+    const drew = drawBarcodeImage(doc, barcodeValue, (pageWidth - bcWidth) / 2, y + 1.2, bcWidth, bcHeight);
+    if (drew) {
+      y += bcHeight + 1.8;
+    }
+  }
   
   y += 3.5;
   const origBill = returnData.original_bill_number || (returnData.order_id ? `#${returnData.order_id.slice(0, 8).toUpperCase()}` : "Direct Return");
