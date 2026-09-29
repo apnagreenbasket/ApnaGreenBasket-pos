@@ -125,62 +125,91 @@ export async function generateReceiptPDF(
     storeDetails = storeDetailsOrAction;
   }
 
-  // Pure Monospaced Courier Thermal POS Format (Standard 72mm Thermal Print Head for 80mm Paper)
-  const doc = new jsPDF({
-    orientation: "portrait",
-    unit: "mm",
-    format: [72, 297], // 72mm matches the exact physical 576-dot thermal print head of 80mm POS printers
-  });
-
-  const pageWidth = doc.internal.pageSize.getWidth(); // 72mm
-  const margin = 4;
-  const contentWidth = pageWidth - margin * 2; // 64mm safe printable width to prevent physical clipping
-
-  let y = 8;
-
-  // Helper for drawing dashed divider line
-  const drawDashedLine = (posY: number) => {
-    doc.setDrawColor(0, 0, 0);
-    doc.setLineWidth(0.2);
-    doc.setLineDashPattern([1, 1], 0);
-    doc.line(margin, posY, pageWidth - margin, posY);
-    doc.setLineDashPattern([], 0);
-  };
-
-  // Helper for drawing solid double divider line
-  const drawSolidLine = (posY: number) => {
-    doc.setDrawColor(0, 0, 0);
-    doc.setLineWidth(0.35);
-    doc.line(margin, posY, pageWidth - margin, posY);
-  };
-
-  // 1. STORE HEADER BLOCK (Centered, Courier Bold)
   const getOutletField = (field: string) => {
     return storeDetails?.[field] || (order as any).restaurant?.[field] || (order as any).outlet?.[field];
   };
 
   const logoUrl = getOutletField("logo_url");
-  
-  // Try to load image if provided
-  if (logoUrl) {
+  const billQrUrlRaw = getOutletField("bill_qr_url");
+  const invoiceNo = (order as any).invoice_no || (order as any).id?.slice(0, 8).toUpperCase() || "RECEIPT";
+
+  // Pre-load all assets asynchronously once in parallel for instant synchronous rendering
+  const [logoBase64, qrDataUrl, playStoreBase64, appStoreBase64] = await Promise.all([
+    logoUrl
+      ? Promise.race([
+          fetchImageAsBase64(logoUrl),
+          new Promise<string>((_, reject) => setTimeout(() => reject("Timeout"), 2500))
+        ]).catch(() => null)
+      : Promise.resolve(null),
+    billQrUrlRaw
+      ? QRCode.toDataURL(billQrUrlRaw, { margin: 1, width: 80 }).catch(() => null)
+      : Promise.resolve(null),
+    Promise.race([
+      fetchImageAsBase64("/images/google-play.png"),
+      new Promise<string>((_, r) => setTimeout(() => r(""), 2000))
+    ]).catch(() => null),
+    Promise.race([
+      fetchImageAsBase64("/images/app-store.png"),
+      new Promise<string>((_, r) => setTimeout(() => r(""), 2000))
+    ]).catch(() => null),
+  ]);
+
+  // Pre-generate barcode data URL
+  let barcodeDataUrl: string | null = null;
+  const barcodeValue = String(invoiceNo).replace(/^#/, "").trim();
+  if (barcodeValue && typeof document !== "undefined") {
     try {
-      // Timeout for image loading
-      const base64Img = await Promise.race([
-        fetchImageAsBase64(logoUrl),
-        new Promise<string>((_, reject) => setTimeout(() => reject("Timeout"), 3000))
-      ]);
-      
-      const imgWidth = 20;
-      const imgHeight = 20;
-      // We don't know if it's PNG or JPEG from base64 string directly without parsing, 
-      // but jsPDF accepts the base64 string directly in addImage if formatted correctly.
-      doc.addImage(base64Img, (pageWidth - imgWidth) / 2, y, imgWidth, imgHeight);
-      y += imgHeight + 4;
-    } catch (e) {
-      console.warn("Failed to load logo", e);
-      // Skip logo on failure
+      const canvas = document.createElement("canvas");
+      JsBarcode(canvas, barcodeValue, {
+        format: "CODE128",
+        width: 2,
+        height: 38,
+        displayValue: false,
+        margin: 0,
+        background: "#ffffff",
+        lineColor: "#000000",
+      });
+      barcodeDataUrl = canvas.toDataURL("image/png");
+    } catch {
+      barcodeDataUrl = null;
     }
   }
+
+  // Pure rendering logic executed on a target jsPDF document (returns final Y position)
+  const renderReceipt = (doc: jsPDF): number => {
+    const pageWidth = doc.internal.pageSize.getWidth(); // 72mm
+    const margin = 4;
+    const contentWidth = pageWidth - margin * 2; // 64mm safe printable width to prevent physical clipping
+
+    let y = 8;
+
+    // Helper for drawing dashed divider line
+    const drawDashedLine = (posY: number) => {
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.2);
+      doc.setLineDashPattern([1, 1], 0);
+      doc.line(margin, posY, pageWidth - margin, posY);
+      doc.setLineDashPattern([], 0);
+    };
+
+    // Helper for drawing solid double divider line
+    const drawSolidLine = (posY: number) => {
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.35);
+      doc.line(margin, posY, pageWidth - margin, posY);
+    };
+
+    // 1. STORE HEADER BLOCK (Centered, Helvetica Bold)
+    if (logoBase64) {
+      try {
+        const imgWidth = 20;
+        const imgHeight = 20;
+        doc.addImage(logoBase64, (pageWidth - imgWidth) / 2, y, imgWidth, imgHeight);
+        y += imgHeight + 4;
+      } catch (e) {
+        console.warn("Failed to load logo", e);
+      }
+    }
 
   const rawStoreName =
     getOutletField("name") ||
@@ -861,69 +890,70 @@ export async function generateReceiptPDF(
     drawDashedLine(summaryY);
   }
 
-  // 5. FOOTER & QR CODE
-  summaryY += 8;
+  // 5. FOOTER & QR CODE + APP STORE BADGES (Side-by-side: QR Code on Left, Google Play & App Store stacked on Right)
+  summaryY += 4;
   
-  // Draw QR Code if bill_qr_url is available
-  if (billQrUrlRaw) {
+  const qrSize = 22;
+  const badgeWidth = 28;
+  const badgeHeight = 9.5;
+  const badgeGapY = 2;
+  const qrBadgeGapX = 4.5;
+
+  const hasQr = Boolean(billQrUrlRaw);
+  const totalBlockWidth = hasQr ? (qrSize + qrBadgeGapX + badgeWidth) : badgeWidth;
+  const blockStartX = (pageWidth - totalBlockWidth) / 2;
+  const qrX = blockStartX;
+  const badgesX = hasQr ? (blockStartX + qrSize + qrBadgeGapX) : blockStartX;
+
+  const googlePlayY = summaryY + 0.5;
+  const appStoreY = googlePlayY + badgeHeight + badgeGapY;
+
+  // Draw QR Code on the Left
+  if (hasQr && qrDataUrl) {
     try {
-      const qrDataUrl = await QRCode.toDataURL(billQrUrlRaw, { margin: 1, width: 60 });
-      const qrSize = 25; // 25x25mm
-      doc.addImage(qrDataUrl, "PNG", (pageWidth - qrSize) / 2, summaryY, qrSize, qrSize);
-      summaryY += qrSize + 4;
+      doc.addImage(qrDataUrl, "PNG", qrX, summaryY, qrSize, qrSize);
     } catch (e) {
-      console.warn("Failed to generate QR code", e);
+      console.warn("Failed to draw QR code", e);
+    }
+  }
+
+  // Draw Google Play on top and App Store below it on the Right
+  const drawBadge = (x: number, yPos: number, width: number, height: number, text: string) => {
+    doc.setFillColor(0, 0, 0);
+    doc.roundedRect(x, yPos, width, height, 1.5, 1.5, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(6.5);
+    doc.setFont("helvetica", "bold");
+    doc.text(text, x + width / 2, yPos + height / 2 + 1, { align: "center" });
+    doc.setTextColor(0, 0, 0);
+  };
+
+  if (playStoreBase64) {
+    try {
+      doc.addImage(playStoreBase64, badgesX, googlePlayY, badgeWidth, badgeHeight);
+    } catch {
+      drawBadge(badgesX, googlePlayY, badgeWidth, badgeHeight, "Google Play");
     }
   } else {
-    summaryY += 2;
+    drawBadge(badgesX, googlePlayY, badgeWidth, badgeHeight, "Google Play");
+  }
+
+  if (appStoreBase64) {
+    try {
+      doc.addImage(appStoreBase64, badgesX, appStoreY, badgeWidth, badgeHeight);
+    } catch {
+      drawBadge(badgesX, appStoreY, badgeWidth, badgeHeight, "App Store");
+    }
+  } else {
+    drawBadge(badgesX, appStoreY, badgeWidth, badgeHeight, "App Store");
   }
   
-  // App Store Badges
-  const badgeWidth = 26;
-  const badgeHeight = 8;
-  const badgeGap = 4;
-  const totalBadgesWidth = badgeWidth * 2 + badgeGap;
-  const badgesStartX = (pageWidth - totalBadgesWidth) / 2;
+  // Interactive links for digital receipt viewing
+  doc.link(badgesX, googlePlayY, badgeWidth, badgeHeight, { url: "https://play.google.com/store/apps/details?id=com.apnagreenbasket" });
+  doc.link(badgesX, appStoreY, badgeWidth, badgeHeight, { url: "https://www.apple.com/app-store/" });
   
-  try {
-    // Attempt to load the user-uploaded images from public folder
-    const [playStoreBase64, appStoreBase64] = await Promise.all([
-      Promise.race([fetchImageAsBase64("/images/google-play.png"), new Promise<string>((_, r) => setTimeout(() => r(""), 2000))]),
-      Promise.race([fetchImageAsBase64("/images/app-store.png"), new Promise<string>((_, r) => setTimeout(() => r(""), 2000))])
-    ]);
-    
-    if (playStoreBase64) {
-      doc.addImage(playStoreBase64, badgesStartX, summaryY, badgeWidth, badgeHeight);
-    } else {
-      throw new Error("Missing play store image");
-    }
-    
-    if (appStoreBase64) {
-      doc.addImage(appStoreBase64, badgesStartX + badgeWidth + badgeGap, summaryY, badgeWidth, badgeHeight);
-    } else {
-      throw new Error("Missing app store image");
-    }
-  } catch (err) {
-    // Fallback to text boxes if images fail to load
-    const drawBadge = (x: number, yPos: number, width: number, height: number, text: string) => {
-      doc.setFillColor(0, 0, 0);
-      doc.roundedRect(x, yPos, width, height, 2, 2, "F");
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(6.5);
-      doc.setFont("helvetica", "bold");
-      doc.text(text, x + width / 2, yPos + height / 2 + 1, { align: "center" });
-      doc.setTextColor(0, 0, 0);
-    };
-    
-    drawBadge(badgesStartX, summaryY, badgeWidth, badgeHeight, "Google Play");
-    drawBadge(badgesStartX + badgeWidth + badgeGap, summaryY, badgeWidth, badgeHeight, "App Store");
-  }
-  
-  // Text Links
-  doc.link(badgesStartX, summaryY, badgeWidth, badgeHeight, { url: "https://play.google.com/store/apps/details?id=com.apnagreenbasket" });
-  doc.link(badgesStartX + badgeWidth + badgeGap, summaryY, badgeWidth, badgeHeight, { url: "https://www.apple.com/app-store/" });
-  
-  summaryY += badgeHeight + 6;
+  const blockHeight = hasQr ? Math.max(qrSize, badgeHeight * 2 + badgeGapY + 1) : (badgeHeight * 2 + badgeGapY);
+  summaryY += blockHeight + 5;
 
   // 6. PAYMENT STATUS STAMP & FOOTER BLOCK
   doc.setFont("helvetica", "bold");
@@ -938,23 +968,44 @@ export async function generateReceiptPDF(
   summaryY += 3.5;
   doc.text("*** HAVE A GREAT DAY ***", pageWidth / 2, summaryY, { align: "center" });
 
-  const barcodeValue = String(invoiceNo).replace(/^#/, "").trim();
-  if (barcodeValue) {
-    summaryY += 3;
-    const bcWidth = 32;
-    const bcHeight = 6;
-    const drew = drawBarcodeImage(doc, barcodeValue, (pageWidth - bcWidth) / 2, summaryY, bcWidth, bcHeight);
-    if (drew) {
+  if (barcodeDataUrl) {
+      summaryY += 3;
+      const bcWidth = 32;
+      const bcHeight = 6;
+      doc.addImage(barcodeDataUrl, "PNG", (pageWidth - bcWidth) / 2, summaryY, bcWidth, bcHeight);
       summaryY += bcHeight;
+    } else if (barcodeValue) {
+      summaryY += 3;
+      const bcWidth = 32;
+      const bcHeight = 6;
+      const drew = drawBarcodeImage(doc, barcodeValue, (pageWidth - bcWidth) / 2, summaryY, bcWidth, bcHeight);
+      if (drew) {
+        summaryY += bcHeight;
+      }
     }
-  }
-  
-  summaryY += 5; // End margin
-  
-  // Optional: Trim page height to fit content if we went over or under
-  // With jsPDF you can't dynamically resize the page after creation easily, 
-  // but starting with 297mm ensures we don't clip unless it's a huge order.
-  
+    
+    summaryY += 5; // End margin
+    return summaryY;
+  };
+
+  // Pass 1: Measure exact content height on a continuous tall canvas (no artificial page breaks)
+  const measureDoc = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: [72, 3000],
+  });
+  const measuredEndY = renderReceipt(measureDoc);
+  // Industry Standard: Dynamic page height automatically sized to exact items + padding
+  const exactPageHeight = Math.max(100, Math.ceil(measuredEndY + 3));
+
+  // Pass 2: Render final production receipt on the exact dynamic page size (1 continuous thermal roll)
+  const doc = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: [72, exactPageHeight],
+  });
+  renderReceipt(doc);
+
   if (action === "print") {
     doc.autoPrint();
     const blobUrl = doc.output("bloburl");
@@ -1137,32 +1188,9 @@ export async function generateReturnReceiptPDF(
     return storeDetails?.[field] || returnData.restaurant?.[field as keyof typeof returnData.restaurant] || undefined;
   };
 
-  const doc = new jsPDF({
-    orientation: "portrait",
-    unit: "mm",
-    format: [72, 297],
-  });
+  const invoiceNo = returnData.return_number;
+  const billQrUrlRaw = getOutletField("bill_qr_url");
 
-  const pageWidth = doc.internal.pageSize.getWidth(); // 72mm
-  const margin = 4;
-  const contentWidth = pageWidth - margin * 2; // 64mm safe printable width for thermal printers
-  let y = 8;
-
-  const drawDashedLine = (posY: number) => {
-    doc.setDrawColor(0, 0, 0);
-    doc.setLineWidth(0.2);
-    doc.setLineDashPattern([1, 1], 0);
-    doc.line(margin, posY, pageWidth - margin, posY);
-    doc.setLineDashPattern([], 0);
-  };
-
-  const drawSolidLine = (posY: number) => {
-    doc.setDrawColor(0, 0, 0);
-    doc.setLineWidth(0.35);
-    doc.line(margin, posY, pageWidth - margin, posY);
-  };
-
-  // 1. STORE HEADER
   const logoUrlRaw = getOutletField("logo_url");
   let logoUrl = null;
   if (logoUrlRaw) {
@@ -1171,20 +1199,78 @@ export async function generateReturnReceiptPDF(
     logoUrl = storeDetails.logo.startsWith("http") ? storeDetails.logo : (typeof window !== "undefined" ? window.location.origin : "") + storeDetails.logo;
   }
 
-  if (logoUrl) {
+  // Pre-load all assets asynchronously once in parallel
+  const [logoBase64, qrDataUrl, playStoreBase64, appStoreBase64] = await Promise.all([
+    logoUrl
+      ? Promise.race([
+          fetchImageAsBase64(logoUrl),
+          new Promise<string>((_, reject) => setTimeout(() => reject("Timeout"), 2500))
+        ]).catch(() => null)
+      : Promise.resolve(null),
+    billQrUrlRaw
+      ? QRCode.toDataURL(billQrUrlRaw, { margin: 1, width: 80 }).catch(() => null)
+      : Promise.resolve(null),
+    Promise.race([
+      fetchImageAsBase64("/images/google-play.png"),
+      new Promise<string>((_, r) => setTimeout(() => r(""), 2000))
+    ]).catch(() => null),
+    Promise.race([
+      fetchImageAsBase64("/images/app-store.png"),
+      new Promise<string>((_, r) => setTimeout(() => r(""), 2000))
+    ]).catch(() => null),
+  ]);
+
+  let barcodeDataUrl: string | null = null;
+  const barcodeValue = String(invoiceNo).replace(/^#/, "").trim();
+  if (barcodeValue && typeof document !== "undefined") {
     try {
-      const base64Img = await Promise.race([
-        fetchImageAsBase64(logoUrl),
-        new Promise<string>((_, reject) => setTimeout(() => reject("Timeout"), 3000))
-      ]);
-      const imgWidth = 20;
-      const imgHeight = 20;
-      doc.addImage(base64Img, (pageWidth - imgWidth) / 2, y, imgWidth, imgHeight);
-      y += imgHeight + 4;
-    } catch (e) {
-      console.warn("Failed to load logo", e);
+      const canvas = document.createElement("canvas");
+      JsBarcode(canvas, barcodeValue, {
+        format: "CODE128",
+        width: 2,
+        height: 38,
+        displayValue: false,
+        margin: 0,
+        background: "#ffffff",
+        lineColor: "#000000",
+      });
+      barcodeDataUrl = canvas.toDataURL("image/png");
+    } catch {
+      barcodeDataUrl = null;
     }
   }
+
+  const renderReturnReceipt = (doc: jsPDF): number => {
+    const pageWidth = doc.internal.pageSize.getWidth(); // 72mm
+    const margin = 4;
+    const contentWidth = pageWidth - margin * 2; // 64mm safe printable width for thermal printers
+    let y = 8;
+
+    const drawDashedLine = (posY: number) => {
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.2);
+      doc.setLineDashPattern([1, 1], 0);
+      doc.line(margin, posY, pageWidth - margin, posY);
+      doc.setLineDashPattern([], 0);
+    };
+
+    const drawSolidLine = (posY: number) => {
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.35);
+      doc.line(margin, posY, pageWidth - margin, posY);
+    };
+
+    // 1. STORE HEADER
+    if (logoBase64) {
+      try {
+        const imgWidth = 20;
+        const imgHeight = 20;
+        doc.addImage(logoBase64, (pageWidth - imgWidth) / 2, y, imgWidth, imgHeight);
+        y += imgHeight + 4;
+      } catch (e) {
+        console.warn("Failed to load logo", e);
+      }
+    }
 
   const rawStoreName =
     getOutletField("name") ||
@@ -1736,65 +1822,67 @@ export async function generateReturnReceiptPDF(
     summaryY += 4.5;
   }
 
-  // 5. FOOTER & QR CODE
-  summaryY += 8;
+  // 5. FOOTER & QR CODE + APP STORE BADGES (Side-by-side: QR Code on Left, Google Play & App Store stacked on Right)
+  summaryY += 4;
   
-  if (billQrUrlRaw) {
+  const qrSize = 22;
+  const badgeWidth = 28;
+  const badgeHeight = 9.5;
+  const badgeGapY = 2;
+  const qrBadgeGapX = 4.5;
+
+  const hasQr = Boolean(billQrUrlRaw);
+  const totalBlockWidth = hasQr ? (qrSize + qrBadgeGapX + badgeWidth) : badgeWidth;
+  const blockStartX = (pageWidth - totalBlockWidth) / 2;
+  const qrX = blockStartX;
+  const badgesX = hasQr ? (blockStartX + qrSize + qrBadgeGapX) : blockStartX;
+
+  const googlePlayY = summaryY + 0.5;
+  const appStoreY = googlePlayY + badgeHeight + badgeGapY;
+
+  if (hasQr && qrDataUrl) {
     try {
-      const qrDataUrl = await QRCode.toDataURL(billQrUrlRaw, { margin: 1, width: 60 });
-      const qrSize = 25;
-      doc.addImage(qrDataUrl, "PNG", (pageWidth - qrSize) / 2, summaryY, qrSize, qrSize);
-      summaryY += qrSize + 4;
+      doc.addImage(qrDataUrl, "PNG", qrX, summaryY, qrSize, qrSize);
     } catch (e) {
-      console.warn("Failed to generate QR code", e);
+      console.warn("Failed to draw QR code", e);
+    }
+  }
+
+  const drawBadge = (x: number, yPos: number, width: number, height: number, text: string) => {
+    doc.setFillColor(0, 0, 0);
+    doc.roundedRect(x, yPos, width, height, 1.5, 1.5, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(6.5);
+    doc.setFont("helvetica", "bold");
+    doc.text(text, x + width / 2, yPos + height / 2 + 1, { align: "center" });
+    doc.setTextColor(0, 0, 0);
+  };
+
+  if (playStoreBase64) {
+    try {
+      doc.addImage(playStoreBase64, badgesX, googlePlayY, badgeWidth, badgeHeight);
+    } catch {
+      drawBadge(badgesX, googlePlayY, badgeWidth, badgeHeight, "Google Play");
     }
   } else {
-    summaryY += 2;
+    drawBadge(badgesX, googlePlayY, badgeWidth, badgeHeight, "Google Play");
+  }
+
+  if (appStoreBase64) {
+    try {
+      doc.addImage(appStoreBase64, badgesX, appStoreY, badgeWidth, badgeHeight);
+    } catch {
+      drawBadge(badgesX, appStoreY, badgeWidth, badgeHeight, "App Store");
+    }
+  } else {
+    drawBadge(badgesX, appStoreY, badgeWidth, badgeHeight, "App Store");
   }
   
-  // App Store Badges
-  const badgeWidth = 26;
-  const badgeHeight = 8;
-  const badgeGap = 4;
-  const totalBadgesWidth = badgeWidth * 2 + badgeGap;
-  const badgesStartX = (pageWidth - totalBadgesWidth) / 2;
+  doc.link(badgesX, googlePlayY, badgeWidth, badgeHeight, { url: "https://play.google.com/store/apps/details?id=com.apnagreenbasket" });
+  doc.link(badgesX, appStoreY, badgeWidth, badgeHeight, { url: "https://www.apple.com/app-store/" });
   
-  try {
-    const [playStoreBase64, appStoreBase64] = await Promise.all([
-      Promise.race([fetchImageAsBase64("/images/google-play.png"), new Promise<string>((_, r) => setTimeout(() => r(""), 2000))]),
-      Promise.race([fetchImageAsBase64("/images/app-store.png"), new Promise<string>((_, r) => setTimeout(() => r(""), 2000))])
-    ]);
-    
-    if (playStoreBase64) {
-      doc.addImage(playStoreBase64, badgesStartX, summaryY, badgeWidth, badgeHeight);
-    } else {
-      throw new Error("Missing play store image");
-    }
-    
-    if (appStoreBase64) {
-      doc.addImage(appStoreBase64, badgesStartX + badgeWidth + badgeGap, summaryY, badgeWidth, badgeHeight);
-    } else {
-      throw new Error("Missing app store image");
-    }
-  } catch (err) {
-    const drawBadge = (x: number, yPos: number, width: number, height: number, text: string) => {
-      doc.setFillColor(0, 0, 0);
-      doc.roundedRect(x, yPos, width, height, 2, 2, "F");
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(6.5);
-      doc.setFont("helvetica", "bold");
-      doc.text(text, x + width / 2, yPos + height / 2 + 1, { align: "center" });
-      doc.setTextColor(0, 0, 0);
-    };
-    
-    drawBadge(badgesStartX, summaryY, badgeWidth, badgeHeight, "Google Play");
-    drawBadge(badgesStartX + badgeWidth + badgeGap, summaryY, badgeWidth, badgeHeight, "App Store");
-  }
-  
-  doc.link(badgesStartX, summaryY, badgeWidth, badgeHeight, { url: "https://play.google.com/store/apps/details?id=com.apnagreenbasket" });
-  doc.link(badgesStartX + badgeWidth + badgeGap, summaryY, badgeWidth, badgeHeight, { url: "https://www.apple.com/app-store/" });
-  
-  summaryY += badgeHeight + 6;
+  const blockHeight = hasQr ? Math.max(qrSize, badgeHeight * 2 + badgeGapY + 1) : (badgeHeight * 2 + badgeGapY);
+  summaryY += blockHeight + 5;
 
   // 6. STATUS STAMP & FOOTER
   doc.setFont("helvetica", "bold");
@@ -1809,23 +1897,43 @@ export async function generateReturnReceiptPDF(
   summaryY += 3.5;
   doc.text("Thank you for shopping with us!", pageWidth / 2, summaryY, { align: "center" });
 
-  const barcodeValue = String(invoiceNo).replace(/^#/, "").trim();
-  if (barcodeValue) {
-    summaryY += 3;
-    const bcWidth = 32;
-    const bcHeight = 6;
-    const drew = drawBarcodeImage(doc, barcodeValue, (pageWidth - bcWidth) / 2, summaryY, bcWidth, bcHeight);
-    if (drew) {
+  if (barcodeDataUrl) {
+      summaryY += 3;
+      const bcWidth = 32;
+      const bcHeight = 6;
+      doc.addImage(barcodeDataUrl, "PNG", (pageWidth - bcWidth) / 2, summaryY, bcWidth, bcHeight);
       summaryY += bcHeight;
+    } else if (barcodeValue) {
+      summaryY += 3;
+      const bcWidth = 32;
+      const bcHeight = 6;
+      const drew = drawBarcodeImage(doc, barcodeValue, (pageWidth - bcWidth) / 2, summaryY, bcWidth, bcHeight);
+      if (drew) {
+        summaryY += bcHeight;
+      }
     }
-  }
-  
-  summaryY += 5;
-  
-  // Optional: Trim page height to fit content if we went over or under
-  if (typeof doc.deletePage === 'function' && typeof doc.addPage === 'function' && doc.internal.pageSize.getHeight() !== summaryY) {
-    // Note: jsPDF format modification after creation is complex, so we skip dynamic trim here for safety unless explicitly handled
-  }
+    
+    summaryY += 5;
+    return summaryY;
+  };
+
+  // Pass 1: Measure exact content height on a continuous tall canvas
+  const measureDoc = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: [72, 3000],
+  });
+  const measuredEndY = renderReturnReceipt(measureDoc);
+  // Industry Standard: Dynamic page height automatically sized to exact items + padding
+  const exactPageHeight = Math.max(100, Math.ceil(measuredEndY + 3));
+
+  // Pass 2: Render final production receipt on the exact dynamic page size (1 continuous thermal roll)
+  const doc = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: [72, exactPageHeight],
+  });
+  renderReturnReceipt(doc);
 
   if (action === "print") {
     doc.autoPrint();
