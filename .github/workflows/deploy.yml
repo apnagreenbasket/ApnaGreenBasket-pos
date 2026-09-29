@@ -1,0 +1,79 @@
+# ============================================================
+# GitHub Actions CI/CD Pipeline — ApnaGreen Basket
+# ============================================================
+# Automatically deploys full stack to AWS EC2 on push to main.
+#
+# Required GitHub Secrets in Repository Settings -> Secrets and variables -> Actions:
+#   EC2_HOST:        Public Elastic IP of EC2 instance
+#   EC2_USER:        SSH username (typically 'ubuntu')
+#   EC2_SSH_KEY:     Private SSH key (.pem content)
+#   DEPLOY_PATH:     Path to repository on EC2 (e.g. /home/ubuntu/ApnaGreenBasket-pos)
+#   API_DOMAIN:      Backend domain (e.g. api.yourdomain.com)
+#   WEB_DOMAIN:      Frontend domain (e.g. yourdomain.com)
+# ============================================================
+
+name: Deploy ApnaGreen Basket to AWS EC2
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'app/**'
+      - 'alembic/**'
+      - 'frontend/**'
+      - 'nginx/**'
+      - 'Dockerfile.api'
+      - 'Dockerfile.web'
+      - 'docker-compose.yml'
+      - 'deploy.sh'
+      - 'requirements.txt'
+      - 'pyproject.toml'
+      - 'uv.lock'
+
+# Prevent overlapping concurrent deployments
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy Full Stack
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: 🚀 Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script_stop: true
+          script: |
+            cd ${{ secrets.DEPLOY_PATH }}
+            ./deploy.sh
+
+      - name: ✅ Verify Production Health
+        run: |
+          sleep 10
+          API_URL="https://${{ secrets.API_DOMAIN || 'api.apnagreenbasket.com' }}/health"
+          WEB_URL="https://${{ secrets.WEB_DOMAIN || 'app.apnagreenbasket.com' }}"
+
+          echo "Checking API: $API_URL"
+          STATUS=$(curl -sf "$API_URL" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status', 'unknown'))" 2>/dev/null || echo "failed")
+          
+          if [ "$STATUS" = "healthy" ]; then
+            echo "✅ Backend API is healthy!"
+          else
+            echo "❌ Backend health check failed with: $STATUS"
+            exit 1
+          fi
+
+          echo "Checking Web: $WEB_URL"
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$WEB_URL" || echo "000")
+          if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "307" ] || [ "$HTTP_CODE" = "308" ]; then
+            echo "✅ Frontend Web is healthy (HTTP $HTTP_CODE)!"
+          else
+            echo "⚠️ Frontend returned unexpected HTTP status: $HTTP_CODE"
+          fi

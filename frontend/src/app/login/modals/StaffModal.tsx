@@ -6,8 +6,8 @@
 
 "use client";
 
-import { FormEvent } from "react";
-import { UserPlus, X } from "lucide-react";
+import { FormEvent, useState, useEffect } from "react";
+import { UserPlus, X, Eye, EyeOff } from "lucide-react";
 import type { StaffRole } from "@/types";
 
 export type StaffModalFormState = {
@@ -41,6 +41,18 @@ export function StaffModal({
   onSubmitStaffMember,
   currentUserRole,
 }: StaffModalProps) {
+  const [emailReadOnly, setEmailReadOnly] = useState(true);
+  const [passwordReadOnly, setPasswordReadOnly] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setEmailReadOnly(true);
+      setPasswordReadOnly(true);
+      setShowPassword(false);
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const isManager = currentUserRole === "MANAGER";
@@ -64,11 +76,39 @@ export function StaffModal({
           </button>
         </div>
 
-        <form onSubmit={onSubmitStaffMember} className="space-y-3">
+        <form
+          onSubmit={onSubmitStaffMember}
+          autoComplete="off"
+          data-lpignore="true"
+          data-1p-ignore="true"
+          data-bwignore="true"
+          data-form-type="other"
+          className="space-y-3"
+        >
+          {/* Decoy inputs to intercept browser password manager autofill */}
+          <div
+            style={{
+              position: "absolute",
+              left: "-9999px",
+              width: "1px",
+              height: "1px",
+              overflow: "hidden",
+              opacity: 0,
+              pointerEvents: "none",
+            }}
+            aria-hidden="true"
+          >
+            <input type="text" name="decoy_staff_username" tabIndex={-1} autoComplete="off" />
+            <input type="password" name="decoy_staff_password" tabIndex={-1} autoComplete="new-password" />
+          </div>
+
           <label className="block space-y-1">
             <span className="text-xs uppercase tracking-wide text-[var(--text-muted)] font-bold">Full Name</span>
             <input
               type="text"
+              name="new_staff_fullname"
+              id="new_staff_fullname"
+              autoComplete="off"
               value={staffFormState.name}
               onChange={(e) => setStaffFormState((prev) => ({ ...prev, name: e.target.value }))}
               required
@@ -81,6 +121,17 @@ export function StaffModal({
             <span className="text-xs uppercase tracking-wide text-[var(--text-muted)] font-bold">Email Address</span>
             <input
               type="email"
+              name="new_staff_email"
+              id="new_staff_email"
+              autoComplete="off"
+              data-lpignore="true"
+              data-1p-ignore="true"
+              data-bwignore="true"
+              readOnly={!editingStaffId && emailReadOnly}
+              onFocus={(e) => {
+                e.currentTarget.readOnly = false;
+                setEmailReadOnly(false);
+              }}
               value={staffFormState.email}
               onChange={(e) => setStaffFormState((prev) => ({ ...prev, email: e.target.value }))}
               required
@@ -96,6 +147,9 @@ export function StaffModal({
               </span>
               <input
                 type="tel"
+                name="new_staff_phone"
+                id="new_staff_phone"
+                autoComplete="off"
                 required={!editingStaffId}
                 minLength={10}
                 maxLength={15}
@@ -109,6 +163,8 @@ export function StaffModal({
             <label className="block space-y-1">
               <span className="text-xs uppercase tracking-wide text-[var(--text-muted)] font-bold">Role</span>
               <select
+                name="new_staff_role"
+                id="new_staff_role"
                 value={staffFormState.role}
                 onChange={(e) => setStaffFormState((prev) => ({ ...prev, role: e.target.value as StaffRole }))}
                 className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3.5 py-2 text-xs font-semibold"
@@ -131,21 +187,49 @@ export function StaffModal({
             <div className="grid gap-3 sm:grid-cols-2 pt-1 border-t border-[var(--border-subtle)]">
               <label className="block space-y-1">
                 <span className="text-xs uppercase tracking-wide text-[var(--text-muted)] font-bold">Password</span>
-                <input
-                  type="password"
-                  value={staffFormState.password}
-                  onChange={(e) => setStaffFormState((prev) => ({ ...prev, password: e.target.value }))}
-                  required={!editingStaffId}
-                  minLength={8}
-                  placeholder="Min 8 characters"
-                  className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3.5 py-2 text-xs"
-                />
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    name="new_staff_password"
+                    id="new_staff_password"
+                    autoComplete="new-password"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
+                    data-bwignore="true"
+                    readOnly={passwordReadOnly}
+                    onFocus={(e) => {
+                      e.currentTarget.readOnly = false;
+                      setPasswordReadOnly(false);
+                    }}
+                    value={staffFormState.password}
+                    onChange={(e) => setStaffFormState((prev) => ({ ...prev, password: e.target.value }))}
+                    required={!editingStaffId}
+                    minLength={8}
+                    placeholder="Min 8 characters"
+                    className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] pl-3.5 pr-9 py-2 text-xs"
+                  />
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition p-0.5"
+                    title={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                  </button>
+                </div>
               </label>
 
               <label className="block space-y-1">
                 <span className="text-xs uppercase tracking-wide text-[var(--text-muted)] font-bold">Initial 4-Digit PIN (Optional)</span>
                 <input
                   type="password"
+                  name="new_staff_pin"
+                  id="new_staff_pin"
+                  autoComplete="new-password"
+                  data-lpignore="true"
+                  data-1p-ignore="true"
+                  data-bwignore="true"
                   maxLength={4}
                   inputMode="numeric"
                   pattern="[0-9]{4}"

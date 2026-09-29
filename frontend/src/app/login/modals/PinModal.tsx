@@ -48,7 +48,7 @@ export function PinModal({
           </button>
         </div>
 
-        <form onSubmit={onSubmitSetStaffPin} className="space-y-4">
+        <form onSubmit={onSubmitSetStaffPin} autoComplete="off" data-lpignore="true" data-1p-ignore="true" className="space-y-4">
           <p className="text-xs text-[var(--text-secondary)]">
             Set 4-digit quick-switch PIN for <strong>{pinTargetStaff.name}</strong> ({pinTargetStaff.role.replace("_", " ")}):
           </p>
@@ -56,6 +56,12 @@ export function PinModal({
           <label className="block space-y-1">
             <input
               type="password"
+              name="staff_setup_pin"
+              id="staff_setup_pin"
+              autoComplete="new-password"
+              data-lpignore="true"
+              data-1p-ignore="true"
+              data-bwignore="true"
               maxLength={4}
               inputMode="numeric"
               pattern="[0-9]{4}"

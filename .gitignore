@@ -1,0 +1,106 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+menu_saas.db
+
+# Environment variables & secrets
+.env
+.env.*
+!.env.example
+!.env.production.example
+*.env
+
+# Private keys, SSH keys & certificates (except public AWS RDS root CA)
+*.pem
+!certs/rds-ca-bundle.pem
+*.key
+*.crt
+id_rsa*
+
+# Local database dumps and backups
+*.sql
+*.sql.gz
+*.dump
+backups/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Testing
+.pytest_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+
+# Mypy
+.mypy_cache/
+
+# Ruff
+.ruff_cache/
+
+# Alembic
+alembic/versions/__pycache__/
+
+# Logs
+*.log
+
+# Frontend & Node
+node_modules/
+frontend/node_modules/
+.next/
+frontend/.next/
+out/
+frontend/out/
+build/
+frontend/build/
+.vercel/
+.turbo/
+frontend/.turbo/
+*.tsbuildinfo
+frontend/next-env.d.ts
+
+# Docker & Nginx SSL
+docker-compose.override.yml
+nginx/ssl/
+nginx/certbot-webroot/
+uploads/*
+!uploads/.gitkeep
+
+# Local reference, scratch & template files (not for production)
+DEPLOYMENT_TEMPLATE.md
+*TEMPLATE*.md
+*template*.md
+scratch/
+notes/
+*.local.md
+local_test*
+*.draft
+
+.agents/

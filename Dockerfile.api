@@ -1,0 +1,71 @@
+# ============================================================
+# Dockerfile.api — FastAPI Backend (Multi-stage Production)
+# ============================================================
+# Build: docker build -f Dockerfile.api -t apnagreenbasket-api .
+# Run:   docker run -p 8000:8000 apnagreenbasket-api
+# ============================================================
+
+# --- Stage 1: Builder ---
+FROM python:3.12-slim AS builder
+
+WORKDIR /build
+
+# Install build dependencies for C-extensions (asyncpg, greenlet, etc.)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends gcc libpq-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+# Create virtual environment and install python dependencies
+COPY requirements.txt .
+RUN python -m venv /opt/venv && \
+    /opt/venv/bin/pip install --no-cache-dir --upgrade pip && \
+    /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
+
+# --- Stage 2: Production Runner ---
+FROM python:3.12-slim AS runner
+
+WORKDIR /app
+
+# Install runtime dependencies (Postgres client library & health curl)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends libpq5 curl && \
+    rm -rf /var/lib/apt/lists/*
+
+# Create dedicated non-root application user
+RUN groupadd -r appuser && useradd -r -g appuser -d /app -s /sbin/nologin appuser
+
+# Copy virtual environment from builder stage
+COPY --from=builder /opt/venv /opt/venv
+
+ENV PATH="/opt/venv/bin:$PATH"
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV DB_CA_CERT_PATH="/app/certs/rds-ca-bundle.pem"
+
+# Copy application source code, database migrations, and SSL certificates
+COPY app ./app
+COPY alembic ./alembic
+COPY alembic.ini ./alembic.ini
+COPY certs ./certs
+COPY seed.py ./seed.py
+
+# Prepare persistent uploads directory with proper ownership
+RUN mkdir -p /app/uploads && chown -R appuser:appuser /app
+
+USER appuser
+
+EXPOSE 8000
+
+# Native container healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Production server: Gunicorn process supervisor + Uvicorn worker threads
+CMD ["sh", "-c", "gunicorn app.main:app \
+    --worker-class uvicorn.workers.UvicornWorker \
+    --workers ${GUNICORN_WORKERS:-2} \
+    --bind 0.0.0.0:8000 \
+    --timeout 120 \
+    --graceful-timeout 30 \
+    --access-logfile - \
+    --error-logfile -"]

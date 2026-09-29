@@ -135,6 +135,12 @@ export function PinSwitchModal({
             </span>
             <input
               type="password"
+              name="staff_switch_pin"
+              id="staff_switch_pin"
+              autoComplete="new-password"
+              data-lpignore="true"
+              data-1p-ignore="true"
+              data-bwignore="true"
               maxLength={4}
               inputMode="numeric"
               pattern="[0-9]{4}"

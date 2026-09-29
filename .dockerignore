@@ -1,0 +1,71 @@
+# ============================================================
+# .dockerignore — ApnaGreen Basket
+# ============================================================
+# Excludes unnecessary files from Docker build context
+# ============================================================
+
+# Frontend (deployed on Vercel, not in Docker)
+frontend/
+
+# Dependencies (installed fresh inside containers)
+node_modules
+.venv
+venv
+**/venv
+
+# Build outputs (rebuilt inside containers)
+.next
+frontend/.next
+out
+frontend/out
+build
+frontend/build
+.turbo
+frontend/.turbo
+
+# Python bytecode & caches
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+**/*.pyc
+**/*.pyo
+**/*.pyd
+*.so
+*.egg-info
+
+# Environment files & secrets
+.env
+.env.*
+*.env
+!.env.example
+!.env.production.example
+
+# Git & OS
+.git
+.gitignore
+.gitattributes
+.DS_Store
+Thumbs.db
+
+# Test & Lint caches
+.pytest_cache
+.mypy_cache
+.ruff_cache
+htmlcov
+.coverage
+*.log
+
+# Local uploads & backups
+uploads/*
+!uploads/.gitkeep
+backups/
+*.sql
+*.sql.gz
+
+# Local documentation & reference files
+DEPLOYMENT_TEMPLATE.md
+*TEMPLATE*.md
+walkthrough.md
+scratch/
+notes/
