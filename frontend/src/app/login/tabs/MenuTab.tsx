@@ -7,6 +7,7 @@ import {
   Barcode,
   Boxes,
   Edit,
+  FileText,
   Filter,
   Image as ImageIcon,
   Layers,
@@ -113,6 +114,7 @@ export function MenuTab({
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<AdminMenuItem | null>(null);
   const [isSettingsDrawerOpen, setIsSettingsDrawerOpen] = useState(false);
+  const [settingsDrawerTab, setSettingsDrawerTab] = useState<"bulk-price" | "catalogue">("bulk-price");
 
   const [localPage, setLocalPage] = useState(1);
   const itemsPerPage = 52;
@@ -158,6 +160,48 @@ export function MenuTab({
       setIsDeletingCat(false);
     }
   };
+
+  // Global Keyboard Shortcuts for Product Catalog / Menu (Press '+' or Numpad '+' to open Catalogue Print)
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if user is typing in an input, textarea, select, or contenteditable
+      const target = e.target as HTMLElement | null;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
+
+      // Don't trigger if any modal or drawer is open
+      if (
+        isItemModalOpen ||
+        isSettingsDrawerOpen ||
+        isCategoryModalOpen ||
+        Boolean(itemPendingDelete) ||
+        Boolean(catPendingDelete)
+      ) {
+        return;
+      }
+
+      if (e.key === "+" || e.code === "NumpadAdd") {
+        e.preventDefault();
+        setSettingsDrawerTab("catalogue");
+        setIsSettingsDrawerOpen(true);
+      }
+    };
+
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, [
+    isItemModalOpen,
+    isSettingsDrawerOpen,
+    isCategoryModalOpen,
+    itemPendingDelete,
+    catPendingDelete,
+  ]);
 
   const handleCreateCategorySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -620,7 +664,26 @@ export function MenuTab({
 
           <button
             type="button"
-            onClick={() => setIsSettingsDrawerOpen(true)}
+            onClick={() => {
+              setSettingsDrawerTab("catalogue");
+              setIsSettingsDrawerOpen(true);
+            }}
+            className="flex items-center gap-1.5 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-1.5 text-xs font-bold text-[var(--text-secondary)] hover:border-[var(--accent-brand)] hover:text-[var(--accent-brand)] transition cursor-pointer"
+            title="Catalogue Print (Shortcut: Press +)"
+          >
+            <FileText className="h-4 w-4 text-[var(--accent-brand)]" />
+            <span className="hidden sm:inline">Catalogue Print</span>
+            <kbd className="ml-1 hidden md:inline-flex items-center rounded border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-1.5 py-0.5 font-mono text-[10px] font-semibold text-[var(--text-muted)] shadow-2xs">
+              +
+            </kbd>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setSettingsDrawerTab("bulk-price");
+              setIsSettingsDrawerOpen(true);
+            }}
             className="p-2 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:border-[var(--accent-brand)] hover:text-[var(--accent-brand)] transition cursor-pointer"
             title="Catalog Settings"
           >
@@ -1751,6 +1814,7 @@ export function MenuTab({
       <MenuSettingsDrawer
         isOpen={isSettingsDrawerOpen}
         onClose={() => setIsSettingsDrawerOpen(false)}
+        initialTab={settingsDrawerTab}
         menuItems={menuItems}
         categories={categories}
         restaurant={restaurant || null}

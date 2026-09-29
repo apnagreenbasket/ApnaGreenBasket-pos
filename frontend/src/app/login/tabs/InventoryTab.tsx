@@ -330,6 +330,59 @@ export function InventoryTab({
   const [selectedDeleteItem, setSelectedDeleteItem] = useState<InventoryItem | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
+  // Global Keyboard Shortcuts for Inventory (Press '+' or Numpad '+' to open Add Stock / Register Product)
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if user is typing in an input, textarea, select, or contenteditable
+      const target = e.target as HTMLElement | null;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
+
+      // Don't trigger if any modal or drawer is open
+      if (
+        isRegisterModalOpen ||
+        isEditOpen ||
+        isAdjustModalOpen ||
+        isReturnBillModalOpen ||
+        isPrintModalOpen ||
+        isDeleteModalOpen ||
+        isBatchDrawerOpen ||
+        isAddSupplierModalOpen ||
+        isWastageModalOpen
+      ) {
+        return;
+      }
+
+      if (e.key === "+" || e.code === "NumpadAdd") {
+        e.preventDefault();
+        setPrefillItem(null);
+        setScannedBarcode("");
+        setIsRegisterModalOpen(true);
+      }
+    };
+
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, [
+    isRegisterModalOpen,
+    isEditOpen,
+    isAdjustModalOpen,
+    isReturnBillModalOpen,
+    isPrintModalOpen,
+    isDeleteModalOpen,
+    isBatchDrawerOpen,
+    isAddSupplierModalOpen,
+    isWastageModalOpen,
+    setIsRegisterModalOpen,
+    setScannedBarcode,
+  ]);
+
   const categories = useMemo(() => {
     const set = new Set<string>();
     if (catalogCategories && catalogCategories.length > 0) {
@@ -841,13 +894,18 @@ export function InventoryTab({
           <button
             type="button"
             onClick={() => {
+              setPrefillItem(null);
               setScannedBarcode("");
               setIsRegisterModalOpen(true);
             }}
             className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-500 shadow-md transition active:scale-95 cursor-pointer"
+            title="Shortcut: Press + or Numpad +"
           >
             <Plus className="h-4 w-4" />
             Add Stock / Register Product
+            <kbd className="ml-1 hidden sm:inline-flex items-center rounded border border-white/30 bg-white/20 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-white/90 shadow-2xs">
+              +
+            </kbd>
           </button>
         </div>
       </div>
@@ -1123,13 +1181,18 @@ export function InventoryTab({
                             <button
                               type="button"
                               onClick={() => {
+                                setPrefillItem(null);
                                 setScannedBarcode("");
                                 setIsRegisterModalOpen(true);
                               }}
                               className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-500 shadow-md transition active:scale-95"
+                              title="Shortcut: Press + or Numpad +"
                             >
                               <Plus className="h-4 w-4" />
                               + Add First Stock / Register Product
+                              <kbd className="ml-1 hidden sm:inline-flex items-center rounded border border-white/30 bg-white/20 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-white/90 shadow-2xs">
+                                +
+                              </kbd>
                             </button>
                           )}
                         </div>

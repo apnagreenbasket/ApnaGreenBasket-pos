@@ -123,6 +123,7 @@ export function BarcodeRegisterModal({
   const mrpMarginRef = useRef<HTMLInputElement>(null);
   const mrpRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  const barcodeAutoPopulatedFromItemRef = useRef<string | null>(null);
 
   // Directly capture hardware scanner input while Register modal is open
   useBarcodeScanner({
@@ -130,6 +131,8 @@ export function BarcodeRegisterModal({
       const clean = scannedCode.trim();
       if (clean) {
         setCustomBarcode(clean);
+        barcodeAutoPopulatedFromItemRef.current = null;
+        setError(null);
       }
     },
     enabled: isOpen,
@@ -152,10 +155,16 @@ export function BarcodeRegisterModal({
     setName(itm.name);
     setCategory(itm.category || categories[0] || "General");
     setUnit(itm.unit || "pcs");
-    // Preserve scanned / entered barcode when associating with an existing item.
-    // Only copy barcode from existing item if customBarcode is currently empty.
-    if (!customBarcode.trim() && itm.barcode) {
+    setError(null);
+
+    // Auto-update barcode to this item's barcode if it has one,
+    // or reset to the initial scanned barcode (or empty string if opened from Add Stock)
+    if (itm.barcode) {
       setCustomBarcode(itm.barcode);
+      barcodeAutoPopulatedFromItemRef.current = itm.id;
+    } else {
+      setCustomBarcode(barcode || "");
+      barcodeAutoPopulatedFromItemRef.current = null;
     }
     if (itm.cost_per_unit != null) setCostPerUnit(String(itm.cost_per_unit));
 
@@ -251,6 +260,7 @@ export function BarcodeRegisterModal({
 
   useEffect(() => {
     if (isOpen) {
+      barcodeAutoPopulatedFromItemRef.current = null;
       if (prefillItem) {
         populateFromItem(prefillItem, false);
       } else {
@@ -530,10 +540,16 @@ export function BarcodeRegisterModal({
             </div>
             <div>
               <h2 className="text-base font-bold text-[var(--text-primary)]">
-                {customBarcode.trim() ? "New Barcode Scanned!" : "Register Inventory Product & Batch"}
+                {barcode.trim()
+                  ? "New Barcode Scanned!"
+                  : selectedItemId
+                  ? "Inward Stock for Existing Item"
+                  : "Add Stock / Register Product"}
               </h2>
               <p className="text-xs text-[var(--text-secondary)]">
-                Inward stock with automatic cost calculation, MRP & tax rates.
+                {selectedItemId
+                  ? "Inward stock, update batch costs, MRP & tax rates for this item."
+                  : "Inward stock with automatic cost calculation, MRP & tax rates."}
               </p>
             </div>
           </div>
@@ -563,6 +579,8 @@ export function BarcodeRegisterModal({
                 const existingCodes = items.map((it) => it.barcode).filter((b): b is string => Boolean(b));
                 const plu = generateItemPlu(mask.itemCodeLength, existingCodes);
                 setCustomBarcode(plu);
+                barcodeAutoPopulatedFromItemRef.current = null;
+                setError(null);
               }}
               className="text-[10px] text-[var(--accent-brand)] font-bold hover:underline bg-[var(--accent-brand)]/10 px-2 py-0.5 rounded-lg transition cursor-pointer"
               title={`Generate ${parseBarcodeMask(scaleBarcodeFormat).itemCodeLength}-digit PLU for active scale mask (${parseBarcodeMask(scaleBarcodeFormat).pattern})`}
@@ -576,7 +594,11 @@ export function BarcodeRegisterModal({
             data-barcode-input="true"
             placeholder="Scan or type barcode (Optional)"
             value={customBarcode}
-            onChange={(e) => setCustomBarcode(e.target.value)}
+            onChange={(e) => {
+              setCustomBarcode(e.target.value);
+              barcodeAutoPopulatedFromItemRef.current = null;
+              setError(null);
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
@@ -619,11 +641,15 @@ export function BarcodeRegisterModal({
           <div className="relative">
             <label className="block text-xs font-semibold text-[var(--text-primary)] mb-1 flex items-center justify-between">
               <span>Product / Item Name *</span>
-              {selectedItemId && (
-                <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
-                  {customBarcode.trim() ? "Linking barcode to existing item" : "Adding batch to existing item"}
-                </span>
-              )}
+              {selectedItemId && (() => {
+                const selectedItem = items.find((i) => i.id === selectedItemId);
+                const hasBarcodeChange = customBarcode.trim() && selectedItem?.barcode !== customBarcode.trim();
+                return (
+                  <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                    {hasBarcodeChange ? "Linking barcode to existing item" : "Adding stock to existing item"}
+                  </span>
+                );
+              })()}
             </label>
             <input
               ref={nameRef}
@@ -634,8 +660,16 @@ export function BarcodeRegisterModal({
               value={name}
               onFocus={() => setIsItemDropdownOpen(true)}
               onChange={(e) => {
-                setName(e.target.value);
-                setSelectedItemId(undefined);
+                const newName = e.target.value;
+                setName(newName);
+                setError(null);
+                if (selectedItemId) {
+                  setSelectedItemId(undefined);
+                  if (barcodeAutoPopulatedFromItemRef.current) {
+                    setCustomBarcode(barcode || "");
+                    barcodeAutoPopulatedFromItemRef.current = null;
+                  }
+                }
                 setIsItemDropdownOpen(true);
               }}
               onKeyDown={(e) => {

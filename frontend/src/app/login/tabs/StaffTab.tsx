@@ -8,7 +8,7 @@
 
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useState, useEffect } from "react";
 import { ConfirmModal } from "../modals/ConfirmModal";
 import {
   Activity,
@@ -113,6 +113,35 @@ export function StaffTab({
     return true;
   });
 
+  // Global Keyboard Shortcuts for Staff & Team (Press '+' or Numpad '+' to open Add Staff Member)
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if user is typing in an input, textarea, select, or contenteditable
+      const target = e.target as HTMLElement | null;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
+
+      // Don't trigger if any confirmation modal is open
+      if (staffToDeactivate || staffToActivate || staffToDelete) {
+        return;
+      }
+
+      if (e.key === "+" || e.code === "NumpadAdd") {
+        e.preventDefault();
+        onOpenCreateStaff();
+      }
+    };
+
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, [staffToDeactivate, staffToActivate, staffToDelete, onOpenCreateStaff]);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -135,9 +164,13 @@ export function StaffTab({
             type="button"
             onClick={onOpenCreateStaff}
             className="inline-flex items-center gap-2 rounded-xl bg-[var(--accent-brand)] px-4 py-2 text-xs font-bold text-[var(--text-on-accent)] hover:bg-[var(--accent-brand-hover)] shadow-xs transition"
+            title="Shortcut: Press + or Numpad +"
           >
             <UserPlus className="h-4 w-4" />
             <span>+ Add Staff Member</span>
+            <kbd className="ml-1 hidden sm:inline-flex items-center rounded border border-white/30 bg-white/20 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-white/90 shadow-2xs">
+              +
+            </kbd>
           </button>
         </div>
       </div>

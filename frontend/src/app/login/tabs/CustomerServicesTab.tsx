@@ -55,6 +55,35 @@ export function CustomerServicesTab({
     }
   }, [error]);
 
+  // Global Keyboard Shortcuts for Customer Services (Press '+' or Numpad '+' to open Register Customer)
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if user is typing in an input, textarea, select, or contenteditable
+      const target = e.target as HTMLElement | null;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
+
+      // Don't trigger if any modal is open
+      if (isAddCustomerModalOpen || isEditCustomerModalOpen || Boolean(customerToRemove)) {
+        return;
+      }
+
+      if (e.key === "+" || e.code === "NumpadAdd") {
+        e.preventDefault();
+        setIsAddCustomerModalOpen(true);
+      }
+    };
+
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, [isAddCustomerModalOpen, isEditCustomerModalOpen, customerToRemove]);
+
   const fetchCustomers = async () => {
     try {
       setIsLoading(true);
@@ -299,9 +328,13 @@ export function CustomerServicesTab({
                 type="button"
                 onClick={() => setIsAddCustomerModalOpen(true)}
                 className="flex items-center gap-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 text-xs font-bold shadow-md transition active:scale-95 cursor-pointer"
+                title="Shortcut: Press + or Numpad +"
               >
                 <UserPlus className="h-4 w-4" />
                 + Register Customer
+                <kbd className="ml-1 hidden sm:inline-flex items-center rounded border border-white/30 bg-white/20 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-white/90 shadow-2xs">
+                  +
+                </kbd>
               </button>
             </div>
           </div>
@@ -343,9 +376,13 @@ export function CustomerServicesTab({
                             type="button"
                             onClick={() => setIsAddCustomerModalOpen(true)}
                             className="inline-flex items-center gap-1.5 rounded-xl bg-purple-600 px-4 py-2 text-xs font-bold text-white hover:bg-purple-700 shadow-md transition active:scale-95 cursor-pointer"
+                            title="Shortcut: Press + or Numpad +"
                           >
                             <UserPlus className="h-4 w-4" />
                             + Register First Customer
+                            <kbd className="ml-1 hidden sm:inline-flex items-center rounded border border-white/30 bg-white/20 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-white/90 shadow-2xs">
+                              +
+                            </kbd>
                           </button>
                         </div>
                       </td>

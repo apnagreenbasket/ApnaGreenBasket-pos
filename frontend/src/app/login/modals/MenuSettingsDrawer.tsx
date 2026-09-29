@@ -6,7 +6,7 @@
 
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { X, DollarSign, FileText } from "lucide-react";
 import type { AdminMenuItem, AdminCategory, RestaurantProfile } from "../adminTypes";
 import { BulkPriceModal } from "../modals/BulkPriceModal";
@@ -21,6 +21,7 @@ interface MenuSettingsDrawerProps {
   restaurant: RestaurantProfile | null;
   onSaveBatchItems: (updates: { id: string; name: string; mrp: string; price: string; evening_price: string }[]) => Promise<void>;
   onRestaurantUpdate?: (r: RestaurantProfile) => void;
+  initialTab?: SettingsTab;
 }
 
 type SettingsTab = "bulk-price" | "catalogue";
@@ -33,8 +34,26 @@ export function MenuSettingsDrawer({
   restaurant,
   onSaveBatchItems,
   onRestaurantUpdate,
+  initialTab = "bulk-price",
 }: MenuSettingsDrawerProps) {
-  const [activeTab, setActiveTab] = useState<SettingsTab>("bulk-price");
+  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
+
+  useEffect(() => {
+    if (isOpen) {
+      setActiveTab(initialTab);
+    }
+  }, [isOpen, initialTab]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
