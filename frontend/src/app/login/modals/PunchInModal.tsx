@@ -68,10 +68,10 @@ export function PunchInModal({
   const displayRole = (activeStaff?.role || userRole || "CASHIER").replace(/_/g, " ");
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="w-full max-w-md overflow-hidden rounded-3xl border border-[var(--border-strong)] bg-[var(--bg-surface)] shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md animate-in fade-in duration-200 overflow-y-auto">
+      <div className="w-full max-w-md my-auto overflow-hidden rounded-3xl border border-[var(--border-strong)] bg-[var(--bg-surface)] shadow-2xl max-h-[94vh] flex flex-col">
         {/* Header Accent Banner */}
-        <div className="bg-gradient-to-r from-emerald-600 to-teal-600 p-6 text-white text-center relative">
+        <div className="bg-gradient-to-r from-emerald-600 to-teal-600 p-6 text-white text-center relative shrink-0">
           <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-white/15 backdrop-blur-md shadow-inner">
             <Clock className="h-8 w-8 text-white animate-pulse" />
           </div>
@@ -83,8 +83,8 @@ export function PunchInModal({
           </p>
         </div>
 
-        {/* Body Content */}
-        <div className="p-6 space-y-5">
+        {/* Body Content - Scrollable with sleek scrollbar so it never gets cropped */}
+        <div className="p-6 space-y-5 overflow-y-auto flex-1 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.15)_transparent] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/15 [&::-webkit-scrollbar-track]:bg-transparent">
           {/* Active Staff Identity Card */}
           <div className="flex items-center gap-3.5 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-4">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-brand)]/15 text-[var(--accent-brand)] font-black text-lg shadow-xs">

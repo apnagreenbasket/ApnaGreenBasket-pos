@@ -172,6 +172,7 @@ async def export_menu_items(db: AsyncSession, outlet_id: uuid.UUID, format: Expo
             "Category": item.category.name if item.category else "",
             "Price": str(item.price),
             "Barcode": item.barcode or "",
+            "Product Photo / Image (Optional)": item.image_url or "",
             "Description": item.description or "",
             "MRP": str(item.mrp) if item.mrp else "",
             "Wholesale Price": str(item.wholesale_price) if item.wholesale_price else "",
@@ -190,7 +191,12 @@ async def export_menu_items(db: AsyncSession, outlet_id: uuid.UUID, format: Expo
         
     df = pd.DataFrame(data)
     if df.empty:
-        df = pd.DataFrame(columns=["Name", "Category", "Price", "Barcode", "Description", "MRP", "Wholesale Price", "Evening Price", "Offer Price", "Offer Label", "Tax Category", "Tax Rate", "HSN Code", "Pricing Mode", "Unit Label", "Alt Unit Label", "Alt Unit Conversion Factor", "Is Available"])
+        df = pd.DataFrame(columns=[
+            "Name", "Category", "Price", "Barcode", "Product Photo / Image (Optional)", "Description", "MRP",
+            "Wholesale Price", "Evening Price", "Offer Price", "Offer Label",
+            "Tax Category", "Tax Rate", "HSN Code", "Pricing Mode", "Unit Label",
+            "Alt Unit Label", "Alt Unit Conversion Factor", "Is Available"
+        ])
         
     return _format_dataframe(df, format, "menu_items_export", "Menu Items Export")
 

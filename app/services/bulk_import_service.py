@@ -78,6 +78,40 @@ def _get_barcode(row: pd.Series, col: str = "barcode") -> str | None:
     return val_str if val_str else None
 
 
+def _get_image_url(row: pd.Series) -> str | None:
+    # Check known normalized column names (after lowercasing and replacing spaces with _)
+    for col in (
+        "product_photo_/_image_(optional)",
+        "product_photo_/_image",
+        "product_photo/image_(optional)",
+        "product_photo_(optional)",
+        "product_photo",
+        "image_url",
+        "image_link",
+        "photo_url",
+        "product_image",
+        "image",
+        "photo",
+    ):
+        val = _get_val(row, col)
+        if val is not None:
+            val_str = str(val).strip()
+            if val_str.lower() not in ("none", "nan", "null", ""):
+                return val_str[:1024]
+
+    # Fuzzy check: any column containing photo or image
+    for col in row.index:
+        col_str = str(col).lower()
+        if "photo" in col_str or "image" in col_str:
+            val = _get_val(row, col)
+            if val is not None:
+                val_str = str(val).strip()
+                if val_str.lower() not in ("none", "nan", "null", ""):
+                    return val_str[:1024]
+
+    return None
+
+
 def _get_hsn(row: pd.Series) -> str | None:
     val = _get_val(row, "hsn_code") or _get_val(row, "hsn")
     if val is None:
@@ -474,6 +508,7 @@ async def import_inventory(db: AsyncSession, outlet_id: uuid.UUID, file_bytes: b
                 if final_price is None or final_price < Decimal("0.00"):
                     final_price = Decimal("0.00")
                 
+                image_url = _get_image_url(row)
                 if menu_item:
                     menu_item.name = name
                     menu_item.category_id = category.id
@@ -487,6 +522,8 @@ async def import_inventory(db: AsyncSession, outlet_id: uuid.UUID, file_bytes: b
                         menu_item.alternate_units = alternate_units
                     if barcode:
                         menu_item.barcode = barcode
+                    if image_url:
+                        menu_item.image_url = image_url
                     if hsn_code:
                         menu_item.hsn_code = str(hsn_code).strip()
                 else:
@@ -497,6 +534,7 @@ async def import_inventory(db: AsyncSession, outlet_id: uuid.UUID, file_bytes: b
                         inventory_item_id=inv_item.id,
                         name=name,
                         barcode=barcode,
+                        image_url=image_url,
                         price=final_price,
                         mrp=mrp,
                         wholesale_price=wholesale_price,
@@ -593,6 +631,7 @@ async def import_menu_items(db: AsyncSession, outlet_id: uuid.UUID, file_bytes: 
                 price = price.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
                 
                 barcode = _get_barcode(row, "barcode")
+                image_url = _get_image_url(row)
                 description = _get_val(row, "description")
                 if description:
                     description = str(description).strip()
@@ -665,6 +704,8 @@ async def import_menu_items(db: AsyncSession, outlet_id: uuid.UUID, file_bytes: 
                     menu_item.name = name
                     if barcode:
                         menu_item.barcode = barcode
+                    if image_url:
+                        menu_item.image_url = image_url
                     menu_item.description = description
                     menu_item.price = price
                     menu_item.mrp = mrp
@@ -691,6 +732,7 @@ async def import_menu_items(db: AsyncSession, outlet_id: uuid.UUID, file_bytes: 
                         inventory_item_id=None,
                         name=name,
                         barcode=barcode,
+                        image_url=image_url,
                         description=description,
                         price=price,
                         mrp=mrp,

@@ -200,7 +200,7 @@ async def download_template(
 
     elif entity == "menu-items":
         cols = [
-            "Name", "Category", "Price", "Barcode", "Description", "MRP",
+            "Name", "Category", "Price", "Barcode", "Product Photo / Image (Optional)", "Description", "MRP",
             "Wholesale Price", "Evening Price", "Offer Price", "Offer Label",
             "Tax Category", "Tax Rate", "HSN Code", "Pricing Mode", "Unit Label",
             "Alt Unit Label", "Alt Unit Conversion Factor", "Is Available"

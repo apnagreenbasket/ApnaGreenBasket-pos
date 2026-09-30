@@ -4,6 +4,7 @@ data sanitization (numeric barcodes, HSN truncation, phone numbers, decimals).
 """
 
 import io
+from decimal import Decimal
 import pytest
 import pandas as pd
 from httpx import AsyncClient
@@ -182,3 +183,120 @@ async def test_bulk_customers_import_resilience(client: AsyncClient, db_session:
     assert cust is not None
     assert cust.name == "Ramesh Patel"
     assert cust.loyalty_points == 120
+
+
+@pytest.mark.asyncio
+async def test_bulk_menu_items_image_url_export_and_import(client: AsyncClient, db_session: AsyncSession):
+    """Verify that Product Photo / Image (Optional) is in template, exported correctly, and imported optionally."""
+    from app.models.menu_item import MenuItem
+
+    outlet = await create_test_outlet(db_session, slug="menu-img-test", name="Menu Img Mart")
+    admin = await create_test_user(db_session, outlet, email="admin@menuimg.com", role=RoleEnum.OUTLET_ADMIN)
+    headers = get_auth_headers(admin, outlet)
+
+    # 1. Download template & verify header
+    tpl_resp = await client.get("/api/admin/bulk/templates/menu-items", headers=headers)
+    assert tpl_resp.status_code == 200
+    tpl_text = tpl_resp.text
+    assert "Product Photo / Image (Optional)" in tpl_text
+
+    # 2. Import items with and without image URL
+    data = [
+        {
+            "Name": "Crispy Apple",
+            "Category": "Fresh Fruits",
+            "Price": 120.0,
+            "Barcode": "APP123",
+            "Product Photo / Image (Optional)": "https://img.cdn.com/apple.png",
+        },
+        {
+            "Name": "Sweet Banana",
+            "Category": "Fresh Fruits",
+            "Price": 60.0,
+            "Barcode": "BAN456",
+            "Product Photo / Image (Optional)": "",  # Empty / optional
+        },
+    ]
+    df = pd.DataFrame(data)
+    excel_buf = io.BytesIO()
+    df.to_excel(excel_buf, index=False, engine="openpyxl")
+    excel_buf.seek(0)
+
+    files = {
+        "file": ("menu_items.xlsx", excel_buf.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    }
+
+    import_resp = await client.post("/api/admin/bulk/menu-items/import", files=files, headers=headers)
+    assert import_resp.status_code == 200, f"Import failed: {import_resp.text}"
+    import_result = import_resp.json()
+    assert import_result["created"] == 2
+    assert import_result["skipped"] == 0
+
+    # Verify database
+    res = await db_session.execute(
+        select(MenuItem).where(MenuItem.outlet_id == outlet.id).order_by(MenuItem.name)
+    )
+    items = res.scalars().all()
+    assert len(items) == 2
+
+    apple = next(i for i in items if i.name == "Crispy Apple")
+    assert apple.image_url == "https://img.cdn.com/apple.png"
+
+    banana = next(i for i in items if i.name == "Sweet Banana")
+    assert banana.image_url is None
+
+    # 3. Export as CSV and check that Product Photo / Image (Optional) is present
+    export_resp = await client.get("/api/admin/bulk/menu-items/export?format=csv", headers=headers)
+    assert export_resp.status_code == 200
+    export_csv = export_resp.text
+    assert "Product Photo / Image (Optional)" in export_csv
+    assert "https://img.cdn.com/apple.png" in export_csv
+
+    # 4. Update banana with an image URL using synonym header 'Image URL'
+    update_data = [
+        {
+            "Name": "Sweet Banana",
+            "Category": "Fresh Fruits",
+            "Price": 65.0,
+            "Barcode": "BAN456",
+            "Image URL": "https://img.cdn.com/banana.png",
+        }
+    ]
+    df_update = pd.DataFrame(update_data)
+    csv_buf = io.BytesIO()
+    df_update.to_csv(csv_buf, index=False)
+    csv_buf.seek(0)
+
+    update_files = {
+        "file": ("update_banana.csv", csv_buf.getvalue(), "text/csv")
+    }
+
+    up_resp = await client.post("/api/admin/bulk/menu-items/import", files=update_files, headers=headers)
+    assert up_resp.status_code == 200
+    up_result = up_resp.json()
+    assert up_result["updated"] == 1
+
+    await db_session.refresh(banana)
+    assert banana.image_url == "https://img.cdn.com/banana.png"
+    assert banana.price == Decimal("65.00")
+
+    # 5. Import without the image column at all (should work seamlessly)
+    no_img_data = [
+        {
+            "Name": "Fresh Orange",
+            "Category": "Fresh Fruits",
+            "Price": 80.0,
+        }
+    ]
+    df_no_img = pd.DataFrame(no_img_data)
+    csv_buf2 = io.BytesIO()
+    df_no_img.to_csv(csv_buf2, index=False)
+    csv_buf2.seek(0)
+
+    no_img_files = {
+        "file": ("orange.csv", csv_buf2.getvalue(), "text/csv")
+    }
+    no_img_resp = await client.post("/api/admin/bulk/menu-items/import", files=no_img_files, headers=headers)
+    assert no_img_resp.status_code == 200
+    assert no_img_resp.json()["created"] == 1
+

@@ -346,7 +346,7 @@ export function PaymentModal({
   }, [effectiveGrandTotalForCollection]);
 
   const handleAutoTapExact = (targetAmount: number) => {
-    let rem = Math.floor(targetAmount);
+    let rem = Math.round(targetAmount);
     const newCounts: Record<number, number> = {
       500: 0, 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0, 1: 0
     };
@@ -361,6 +361,13 @@ export function PaymentModal({
     const totalTapped = Object.entries(newCounts).reduce((sum, [k, v]) => sum + Number(k) * v, 0);
     setCashTendered(totalTapped > 0 ? totalTapped.toString() : "");
   };
+
+  // Automatically select exact notes for Additional Amount Due when editing bill
+  useEffect(() => {
+    if (isOpen && paymentEditMode === "ADJUST" && editingCompletedBill && effectiveGrandTotalForCollection > 0) {
+      handleAutoTapExact(effectiveGrandTotalForCollection);
+    }
+  }, [isOpen, paymentEditMode, editingCompletedBill, effectiveGrandTotalForCollection]);
 
 
   const changeRequired = useMemo(() => {
@@ -1361,14 +1368,18 @@ export function PaymentModal({
                     </span>
                     <button
                       type="button"
-                      onClick={() => handleAutoTapExact(grandTotal)}
+                      onClick={() => handleAutoTapExact(effectiveGrandTotalForCollection)}
                       className="rounded-lg bg-[var(--bg-surface)] border border-[var(--border-strong)] px-2 py-0.5 text-[10px] font-mono font-bold text-[var(--text-primary)] hover:border-[var(--text-muted)] hover:text-[var(--text-primary)] transition whitespace-nowrap"
-                      title="Auto-fill exact note breakdown for Grand Total"
+                      title={
+                        paymentEditMode === "ADJUST" && editingCompletedBill
+                          ? "Auto-fill exact note breakdown for Additional Amount Due"
+                          : "Auto-fill exact note breakdown for Grand Total"
+                      }
                     >
-                      Exact ₹{grandTotal.toFixed(2)}
+                      Exact ₹{effectiveGrandTotalForCollection.toFixed(2)}
                     </button>
 
-                    {smallestSingleNoteForGrandTotal && (
+                    {smallestSingleNoteForGrandTotal && smallestSingleNoteForGrandTotal !== Math.round(effectiveGrandTotalForCollection) && (
                       <button
                         type="button"
                         onClick={() => handleAutoTapExact(smallestSingleNoteForGrandTotal)}

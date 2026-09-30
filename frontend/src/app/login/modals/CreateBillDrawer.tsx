@@ -935,13 +935,16 @@ export function CreateBillDrawer({
     if (val.trim().length >= 2) {
       try {
         const data = await apiRequest<any>(`/api/admin/customers?search=${encodeURIComponent(val.trim())}&page=1&page_size=50`);
-        setCustomerSuggestions(data.items || data);
-        setShowSuggestions(true);
+        const items = data.items || data || [];
+        setCustomerSuggestions(items);
+        setShowSuggestions(items.length > 0);
+        setHighlightedSuggestionIndex(items.length > 0 ? 0 : -1);
       } catch {
         /* ignore */
       }
     } else {
       setShowSuggestions(false);
+      setHighlightedSuggestionIndex(-1);
     }
   };
 
@@ -1671,21 +1674,27 @@ export function CreateBillDrawer({
                     value={customerPhone}
                     onChange={(e) => handlePhoneChange(e.target.value)}
                     onFocus={() => {
-                      if (customerPhone.trim().length >= 2) setShowSuggestions(true);
+                      if (customerPhone.trim().length >= 2 && customerSuggestions.length > 0) {
+                        setShowSuggestions(true);
+                        setHighlightedSuggestionIndex(0);
+                      }
                     }}
                     onKeyDown={(e) => {
                       if (!showSuggestions || customerSuggestions.length === 0) return;
                       
                       if (e.key === "ArrowDown") {
                         e.preventDefault();
-                        setHighlightedSuggestionIndex(prev => Math.min(prev + 1, customerSuggestions.length - 1));
+                        setHighlightedSuggestionIndex(prev => (prev < customerSuggestions.length - 1 ? prev + 1 : 0));
                       } else if (e.key === "ArrowUp") {
                         e.preventDefault();
-                        setHighlightedSuggestionIndex(prev => Math.max(prev - 1, -1));
+                        setHighlightedSuggestionIndex(prev => (prev > 0 ? prev - 1 : customerSuggestions.length - 1));
                       } else if (e.key === "Enter") {
                         e.preventDefault();
-                        if (highlightedSuggestionIndex >= 0 && highlightedSuggestionIndex < customerSuggestions.length) {
-                          const s = customerSuggestions[highlightedSuggestionIndex];
+                        const targetIdx = highlightedSuggestionIndex >= 0 && highlightedSuggestionIndex < customerSuggestions.length
+                          ? highlightedSuggestionIndex
+                          : 0;
+                        const s = customerSuggestions[targetIdx];
+                        if (s) {
                           setCustomerPhone(s.phone);
                           setCustomerName(s.name);
                           if (s.gstin && setCustomerGstin) setCustomerGstin(s.gstin);
@@ -1697,6 +1706,9 @@ export function CreateBillDrawer({
                           if (isWalkIn) setIsWalkIn?.(false);
                           void fetchCustomerAnalytics(s.phone);
                         }
+                      } else if (e.key === "Escape") {
+                        setShowSuggestions(false);
+                        setHighlightedSuggestionIndex(-1);
                       }
                     }}
                     className={`w-full rounded-xl border bg-[var(--bg-surface-elevated)] px-2.5 py-1 text-base font-mono text-[var(--text-primary)] focus:outline-none transition-all ${
@@ -1720,30 +1732,44 @@ export function CreateBillDrawer({
 
                   {/* Customer Auto-suggest dropdown */}
                   {showSuggestions && customerSuggestions.length > 0 && (
-                    <div className="absolute left-0 right-0 top-full mt-1 z-50 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] p-1 shadow-xl max-h-40 overflow-y-auto space-y-1">
-                      {customerSuggestions.map((s, i) => (
-                        <button
-                          key={i}
-                          type="button"
-                          onClick={() => {
-                            setCustomerPhone(s.phone);
-                            setCustomerName(s.name);
-                            if (s.gstin && setCustomerGstin) setCustomerGstin(s.gstin);
-                            if (s.legal_name && setCustomerLegalName) setCustomerLegalName(s.legal_name);
-                            if (s.state_code && setPlaceOfSupply) setPlaceOfSupply(s.state_code);
-                            setShowSuggestions(false);
-                            setHighlightedSuggestionIndex(-1);
-                            void fetchCustomerAnalytics(s.phone);
-                          }}
-                          onMouseEnter={() => setHighlightedSuggestionIndex(i)}
-                          className={`w-full text-left rounded-lg p-3 text-lg transition cursor-pointer flex items-center justify-between ${
-                            highlightedSuggestionIndex === i ? "bg-[var(--accent-brand)]/20 border border-[var(--accent-brand)]" : "hover:bg-[var(--bg-surface)]"
-                          }`}
-                        >
-                          <span className="font-bold text-[var(--text-primary)]">{s.name}</span>
-                          <span className="font-mono text-base text-[var(--text-muted)]">{s.phone}</span>
-                        </button>
-                      ))}
+                    <div className="absolute left-0 right-0 top-full mt-1 z-50 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] p-1 shadow-xl max-h-52 overflow-y-auto space-y-1">
+                      {customerSuggestions.map((s, i) => {
+                        const isHighlighted = highlightedSuggestionIndex === i || (highlightedSuggestionIndex === -1 && i === 0);
+                        return (
+                          <button
+                            key={i}
+                            type="button"
+                            onClick={() => {
+                              setCustomerPhone(s.phone);
+                              setCustomerName(s.name);
+                              if (s.gstin && setCustomerGstin) setCustomerGstin(s.gstin);
+                              if (s.legal_name && setCustomerLegalName) setCustomerLegalName(s.legal_name);
+                              if (s.state_code && setPlaceOfSupply) setPlaceOfSupply(s.state_code);
+                              setShowSuggestions(false);
+                              setHighlightedSuggestionIndex(-1);
+                              setPhoneHasError(false);
+                              if (isWalkIn) setIsWalkIn?.(false);
+                              void fetchCustomerAnalytics(s.phone);
+                            }}
+                            onMouseEnter={() => setHighlightedSuggestionIndex(i)}
+                            className={`w-full text-left rounded-lg p-2.5 text-base transition cursor-pointer flex items-center justify-between border ${
+                              isHighlighted
+                                ? "bg-sky-500/20 border-sky-400 text-sky-100 ring-1 ring-sky-500/30"
+                                : "border-transparent hover:bg-[var(--bg-surface)] text-[var(--text-primary)]"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold">{s.name}</span>
+                              {isHighlighted && (
+                                <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-sky-500/30 text-sky-300 border border-sky-400/40">
+                                  ↵ Enter
+                                </span>
+                              )}
+                            </div>
+                            <span className="font-mono text-sm text-[var(--text-muted)]">{s.phone}</span>
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                 </div>

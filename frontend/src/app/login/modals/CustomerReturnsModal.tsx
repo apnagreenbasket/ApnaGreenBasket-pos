@@ -757,9 +757,17 @@ export function CustomerReturnsModal({
     return highlighted;
   }, [isNetRefund, remainingNeededInward, inwardDenomTotal]);
 
+  const effectiveTargetOutward = useMemo(() => {
+    if (isNetRefund) {
+      return targetRefundAmt;
+    }
+    return remainingNeededOutward;
+  }, [isNetRefund, targetRefundAmt, remainingNeededOutward]);
+
   const smallestSingleNoteForOutward = useMemo(() => {
-    return [...DENOMINATIONS].reverse().find((d) => d >= targetRefundAmt) || null;
-  }, [targetRefundAmt]);
+    if (effectiveTargetOutward <= 0) return null;
+    return [...DENOMINATIONS].reverse().find((d) => d >= effectiveTargetOutward) || null;
+  }, [effectiveTargetOutward]);
 
   const smallestSingleNoteForInward = useMemo(() => {
     const target = !isNetRefund ? targetCollectionAmt : remainingNeededInward;
@@ -861,9 +869,9 @@ export function CustomerReturnsModal({
     rawRefundOwed,
   ]);
 
-  const handleAutoTapOutwardExact = (targetAmount: number) => {
-    scrollToCashDeck("OUTWARD");
-    let rem = Math.floor(targetAmount);
+  const handleAutoTapOutwardExact = (targetAmount: number, shouldScroll = true) => {
+    if (shouldScroll) scrollToCashDeck("OUTWARD");
+    let rem = Math.round(targetAmount);
     const newCounts: Record<number, number> = {
       500: 0, 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0, 1: 0
     };
@@ -877,9 +885,9 @@ export function CustomerReturnsModal({
     setRefundCashDenoms(newCounts);
   };
 
-  const handleAutoTapInwardExact = (targetAmount: number) => {
-    scrollToCashDeck("INWARD");
-    let rem = Math.floor(targetAmount);
+  const handleAutoTapInwardExact = (targetAmount: number, shouldScroll = true) => {
+    if (shouldScroll) scrollToCashDeck("INWARD");
+    let rem = Math.round(targetAmount);
     const newCounts: Record<number, number> = {
       500: 0, 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0, 1: 0
     };
@@ -892,6 +900,20 @@ export function CustomerReturnsModal({
     }
     setInwardCashDenoms(newCounts);
   };
+
+  // Automatically select exact notes for Outward Refund or Change Given Back
+  useEffect(() => {
+    if (refundMethod === "CASH") {
+      if (isNetRefund && targetRefundAmt > 0 && refundDenomTotal === 0) {
+        handleAutoTapOutwardExact(targetRefundAmt, false);
+      } else if (!isNetRefund && targetCollectionAmt > 0 && inwardDenomTotal > targetCollectionAmt) {
+        const changeDue = inwardDenomTotal - targetCollectionAmt;
+        if (changeDue > 0 && refundDenomTotal !== changeDue) {
+          handleAutoTapOutwardExact(changeDue, false);
+        }
+      }
+    }
+  }, [isNetRefund, targetRefundAmt, targetCollectionAmt, inwardDenomTotal, refundMethod, refundDenomTotal]);
 
   const handleResetOutwardNotes = () => {
     setError(null);
@@ -936,13 +958,17 @@ export function CustomerReturnsModal({
         const data = await apiRequest<any>(
           `/api/admin/customers?search=${encodeURIComponent(clean.trim())}&page=1&page_size=50`
         );
-        setCustomerSuggestions(data?.items || data || []);
-        setShowSuggestions(true);
+        const items = data?.items || data || [];
+        setCustomerSuggestions(items);
+        setShowSuggestions(items.length > 0);
+        setHighlightedSuggestionIndex(items.length > 0 ? 0 : -1);
       } catch {
         setCustomerSuggestions([]);
+        setHighlightedSuggestionIndex(-1);
       }
     } else {
       setShowSuggestions(false);
+      setHighlightedSuggestionIndex(-1);
     }
   };
 
@@ -3924,11 +3950,11 @@ export function CustomerReturnsModal({
                               </button>
                             )}
                           </div>
-                        ) : targetRefundAmt > 0 && refundDenomTotal > 0 && (refundDenomTotal - inwardDenomTotal === targetRefundAmt) ? (
+                        ) : (isNetRefund ? (targetRefundAmt > 0 && refundDenomTotal > 0 && (refundDenomTotal - inwardDenomTotal === targetRefundAmt)) : (effectiveTargetOutward > 0 && refundDenomTotal === effectiveTargetOutward)) ? (
                           <div className="flex items-center justify-between bg-emerald-500/15 rounded-xl py-2 px-3.5 border border-emerald-500/40 text-emerald-300 animate-in fade-in duration-200">
                             <span className="font-mono text-sm font-black flex items-center gap-2">
                               <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-                              <span>Net Dispense Satisfied: <span className="text-xl font-black text-emerald-200">₹{targetRefundAmt.toFixed(2)}</span></span>
+                              <span>Net Dispense Satisfied: <span className="text-xl font-black text-emerald-200">₹{effectiveTargetOutward.toFixed(2)}</span></span>
                             </span>
                             <span className="text-xs font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 px-2.5 py-1 rounded-md border border-emerald-500/30">
                               Exact Change ✓
@@ -3943,11 +3969,11 @@ export function CustomerReturnsModal({
                           </span>
                           <button
                             type="button"
-                            onClick={() => handleAutoTapOutwardExact(targetRefundAmt)}
+                            onClick={() => handleAutoTapOutwardExact(effectiveTargetOutward)}
                             className="rounded-xl bg-[var(--bg-surface)] border border-[var(--border-strong)] px-2.5 py-1 text-xs font-mono font-black text-sky-400 hover:border-sky-400 hover:bg-sky-500/10 transition whitespace-nowrap cursor-pointer"
                             title="Auto-fill exact note breakdown"
                           >
-                            Exact ₹{targetRefundAmt.toFixed(2)}
+                            Exact ₹{effectiveTargetOutward.toFixed(2)}
                           </button>
                           {smallestSingleNoteForOutward && (
                             <button
@@ -4800,14 +4826,17 @@ export function CustomerReturnsModal({
                     e.stopPropagation();
                     if (e.key === "ArrowDown" && showSuggestions && customerSuggestions.length > 0) {
                       e.preventDefault();
-                      setHighlightedSuggestionIndex((prev) => Math.min(prev + 1, customerSuggestions.length - 1));
+                      setHighlightedSuggestionIndex((prev) => (prev < customerSuggestions.length - 1 ? prev + 1 : 0));
                     } else if (e.key === "ArrowUp" && showSuggestions && customerSuggestions.length > 0) {
                       e.preventDefault();
-                      setHighlightedSuggestionIndex((prev) => Math.max(prev - 1, -1));
+                      setHighlightedSuggestionIndex((prev) => (prev > 0 ? prev - 1 : customerSuggestions.length - 1));
                     } else if (e.key === "Enter") {
                       e.preventDefault();
-                      if (showSuggestions && highlightedSuggestionIndex >= 0 && highlightedSuggestionIndex < customerSuggestions.length) {
-                        handleSelectCustomerSuggestion(customerSuggestions[highlightedSuggestionIndex]);
+                      if (showSuggestions && customerSuggestions.length > 0) {
+                        const targetIdx = highlightedSuggestionIndex >= 0 && highlightedSuggestionIndex < customerSuggestions.length
+                          ? highlightedSuggestionIndex
+                          : 0;
+                        handleSelectCustomerSuggestion(customerSuggestions[targetIdx]);
                       } else {
                         handleSaveAndLinkCustomer();
                       }
@@ -4832,25 +4861,34 @@ export function CustomerReturnsModal({
                 {/* Suggestions dropdown */}
                 {showSuggestions && customerSuggestions.length > 0 && (
                   <div className="absolute left-0 top-full mt-1.5 z-50 w-full rounded-2xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] p-2 shadow-2xl max-h-56 overflow-y-auto space-y-1.5">
-                    {customerSuggestions.map((s, i) => (
-                      <button
-                        key={i}
-                        type="button"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => handleSelectCustomerSuggestion(s)}
-                        onMouseEnter={() => setHighlightedSuggestionIndex(i)}
-                        className={`w-full text-left rounded-xl px-3 py-2 text-sm transition cursor-pointer flex items-center justify-between gap-3 ${
-                          highlightedSuggestionIndex === i
-                            ? "bg-sky-500/20 border border-sky-500/40 text-white"
-                            : "hover:bg-[var(--bg-surface)] text-[var(--text-primary)] border border-transparent"
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="h-7 w-7 rounded-full bg-sky-500/15 text-sky-400 flex items-center justify-center font-bold text-xs shrink-0">
-                            {(s.name || "C").charAt(0).toUpperCase()}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="font-bold truncate text-[var(--text-primary)] text-sm">{s.name || "Customer"}</p>
+                    {customerSuggestions.map((s, i) => {
+                      const isHighlighted = highlightedSuggestionIndex === i || (highlightedSuggestionIndex === -1 && i === 0);
+                      return (
+                        <button
+                          key={i}
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => handleSelectCustomerSuggestion(s)}
+                          onMouseEnter={() => setHighlightedSuggestionIndex(i)}
+                          className={`w-full text-left rounded-xl px-3 py-2 text-sm transition cursor-pointer flex items-center justify-between gap-3 ${
+                            isHighlighted
+                              ? "bg-sky-500/20 border border-sky-500/50 text-white ring-1 ring-sky-500/30"
+                              : "hover:bg-[var(--bg-surface)] text-[var(--text-primary)] border border-transparent"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="h-7 w-7 rounded-full bg-sky-500/15 text-sky-400 flex items-center justify-center font-bold text-xs shrink-0">
+                              {(s.name || "C").charAt(0).toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <p className="font-bold truncate text-[var(--text-primary)] text-sm">{s.name || "Customer"}</p>
+                                {isHighlighted && (
+                                  <span className="text-[10px] font-mono font-semibold px-1.5 py-0.2 rounded bg-sky-500/30 text-sky-300 border border-sky-400/40">
+                                    ↵ Enter
+                                  </span>
+                                )}
+                              </div>
                             <p className="font-mono text-xs text-[var(--text-muted)]">{s.phone}</p>
                           </div>
                         </div>
@@ -4864,7 +4902,8 @@ export function CustomerReturnsModal({
                           </span>
                         )}
                       </button>
-                    ))}
+                    );
+                  })}
                   </div>
                 )}
               </div>
