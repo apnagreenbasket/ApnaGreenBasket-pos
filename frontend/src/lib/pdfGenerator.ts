@@ -5292,6 +5292,36 @@ export function generateShiftHandoverReceiptPDF(
 
   const renderReceipt = (d: any) => {
     let y = 6;
+
+    const printRow = (
+      leftText: string,
+      rightText: string,
+      options?: { fontSize?: number; isBold?: boolean; spacing?: number }
+    ) => {
+      const fontSize = options?.fontSize ?? 7.5;
+      const isBold = options?.isBold ?? false;
+      const spacing = options?.spacing ?? 3.5;
+
+      d.setFont("helvetica", isBold ? "bold" : "normal");
+      d.setFontSize(fontSize);
+      d.setTextColor(0, 0, 0);
+
+      const leftW = d.getTextWidth(leftText);
+      const rightW = d.getTextWidth(rightText);
+
+      // If combined width exceeds printable width minus buffer, wrap to two lines cleanly
+      if (leftW + rightW > contentWidth - 2) {
+        d.text(leftText, margin, y);
+        y += spacing;
+        d.text(rightText, pageWidth - margin, y, { align: "right" });
+        y += spacing;
+      } else {
+        d.text(leftText, margin, y);
+        d.text(rightText, pageWidth - margin, y, { align: "right" });
+        y += spacing;
+      }
+    };
+
     const storeName = restaurant?.name || "ApnaGreen Basket";
     d.setFont("helvetica", "bold");
     d.setFontSize(11);
@@ -5331,17 +5361,10 @@ export function generateShiftHandoverReceiptPDF(
     y += 4;
 
     // Staff & Timing
-    d.setFont("helvetica", "bold");
-    d.setFontSize(7.5);
-    d.text("Cashier / Staff", margin, y);
-    d.text(shift.staff_name || "Team Member", pageWidth - margin, y, { align: "right" });
-    y += 3.5;
+    printRow("Cashier / Staff", shift.staff_name || "Team Member", { fontSize: 7.5, isBold: true, spacing: 3.5 });
 
     if (shift.staff_role) {
-      d.setFont("helvetica", "normal");
-      d.text("Role", margin, y);
-      d.text(shift.staff_role.replace(/_/g, " "), pageWidth - margin, y, { align: "right" });
-      y += 3.5;
+      printRow("Role", shift.staff_role.replace(/_/g, " "), { fontSize: 7, spacing: 3.5 });
     }
 
     const formatDt = (iso?: string | null) => {
@@ -5360,19 +5383,11 @@ export function generateShiftHandoverReceiptPDF(
       }
     };
 
-    d.setFont("helvetica", "normal");
-    d.text("Shift Punch-In", margin, y);
-    d.text(formatDt(shift.punch_in_at), pageWidth - margin, y, { align: "right" });
-    y += 3.5;
-
-    d.text("Shift Punch-Out", margin, y);
-    d.text(shift.punch_out_at ? formatDt(shift.punch_out_at) : "Active (Live)", pageWidth - margin, y, { align: "right" });
-    y += 3.5;
+    printRow("Shift Punch-In", formatDt(shift.punch_in_at), { fontSize: 7, spacing: 3.5 });
+    printRow("Shift Punch-Out", shift.punch_out_at ? formatDt(shift.punch_out_at) : "Active (Live)", { fontSize: 7, spacing: 3.5 });
 
     if (shift.duration_formatted) {
-      d.text("Shift Duration", margin, y);
-      d.text(shift.duration_formatted, pageWidth - margin, y, { align: "right" });
-      y += 3.5;
+      printRow("Shift Duration", shift.duration_formatted, { fontSize: 7, spacing: 3.5 });
     }
 
     drawDashedLine(d, y);
@@ -5384,26 +5399,12 @@ export function generateShiftHandoverReceiptPDF(
     d.text("SHIFT SALES SUMMARY", margin, y);
     y += 4;
 
-    d.setFont("helvetica", "normal");
-    d.setFontSize(7.5);
-    d.text("Invoices / Bills Cut", margin, y);
-    d.text(`${shift.total_bills_count || 0} bills`, pageWidth - margin, y, { align: "right" });
-    y += 3.5;
-
-    d.setFont("helvetica", "bold");
-    d.text("Total Gross Sales", margin, y);
-    d.text(`INR ${(Number(shift.total_sales_amount) || 0).toFixed(2)}`, pageWidth - margin, y, { align: "right" });
-    y += 3.8;
-
-    d.setFont("helvetica", "normal");
-    d.text("UPI / Online Sales", margin, y);
-    d.text(`INR ${(Number(shift.upi_collected) || 0).toFixed(2)}`, pageWidth - margin, y, { align: "right" });
-    y += 3.5;
+    printRow("Invoices / Bills Cut", `${shift.total_bills_count || 0} bills`, { fontSize: 7.5, spacing: 3.5 });
+    printRow("Total Gross Sales", `INR ${(Number(shift.total_sales_amount) || 0).toFixed(2)}`, { fontSize: 7.5, isBold: true, spacing: 3.8 });
+    printRow("UPI / Online Sales", `INR ${(Number(shift.upi_collected) || 0).toFixed(2)}`, { fontSize: 7, spacing: 3.5 });
 
     if (Number(shift.card_collected) > 0) {
-      d.text("Card / Other Sales", margin, y);
-      d.text(`INR ${(Number(shift.card_collected) || 0).toFixed(2)}`, pageWidth - margin, y, { align: "right" });
-      y += 3.5;
+      printRow("Card / Other Sales", `INR ${(Number(shift.card_collected) || 0).toFixed(2)}`, { fontSize: 7, spacing: 3.5 });
     }
 
     drawDashedLine(d, y);
@@ -5415,61 +5416,55 @@ export function generateShiftHandoverReceiptPDF(
     d.text("CASH DRAWER RECONCILIATION", margin, y);
     y += 4;
 
-    d.setFont("helvetica", "normal");
-    d.setFontSize(7.5);
-    d.text("Starting Cash in Drawer", margin, y);
-    d.text(`+INR ${(Number(shift.opening_cash) || 0).toFixed(2)}`, pageWidth - margin, y, { align: "right" });
-    y += 3.5;
-
-    d.text("(+) Cash Collected from Sales", margin, y);
-    d.text(`+INR ${(Number(shift.cash_collected) || 0).toFixed(2)}`, pageWidth - margin, y, { align: "right" });
-    y += 3.5;
+    printRow("Starting Cash in Drawer", `+INR ${(Number(shift.opening_cash) || 0).toFixed(2)}`, { fontSize: 7.5, spacing: 3.5 });
+    printRow("(+) Cash Collected from Sales", `+INR ${(Number(shift.cash_collected) || 0).toFixed(2)}`, { fontSize: 7.5, spacing: 3.5 });
 
     if (Number(shift.returns_refund_cash) > 0) {
-      d.text("(-) Cash Returns / Refunds", margin, y);
-      d.text(`-INR ${(Number(shift.returns_refund_cash) || 0).toFixed(2)}`, pageWidth - margin, y, { align: "right" });
-      y += 3.5;
+      printRow("(-) Cash Returns / Refunds", `-INR ${(Number(shift.returns_refund_cash) || 0).toFixed(2)}`, { fontSize: 7.5, spacing: 3.5 });
     }
 
     drawSolidLine(d, y);
-    y += 4.5;
+    y += 4;
 
-    d.setFont("helvetica", "bold");
-    d.setFontSize(8.5);
-    d.text("EXPECTED DRAWER CASH", margin, y);
-    d.text(`INR ${(Number(shift.expected_cash_in_drawer) || 0).toFixed(2)}`, pageWidth - margin, y, { align: "right" });
-    y += 4.5;
-
-    d.text("ACTUAL CASH HANDED OVER", margin, y);
-    d.text(`INR ${(Number(shift.actual_cash_handed_over) || 0).toFixed(2)}`, pageWidth - margin, y, { align: "right" });
-    y += 4.5;
+    printRow("EXPECTED DRAWER CASH", `INR ${(Number(shift.expected_cash_in_drawer) || 0).toFixed(2)}`, { fontSize: 8, isBold: true, spacing: 4 });
+    printRow("ACTUAL CASH HANDED OVER", `INR ${(Number(shift.actual_cash_handed_over) || 0).toFixed(2)}`, { fontSize: 8, isBold: true, spacing: 4 });
 
     const diff = Number(shift.cash_difference) || 0;
-    d.setFontSize(8);
-    d.text("CASH TALLY / DIFFERENCE", margin, y);
     const diffSign = diff > 0 ? "+" : "";
-    const diffLabel = diff === 0 ? "INR 0.00 (EXACT MATCH)" : `INR ${diffSign}${diff.toFixed(2)} (${diff > 0 ? "EXCESS" : "SHORTAGE"})`;
-    d.text(diffLabel, pageWidth - margin, y, { align: "right" });
-    y += 5;
+    printRow("CASH DIFFERENCE", `INR ${diffSign}${diff.toFixed(2)}`, { fontSize: 8, isBold: true, spacing: 4 });
+
+    const isExact = Math.abs(diff) < 0.01;
+    const diffStatus = isExact
+      ? "EXACT MATCH (BALANCED)"
+      : diff > 0
+      ? `EXCESS (+INR ${diff.toFixed(2)})`
+      : `SHORTAGE (-INR ${Math.abs(diff).toFixed(2)})`;
+    printRow("TALLY STATUS", diffStatus, { fontSize: 7.5, isBold: true, spacing: 4.5 });
 
     if (shift.notes) {
       drawDashedLine(d, y);
       y += 3.5;
       d.setFont("helvetica", "normal");
       d.setFontSize(7);
-      d.text(`Notes: ${shift.notes}`, margin, y, { maxWidth: contentWidth });
-      y += 5;
+      const noteLines = d.splitTextToSize(`Notes: ${shift.notes}`, contentWidth);
+      d.text(noteLines, margin, y);
+      y += noteLines.length * 3.5 + 2;
     }
 
     drawSolidLine(d, y);
     y += 9;
 
     // Signatures
+    const sigLineWidth = 26;
+    d.setDrawColor(80, 80, 80);
+    d.setLineWidth(0.3);
+    d.setLineDashPattern([], 0);
+    d.line(margin, y, margin + sigLineWidth, y);
+    d.line(pageWidth - margin - sigLineWidth, y, pageWidth - margin, y);
+    y += 3.5;
     d.setFont("helvetica", "normal");
     d.setFontSize(7);
-    d.text("_______________________", margin, y);
-    d.text("_______________________", pageWidth - margin, y, { align: "right" });
-    y += 3.5;
+    d.setTextColor(0, 0, 0);
     d.text("Cashier Signature", margin, y);
     d.text("Owner/Receiver Signature", pageWidth - margin, y, { align: "right" });
     y += 5;

@@ -7,7 +7,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Clock, LogOut, Play, ShieldAlert, Sparkles, UserCheck } from "lucide-react";
+import { Clock, Lock, LogOut, Play, ShieldAlert, Sparkles, UserCheck } from "lucide-react";
 import type { StaffMember } from "@/types";
 
 type PunchInModalProps = {
@@ -33,14 +33,8 @@ export function PunchInModal({
 }: PunchInModalProps) {
   const [currentTime, setCurrentTime] = useState<string>("");
   const [currentDate, setCurrentDate] = useState<string>("");
-  const [openingCash, setOpeningCash] = useState<string>("");
 
-  useEffect(() => {
-    if (isOpen) {
-      const balNum = Number(currentDrawerBalance || 0);
-      setOpeningCash(balNum > 0 ? balNum.toFixed(2) : "0");
-    }
-  }, [isOpen, currentDrawerBalance]);
+  const startingDrawerFloat = Number(currentDrawerBalance || 0);
 
   useEffect(() => {
     const updateTime = () => {
@@ -119,32 +113,35 @@ export function PunchInModal({
             </div>
           </div>
 
-          {/* Starting Cash in Drawer Input */}
-          <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-4 space-y-2">
+          {/* Starting Cash in Drawer (Non-Editable / Locked to Live Drawer Float) */}
+          <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-4 space-y-2.5">
             <div className="flex items-center justify-between text-xs">
-              <label htmlFor="opening-cash-input" className="font-bold text-[var(--text-primary)] flex items-center gap-1.5">
+              <span className="font-bold text-[var(--text-primary)] flex items-center gap-1.5">
                 <span>💵</span> Starting Cash in Drawer
-              </label>
-              <span className="text-[11px] font-mono text-[var(--text-muted)]">
-                Live Drawer: ₹{Number(currentDrawerBalance || 0).toFixed(2)}
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400 font-mono">
+                <Lock className="h-3 w-3" />
+                Locked • Auto Float
               </span>
             </div>
-            <div className="relative">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-[var(--text-muted)]">₹</span>
-              <input
-                id="opening-cash-input"
-                type="number"
-                step="0.01"
-                min="0"
-                value={openingCash}
-                onChange={(e) => setOpeningCash(e.target.value)}
-                placeholder="0.00"
-                disabled={isPunchingIn}
-                className="w-full pl-8 pr-3.5 py-2.5 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-base)] text-sm font-mono font-bold text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none"
-              />
+
+            <div className="flex items-center justify-between rounded-xl border border-[var(--border-strong)] bg-[var(--bg-base)] px-4 py-3 select-none">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-sm font-bold text-[var(--text-muted)]">₹</span>
+                <span className="font-mono text-2xl font-black text-[var(--text-primary)] tracking-wide">
+                  {startingDrawerFloat.toFixed(2)}
+                </span>
+              </div>
+              <div className="text-right">
+                <span className="block text-[11px] font-mono font-semibold text-emerald-600 dark:text-emerald-400">
+                  Live Drawer
+                </span>
+                <span className="text-[10px] text-[var(--text-muted)]">Opening Balance</span>
+              </div>
             </div>
-            <p className="text-[11px] text-[var(--text-muted)]">
-              Opening float / change in cash drawer when you sit. Shift collection starts from this amount.
+
+            <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
+              Starting cash is auto-locked to the counter's live drawer float. Cashier cannot edit opening float; physical cash count will be entered at punch-out.
             </p>
           </div>
 
@@ -156,7 +153,7 @@ export function PunchInModal({
           {/* Primary Action Button */}
           <button
             type="button"
-            onClick={() => onPunchIn(parseFloat(openingCash) || 0)}
+            onClick={() => onPunchIn(startingDrawerFloat)}
             disabled={isPunchingIn}
             className="w-full flex items-center justify-center gap-2.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 py-3.5 px-4 text-sm font-bold text-white shadow-lg hover:from-emerald-700 hover:to-teal-700 transition active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
           >

@@ -889,10 +889,10 @@ export function StaffTab({
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
-                <th className="p-3.5">Timestamp</th>
-                <th className="p-3.5">Staff Member</th>
-                <th className="p-3.5">Action Type</th>
-                <th className="p-3.5">Reference</th>
+                <th className="p-3.5 whitespace-nowrap">Timestamp</th>
+                <th className="p-3.5 whitespace-nowrap">Staff Member</th>
+                <th className="p-3.5 whitespace-nowrap">Action Type</th>
+                <th className="p-3.5 whitespace-nowrap">Reference</th>
                 <th className="p-3.5">Details</th>
               </tr>
             </thead>
@@ -904,47 +904,157 @@ export function StaffTab({
                   </td>
                 </tr>
               ) : (
-                staffAuditLogs.map((log) => (
-                  <tr key={log.id} className="hover:bg-[var(--bg-surface-elevated)]/50 transition">
-                    <td className="p-3.5 text-[var(--text-secondary)] font-mono text-[11px]">
-                      {parseUTCDate(log.created_at).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
-                    </td>
-                    <td className="p-3.5 font-bold text-[var(--text-primary)]">{log.staff_name || "System / Admin"}</td>
-                    <td className="p-3.5">
-                      {log.action_type === "punch_in" ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase">
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                          PUNCH IN
-                        </span>
-                      ) : log.action_type === "punch_out" ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase">
-                          <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                          PUNCH OUT
-                        </span>
-                      ) : (
-                        <span className="inline-block rounded-full bg-[var(--accent-brand)]/10 px-2.5 py-0.5 text-[10px] font-bold text-[var(--accent-brand)] uppercase">
-                          {log.action_type.replace(/_/g, " ")}
-                        </span>
-                      )}
-                    </td>
-                    <td className="p-3.5 font-mono text-[11px] text-[var(--text-muted)]">
-                      {log.reference_type ? `${log.reference_type} #${log.reference_id?.slice(0, 8)}` : "—"}
-                    </td>
-                    <td className="p-3.5 text-[var(--text-secondary)] font-medium">
-                      {log.action_type === "punch_out" ? (
-                        <span className="font-semibold text-amber-600 dark:text-amber-400">
-                          {log.details || "—"}
-                        </span>
-                      ) : log.action_type === "punch_in" ? (
-                        <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                          {log.details || "—"}
-                        </span>
-                      ) : (
-                        log.details || "—"
-                      )}
-                    </td>
-                  </tr>
-                ))
+                staffAuditLogs.map((log) => {
+                  const renderAuditDetails = (details?: string | null, actionType?: string) => {
+                    if (!details) return <span className="text-[var(--text-muted)]">—</span>;
+
+                    // Case 1: Punch Out audit log details
+                    if (actionType === "punch_out") {
+                      const parts = details
+                        .split(/\.\s+/)
+                        .map((p) => p.trim().replace(/\.$/, ""))
+                        .filter(Boolean);
+
+                      if (parts.length >= 2) {
+                        const title = parts[0];
+                        const timePart = parts.find((p) => p.toLowerCase().includes("elapsed shift time"));
+                        const salesPart = parts.find((p) => p.toLowerCase().includes("sales:"));
+                        const handoverPart = parts.find((p) => p.toLowerCase().includes("handover cash:"));
+                        const otherParts = parts.filter(
+                          (p, idx) => idx !== 0 && p !== timePart && p !== salesPart && p !== handoverPart
+                        );
+
+                        return (
+                          <div className="flex flex-col gap-1 py-1 max-w-xl">
+                            <div className="font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                              <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
+                              <span>{title}</span>
+                            </div>
+
+                            {(timePart || salesPart) && (
+                              <div className="text-[11px] text-[var(--text-muted)] flex items-center gap-2 flex-wrap pl-3">
+                                {timePart && (
+                                  <span>
+                                    ⏱ <strong className="text-[var(--text-primary)] font-mono">{timePart.replace(/^elapsed shift time:\s*/i, "")}</strong>
+                                  </span>
+                                )}
+                                {timePart && salesPart && <span>•</span>}
+                                {salesPart && (
+                                  <span>
+                                    Sales: <strong className="text-emerald-600 dark:text-emerald-400 font-mono">{salesPart.replace(/^sales:\s*/i, "")}</strong>
+                                  </span>
+                                )}
+                              </div>
+                            )}
+
+                            {handoverPart && (
+                              <div className="text-[11px] text-[var(--text-muted)] flex items-center gap-1.5 flex-wrap pl-3">
+                                <span>💵 {handoverPart}</span>
+                              </div>
+                            )}
+
+                            {otherParts.map((part, i) => (
+                              <div key={i} className="text-[11px] text-[var(--text-secondary)] pl-3">
+                                {part}
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="font-semibold text-amber-600 dark:text-amber-400 py-0.5 max-w-xl break-words">
+                          {details}
+                        </div>
+                      );
+                    }
+
+                    // Case 2: Punch In audit log details
+                    if (actionType === "punch_in") {
+                      const match = details.match(
+                        /^(Staff\s+['"][^'"]+['"]\s+punched in for shift)\s+with\s+(starting drawer cash\s+.*)$/i
+                      );
+                      if (match) {
+                        return (
+                          <div className="flex flex-col gap-1 py-1 max-w-xl">
+                            <div className="font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
+                              <span>{match[1]}</span>
+                            </div>
+                            <div className="text-[11px] text-[var(--text-muted)] pl-3 flex items-center gap-1">
+                              <span>💵 Starting drawer cash:</span>
+                              <strong className="text-emerald-600 dark:text-emerald-400 font-mono">
+                                {match[2].replace(/^starting drawer cash\s*/i, "")}
+                              </strong>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="font-semibold text-emerald-600 dark:text-emerald-400 py-0.5 max-w-xl break-words">
+                          {details}
+                        </div>
+                      );
+                    }
+
+                    // Case 3: Other actions with multi-sentence or newline details
+                    const lines = details
+                      .split(/\n|\.\s+/)
+                      .map((l) => l.trim().replace(/\.$/, ""))
+                      .filter(Boolean);
+
+                    if (lines.length > 1) {
+                      return (
+                        <div className="flex flex-col gap-0.5 py-1 max-w-xl">
+                          {lines.map((line, idx) => (
+                            <div key={idx} className="text-xs text-[var(--text-secondary)] leading-relaxed">
+                              {line}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="text-xs text-[var(--text-secondary)] py-0.5 max-w-xl break-words leading-relaxed">
+                        {details}
+                      </div>
+                    );
+                  };
+
+                  return (
+                    <tr key={log.id} className="hover:bg-[var(--bg-surface-elevated)]/50 transition">
+                      <td className="p-3.5 text-[var(--text-secondary)] font-mono text-[11px] whitespace-nowrap">
+                        {parseUTCDate(log.created_at).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                      </td>
+                      <td className="p-3.5 font-bold text-[var(--text-primary)] whitespace-nowrap">{log.staff_name || "System / Admin"}</td>
+                      <td className="p-3.5 whitespace-nowrap">
+                        {log.action_type === "punch_in" ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                            PUNCH IN
+                          </span>
+                        ) : log.action_type === "punch_out" ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase">
+                            <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                            PUNCH OUT
+                          </span>
+                        ) : (
+                          <span className="inline-block rounded-full bg-[var(--accent-brand)]/10 px-2.5 py-0.5 text-[10px] font-bold text-[var(--accent-brand)] uppercase">
+                            {log.action_type.replace(/_/g, " ")}
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-3.5 font-mono text-[11px] text-[var(--text-muted)] whitespace-nowrap">
+                        {log.reference_type ? `${log.reference_type} #${log.reference_id?.slice(0, 8)}` : "—"}
+                      </td>
+                      <td className="p-3.5 text-[var(--text-secondary)] font-medium max-w-xl">
+                        {renderAuditDetails(log.details, log.action_type)}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
