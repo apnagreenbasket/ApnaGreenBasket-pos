@@ -52,7 +52,8 @@ export function PunchOutModal({
         .then((data) => {
           if (!isMounted) return;
           setSummary(data);
-          setActualCashInput(data.expected_cash_in_drawer.toFixed(2));
+          const exp = Number(data?.expected_cash_in_drawer || 0);
+          setActualCashInput(exp.toFixed(2));
         })
         .catch((err) => {
           console.error("Failed to fetch live shift summary:", err);
@@ -86,7 +87,7 @@ export function PunchOutModal({
     : "Earlier today";
 
   const enteredActualCash = parseFloat(actualCashInput) || 0;
-  const expectedCash = summary ? summary.expected_cash_in_drawer : 0;
+  const expectedCash = summary ? Number(summary.expected_cash_in_drawer || 0) : 0;
   const difference = enteredActualCash - expectedCash;
   const isBalanced = Math.abs(difference) < 0.01;
   const isShortage = difference < -0.01;
@@ -96,6 +97,13 @@ export function PunchOutModal({
     if (!summary) return;
     const slipData: ShiftFinancialSummary = {
       ...summary,
+      total_sales_amount: Number(summary.total_sales_amount || 0),
+      opening_cash: Number(summary.opening_cash || 0),
+      cash_collected: Number(summary.cash_collected || 0),
+      upi_collected: Number(summary.upi_collected || 0),
+      card_collected: Number(summary.card_collected || 0),
+      returns_refund_cash: Number(summary.returns_refund_cash || 0),
+      expected_cash_in_drawer: Number(summary.expected_cash_in_drawer || 0),
       actual_cash_handed_over: enteredActualCash,
       cash_difference: difference,
       notes: notes.trim() || undefined,
@@ -176,7 +184,7 @@ export function PunchOutModal({
                     <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-500">Gross</span>
                   </div>
                   <div className="mt-1 font-mono text-xl font-black text-emerald-600 dark:text-emerald-400">
-                    ₹{summary.total_sales_amount.toFixed(2)}
+                    ₹{Number(summary.total_sales_amount || 0).toFixed(2)}
                   </div>
                 </div>
               </div>
@@ -192,22 +200,22 @@ export function PunchOutModal({
                   <div className="flex justify-between items-center text-[var(--text-muted)]">
                     <span>Starting Cash Float (Punch In Drawer):</span>
                     <span className="font-mono font-semibold text-[var(--text-primary)]">
-                      ₹{summary.opening_cash.toFixed(2)}
+                      ₹{Number(summary.opening_cash || 0).toFixed(2)}
                     </span>
                   </div>
 
                   <div className="flex justify-between items-center text-[var(--text-muted)]">
                     <span>(+) Cash Collected from Sales:</span>
                     <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">
-                      +₹{summary.cash_collected.toFixed(2)}
+                      +₹{Number(summary.cash_collected || 0).toFixed(2)}
                     </span>
                   </div>
 
-                  {summary.returns_refund_cash > 0 && (
+                  {Number(summary.returns_refund_cash || 0) > 0 && (
                     <div className="flex justify-between items-center text-[var(--text-muted)]">
                       <span>(-) Cash Paid for Returns / Refunds:</span>
                       <span className="font-mono font-semibold text-rose-500">
-                        -₹{summary.returns_refund_cash.toFixed(2)}
+                        -₹{Number(summary.returns_refund_cash || 0).toFixed(2)}
                       </span>
                     </div>
                   )}
@@ -215,15 +223,15 @@ export function PunchOutModal({
                   <div className="flex justify-between items-center text-[var(--text-muted)]">
                     <span>UPI &amp; QR Payments:</span>
                     <span className="font-mono font-semibold text-sky-600 dark:text-sky-400">
-                      ₹{summary.upi_collected.toFixed(2)}
+                      ₹{Number(summary.upi_collected || 0).toFixed(2)}
                     </span>
                   </div>
 
-                  {summary.card_collected > 0 && (
+                  {Number(summary.card_collected || 0) > 0 && (
                     <div className="flex justify-between items-center text-[var(--text-muted)]">
                       <span>Debit / Credit Card Payments:</span>
                       <span className="font-mono font-semibold text-indigo-500">
-                        ₹{summary.card_collected.toFixed(2)}
+                        ₹{Number(summary.card_collected || 0).toFixed(2)}
                       </span>
                     </div>
                   )}
@@ -236,11 +244,11 @@ export function PunchOutModal({
                       Expected Drawer Cash to Hand Over
                     </span>
                     <span className="text-[10px] text-[var(--text-muted)]">
-                      Opening Cash + Cash Sales {summary.returns_refund_cash > 0 ? "- Returns" : ""}
+                      Opening Cash + Cash Sales {Number(summary.returns_refund_cash || 0) > 0 ? "- Returns" : ""}
                     </span>
                   </div>
                   <span className="font-mono text-lg font-black text-amber-600 dark:text-amber-400">
-                    ₹{summary.expected_cash_in_drawer.toFixed(2)}
+                    ₹{Number(summary.expected_cash_in_drawer || 0).toFixed(2)}
                   </span>
                 </div>
               </div>

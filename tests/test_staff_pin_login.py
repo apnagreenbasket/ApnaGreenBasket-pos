@@ -56,4 +56,4 @@ async def test_standalone_staff_pin_login_endpoint(client, db_session: AsyncSess
         json={"outlet_id": str(outlet_id), "staff_id": str(cashier.id), "pin": "9999"},
     )
     assert bad_resp.status_code == 401
-    assert "Invalid credentials. 4 attempts remaining before account lockout." in bad_resp.json()["detail"]
+    assert "Invalid staff PIN. 4 attempts remaining before account lockout." in bad_resp.json()["detail"]

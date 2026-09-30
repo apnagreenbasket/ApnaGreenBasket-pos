@@ -39,14 +39,14 @@ export interface StaffPunchStatus {
   punch_in_at?: string | null;
   elapsed_seconds: number;
   max_shift_seconds: number;
-  opening_cash?: number;
-  current_drawer_balance?: number;
+  opening_cash?: number | string;
+  current_drawer_balance?: number | string;
   live_bills_count?: number;
-  live_sales_amount?: number;
-  live_cash_collected?: number;
-  live_upi_collected?: number;
-  live_returns_cash?: number;
-  live_expected_drawer_cash?: number;
+  live_sales_amount?: number | string;
+  live_cash_collected?: number | string;
+  live_upi_collected?: number | string;
+  live_returns_cash?: number | string;
+  live_expected_drawer_cash?: number | string;
 }
 
 export interface ShiftFinancialSummary {
@@ -58,16 +58,16 @@ export interface ShiftFinancialSummary {
   punch_out_at?: string | null;
   duration_seconds: number;
   duration_formatted: string;
-  opening_cash: number;
+  opening_cash: number | string;
   total_bills_count: number;
-  total_sales_amount: number;
-  cash_collected: number;
-  upi_collected: number;
-  card_collected: number;
-  returns_refund_cash: number;
-  expected_cash_in_drawer: number;
-  actual_cash_handed_over: number;
-  cash_difference: number;
+  total_sales_amount: number | string;
+  cash_collected: number | string;
+  upi_collected: number | string;
+  card_collected: number | string;
+  returns_refund_cash: number | string;
+  expected_cash_in_drawer: number | string;
+  actual_cash_handed_over: number | string;
+  cash_difference: number | string;
   status: string;
   notes?: string | null;
 }
@@ -82,16 +82,16 @@ export interface StaffPunchSessionItem {
   punch_out_at?: string | null;
   duration_seconds?: number | null;
   duration_formatted?: string | null;
-  opening_cash: number;
+  opening_cash: number | string;
   total_bills_count: number;
-  total_sales_amount: number;
-  cash_collected: number;
-  upi_collected: number;
-  card_collected: number;
-  returns_refund_cash: number;
-  expected_cash_in_drawer: number;
-  actual_cash_handed_over: number;
-  cash_difference: number;
+  total_sales_amount: number | string;
+  cash_collected: number | string;
+  upi_collected: number | string;
+  card_collected: number | string;
+  returns_refund_cash: number | string;
+  expected_cash_in_drawer: number | string;
+  actual_cash_handed_over: number | string;
+  cash_difference: number | string;
   status: string;
   auto_punched_out: boolean;
   notes?: string | null;

@@ -14,7 +14,7 @@ type PunchInModalProps = {
   isOpen: boolean;
   activeStaff: StaffMember | null;
   userRole?: string | null;
-  currentDrawerBalance?: number;
+  currentDrawerBalance?: number | string;
   isPunchingIn: boolean;
   onPunchIn: (openingCash?: number) => Promise<void>;
   onSwitchUser: () => void;
@@ -37,7 +37,8 @@ export function PunchInModal({
 
   useEffect(() => {
     if (isOpen) {
-      setOpeningCash(currentDrawerBalance > 0 ? currentDrawerBalance.toString() : "0");
+      const balNum = Number(currentDrawerBalance || 0);
+      setOpeningCash(balNum > 0 ? balNum.toFixed(2) : "0");
     }
   }, [isOpen, currentDrawerBalance]);
 
@@ -125,7 +126,7 @@ export function PunchInModal({
                 <span>💵</span> Starting Cash in Drawer
               </label>
               <span className="text-[11px] font-mono text-[var(--text-muted)]">
-                Live Drawer: ₹{(currentDrawerBalance || 0).toFixed(2)}
+                Live Drawer: ₹{Number(currentDrawerBalance || 0).toFixed(2)}
               </span>
             </div>
             <div className="relative">

@@ -171,10 +171,10 @@ export function StaffTab({
     void loadShiftSessions();
   }, [loadShiftSessions]);
 
-  const totalSalesRecorded = shiftSessions.reduce((acc, s) => acc + (s.total_sales_amount || 0), 0);
-  const totalCashCollected = shiftSessions.reduce((acc, s) => acc + (s.cash_collected || 0), 0);
-  const totalHandedOver = shiftSessions.reduce((acc, s) => acc + (s.actual_cash_handed_over || 0), 0);
-  const totalDifference = shiftSessions.reduce((acc, s) => acc + (s.cash_difference || 0), 0);
+  const totalSalesRecorded = shiftSessions.reduce((acc, s) => acc + (Number(s.total_sales_amount) || 0), 0);
+  const totalCashCollected = shiftSessions.reduce((acc, s) => acc + (Number(s.cash_collected) || 0), 0);
+  const totalHandedOver = shiftSessions.reduce((acc, s) => acc + (Number(s.actual_cash_handed_over) || 0), 0);
+  const totalDifference = shiftSessions.reduce((acc, s) => acc + (Number(s.cash_difference) || 0), 0);
 
   const isManager = currentUserRole === "MANAGER";
 
@@ -697,8 +697,9 @@ export function StaffTab({
               ) : (
                 shiftSessions.map((session) => {
                   const isSettled = session.status === "SETTLED";
-                  const isDiffZero = Math.abs(session.cash_difference) < 0.01;
-                  const isDiffNegative = session.cash_difference < -0.01;
+                  const diffVal = Number(session.cash_difference || 0);
+                  const isDiffZero = Math.abs(diffVal) < 0.01;
+                  const isDiffNegative = diffVal < -0.01;
 
                   return (
                     <tr key={session.id} className="hover:bg-[var(--bg-surface-elevated)]/50 transition">
@@ -762,7 +763,7 @@ export function StaffTab({
                           <span className="font-mono text-sky-600 dark:text-sky-400 text-[10px]">
                             UPI: {formatRupees(session.upi_collected)}
                           </span>
-                          {session.returns_refund_cash > 0 && (
+                          {Number(session.returns_refund_cash || 0) > 0 && (
                             <span className="font-mono text-rose-500 text-[10px]">
                               Refunds: -{formatRupees(session.returns_refund_cash)}
                             </span>
@@ -795,12 +796,12 @@ export function StaffTab({
                         ) : isDiffNegative ? (
                           <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 px-2.5 py-1 text-[10px] font-semibold text-rose-500">
                             <AlertCircle className="h-3 w-3" />
-                            Short: -{formatRupees(Math.abs(session.cash_difference))}
+                            Short: -{formatRupees(Math.abs(diffVal))}
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
                             <AlertCircle className="h-3 w-3" />
-                            Excess: +{formatRupees(session.cash_difference)}
+                            Excess: +{formatRupees(diffVal)}
                           </span>
                         )}
                       </td>

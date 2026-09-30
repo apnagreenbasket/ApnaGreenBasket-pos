@@ -10,7 +10,7 @@ from decimal import Decimal
 
 from typing import Any
 
-from pydantic import EmailStr, Field, computed_field, field_validator
+from pydantic import EmailStr, Field, computed_field, field_serializer, field_validator
 
 from app.models.enums import RoleEnum
 from app.schemas.common import BaseResponse, StrictSchema
@@ -171,6 +171,20 @@ class StaffPunchStatusResponse(BaseResponse):
     live_returns_cash: Decimal = Decimal("0.00")
     live_expected_drawer_cash: Decimal = Decimal("0.00")
 
+    @field_serializer(
+        "opening_cash",
+        "current_drawer_balance",
+        "live_sales_amount",
+        "live_cash_collected",
+        "live_upi_collected",
+        "live_returns_cash",
+        "live_expected_drawer_cash",
+        when_used="json-unless-none",
+        check_fields=False,
+    )
+    def serialize_decimal(self, v: Decimal | None) -> float:
+        return float(v) if v is not None else 0.0
+
 
 class StaffPunchOutRequest(StrictSchema):
     notes: str | None = None
@@ -200,6 +214,22 @@ class ShiftFinancialSummary(BaseResponse):
     status: str = "OPEN"
     notes: str | None = None
 
+    @field_serializer(
+        "opening_cash",
+        "total_sales_amount",
+        "cash_collected",
+        "upi_collected",
+        "card_collected",
+        "returns_refund_cash",
+        "expected_cash_in_drawer",
+        "actual_cash_handed_over",
+        "cash_difference",
+        when_used="json-unless-none",
+        check_fields=False,
+    )
+    def serialize_decimal(self, v: Decimal | None) -> float:
+        return float(v) if v is not None else 0.0
+
 
 class StaffPunchSessionItem(BaseResponse):
     id: uuid.UUID
@@ -225,4 +255,20 @@ class StaffPunchSessionItem(BaseResponse):
     auto_punched_out: bool = False
     notes: str | None = None
     created_at: datetime
+
+    @field_serializer(
+        "opening_cash",
+        "total_sales_amount",
+        "cash_collected",
+        "upi_collected",
+        "card_collected",
+        "returns_refund_cash",
+        "expected_cash_in_drawer",
+        "actual_cash_handed_over",
+        "cash_difference",
+        when_used="json-unless-none",
+        check_fields=False,
+    )
+    def serialize_decimal(self, v: Decimal | None) -> float:
+        return float(v) if v is not None else 0.0
 
