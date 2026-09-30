@@ -1754,19 +1754,19 @@ export function CreateBillDrawer({
                             onMouseEnter={() => setHighlightedSuggestionIndex(i)}
                             className={`w-full text-left rounded-lg p-2.5 text-base transition cursor-pointer flex items-center justify-between border ${
                               isHighlighted
-                                ? "bg-sky-500/20 border-sky-400 text-sky-100 ring-1 ring-sky-500/30"
+                                ? "bg-sky-500/15 dark:bg-sky-500/25 border-sky-400 dark:border-sky-500 ring-1 ring-sky-400/30 text-[var(--text-primary)]"
                                 : "border-transparent hover:bg-[var(--bg-surface)] text-[var(--text-primary)]"
                             }`}
                           >
                             <div className="flex items-center gap-2">
-                              <span className="font-bold">{s.name}</span>
+                              <span className="font-bold text-[var(--text-primary)]">{s.name}</span>
                               {isHighlighted && (
-                                <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-sky-500/30 text-sky-300 border border-sky-400/40">
+                                <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-sky-600 text-white shadow-xs">
                                   ↵ Enter
                                 </span>
                               )}
                             </div>
-                            <span className="font-mono text-sm text-[var(--text-muted)]">{s.phone}</span>
+                            <span className={`font-mono text-sm ${isHighlighted ? "text-sky-700 dark:text-sky-300 font-semibold" : "text-[var(--text-muted)]"}`}>{s.phone}</span>
                           </button>
                         );
                       })}

@@ -4872,24 +4872,26 @@ export function CustomerReturnsModal({
                           onMouseEnter={() => setHighlightedSuggestionIndex(i)}
                           className={`w-full text-left rounded-xl px-3 py-2 text-sm transition cursor-pointer flex items-center justify-between gap-3 ${
                             isHighlighted
-                              ? "bg-sky-500/20 border border-sky-500/50 text-white ring-1 ring-sky-500/30"
+                              ? "bg-sky-500/15 dark:bg-sky-500/25 border border-sky-400 dark:border-sky-500 ring-1 ring-sky-400/30 text-[var(--text-primary)]"
                               : "hover:bg-[var(--bg-surface)] text-[var(--text-primary)] border border-transparent"
                           }`}
                         >
                           <div className="flex items-center gap-2.5 min-w-0">
-                            <div className="h-7 w-7 rounded-full bg-sky-500/15 text-sky-400 flex items-center justify-center font-bold text-xs shrink-0">
+                            <div className={`h-7 w-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
+                              isHighlighted ? "bg-sky-600 text-white" : "bg-sky-500/15 text-sky-600 dark:text-sky-400"
+                            }`}>
                               {(s.name || "C").charAt(0).toUpperCase()}
                             </div>
                             <div className="min-w-0">
                               <div className="flex items-center gap-2">
                                 <p className="font-bold truncate text-[var(--text-primary)] text-sm">{s.name || "Customer"}</p>
                                 {isHighlighted && (
-                                  <span className="text-[10px] font-mono font-semibold px-1.5 py-0.2 rounded bg-sky-500/30 text-sky-300 border border-sky-400/40">
+                                  <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-sky-600 text-white shadow-xs">
                                     ↵ Enter
                                   </span>
                                 )}
                               </div>
-                            <p className="font-mono text-xs text-[var(--text-muted)]">{s.phone}</p>
+                            <p className={`font-mono text-xs ${isHighlighted ? "text-sky-700 dark:text-sky-300 font-semibold" : "text-[var(--text-muted)]"}`}>{s.phone}</p>
                           </div>
                         </div>
                         {typeof s.credit_balance === "number" && s.credit_balance !== 0 && (
