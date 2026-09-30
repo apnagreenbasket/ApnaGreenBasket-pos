@@ -100,9 +100,27 @@ export function useBillingManagement({
       const isExchange = (b.source || "").toUpperCase() === "EXCHANGE";
       if (isExchange) return;
 
+      // Exclude voided/replaced bills so edited orders are not double counted
+      if (b.is_void) return;
+
       const s = (b.status || "").toUpperCase();
-      if (s === "PAID" || s === "SERVED" || s === "COMPLETED" || s === "FINALIZED" || s === "PARTIALLY_REFUNDED") {
-        grandTotal += b.total_amount || 0;
+      const isSettledOrRefunded =
+        s === "PAID" ||
+        s === "SERVED" ||
+        s === "COMPLETED" ||
+        s === "FINALIZED" ||
+        s === "PARTIALLY_REFUNDED" ||
+        s === "REFUNDED";
+
+      if (isSettledOrRefunded) {
+        const refundedAmt = Number((b as any).total_refunded_amount || 0);
+        const baseAmount = (b as any).net_amount !== undefined
+          ? Math.max(0, Number((b as any).net_amount))
+          : Math.max(0, (b.total_amount || 0) - refundedAmt);
+
+        grandTotal += baseAmount;
+        returnsTotal += refundedAmt;
+
         const cApp = Number((b as any).credit_applied || 0);
         const dApp = Number((b as any).debit_applied || 0);
         const dSet = Number((b as any).debt_settled || 0);
@@ -117,7 +135,7 @@ export function useBillingManagement({
         creditCashedOut += cCash;
         loyaltyRedeemed += lRed;
 
-        const net = (b.total_amount || 0)
+        const net = baseAmount
                   - lRed
                   - cApp
                   - dApp
@@ -127,10 +145,13 @@ export function useBillingManagement({
         netPaid += net;
 
         const explicitUpi = Number((b as any).upi_amount || 0);
-        if (explicitUpi > 0) {
-          upiPaid += explicitUpi;
-        } else if ((b.payment_method || "").toUpperCase() === "UPI") {
+        const pm = (b.payment_method || "").toUpperCase();
+        if (pm === "UPI") {
           upiPaid += Math.max(0, net);
+        } else if (pm === "SPLIT" && explicitUpi > 0) {
+          upiPaid += Math.min(explicitUpi, Math.max(0, net));
+        } else if (explicitUpi > 0) {
+          upiPaid += Math.min(explicitUpi, Math.max(0, net));
         }
       }
     });
