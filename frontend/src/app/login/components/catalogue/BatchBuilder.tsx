@@ -23,7 +23,6 @@ import {
   Copy,
   ListPlus,
 } from "lucide-react";
-import jsPDF from "jspdf";
 import { getOptimizedImageUrl } from "./imageOptimizer";
 import type { AdminMenuItem, AdminCategory } from "../../adminTypes";
 import type {
@@ -96,7 +95,6 @@ export function BatchBuilder({
   const [statusMsg, setStatusMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isFetchingLive, setIsFetchingLive] = useState(false);
-  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   const menuItemMap = useMemo(() => new Map(menuItems.map((i) => [i.id, i])), [menuItems]);
 
@@ -292,19 +290,20 @@ export function BatchBuilder({
     }
   }, [batch, onBatchUpdated]);
 
-  // ── Print / Preview ──────────────────────────────────────────────
+  // ── Print / Preview / Save as PDF ────────────────────────────────
   const handlePrintOrPreview = (autoPrint: boolean) => {
     if (typeof window === "undefined") return;
 
     const TemplateComponent = templateRegistry[batch.template];
     const printWindow = window.open("", "_blank");
-    if (!printWindow) return;
+    if (!printWindow) {
+      alert("Popup blocker prevented opening the preview window. Please allow popups for this site.");
+      return;
+    }
 
-    // For now, render everything on a single page (pagination can be refined later)
     const totalPages = 1;
+    const catalogTitle = batch.name || "ApnaGreen Basket Catalogue";
 
-    // Build the HTML string using React's server-style rendering concept
-    // We generate inline-styled HTML directly for the print window
     const fontLinks = batch.template === "mandi-ledger"
       ? `<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,600;0,700;1,400;1,600;1,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">`
       : `<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">`;
@@ -313,41 +312,97 @@ export function BatchBuilder({
 <html>
 <head>
   <meta charset="utf-8">
-  <title>${batch.name} — Print Catalogue</title>
+  <title>${catalogTitle}</title>
   ${fontLinks}
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { margin: 0; padding: 0; }
+    body {
+      margin: 0;
+      padding: 0;
+      background: #F3F4F6;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
     @media print {
+      body { background: #fff !important; }
       @page { size: A4; margin: 0; }
       .no-print { display: none !important; }
+      #catalogue-root {
+        margin: 0 !important;
+        box-shadow: none !important;
+        max-width: 100% !important;
+        width: 100% !important;
+        border-radius: 0 !important;
+      }
     }
     .print-btn-bar {
-      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
-      background: #1a1a1a; padding: 10px 20px;
-      display: flex; gap: 10px; align-items: center;
-      font-family: system-ui, sans-serif; color: #fff;
+      position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+      background: #111827; padding: 10px 24px;
+      display: flex; gap: 12px; align-items: center;
+      color: #fff;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+    }
+    .print-btn-bar .title-box {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .print-btn-bar .title-box .title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #F9FAFB;
+    }
+    .print-btn-bar .title-box .subtitle {
+      font-size: 11px;
+      color: #9CA3AF;
     }
     .print-btn-bar button {
-      padding: 6px 16px; border-radius: 6px; border: none; cursor: pointer;
-      font-size: 13px; font-weight: 600;
+      padding: 8px 18px; border-radius: 8px; border: none; cursor: pointer;
+      font-size: 13px; font-weight: 700;
+      display: inline-flex; align-items: center; gap: 6px;
+      transition: all 0.15s ease;
     }
-    .print-btn { background: #1B6B45; color: #fff; }
-    .close-btn { background: #333; color: #fff; }
-    #catalogue-root { margin-top: 50px; }
-    @media print { #catalogue-root { margin-top: 0; } }
+    .save-pdf-btn {
+      background: #059669; color: #fff;
+    }
+    .save-pdf-btn:hover { background: #047857; }
+    .print-btn { background: #374151; color: #fff; }
+    .print-btn:hover { background: #4B5563; }
+    .close-btn { background: #1F2937; color: #9CA3AF; }
+    .close-btn:hover { background: #374151; color: #fff; }
+    
+    #catalogue-root {
+      margin: 64px auto 40px;
+      max-width: 794px;
+      background: #fff;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+      border-radius: 4px;
+      overflow: visible;
+    }
   </style>
 </head>
 <body>
   <div class="print-btn-bar no-print">
-    <span style="flex:1;font-size:14px;font-weight:700;">${batch.name}</span>
-    <button class="print-btn" onclick="window.print()">🖨 Print</button>
+    <div class="title-box">
+      <span class="title">${catalogTitle}</span>
+      <span class="subtitle">💡 Click <strong>&ldquo;Save as PDF&rdquo;</strong> to download this catalogue directly in seconds</span>
+    </div>
+    <button class="save-pdf-btn" onclick="saveAsPdf()" title="Save as PDF directly to your device">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Save as PDF
+    </button>
+    <button class="print-btn" onclick="window.print()" title="Print directly to paper printer">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+      Print
+    </button>
     <button class="close-btn" onclick="window.close()">✕ Close</button>
   </div>
   <div id="catalogue-root"></div>
-  <script type="module">
-    // Wait for React to render via the parent
-  <\/script>
+  <script>
+    function saveAsPdf() {
+      window.print();
+    }
+  </script>
 </body>
 </html>`);
     printWindow.document.close();
@@ -374,124 +429,16 @@ export function BatchBuilder({
         setTimeout(() => {
           printWindow.focus();
           printWindow.print();
-        }, 1200);
+        }, 750);
       }
     });
   };
 
   // ── Automatic Save PDF ───────────────────────────────────────────
-  const handleSavePdf = async () => {
-    if (typeof window === "undefined") return;
-    setIsGeneratingPdf(true);
-    setStatusMsg({ type: "ok", text: "Preparing PDF for download..." });
-
-    // Inject fonts if not already in document
-    const fontId = "catalogue-fonts-" + batch.template;
-    if (!document.getElementById(fontId)) {
-      const link = document.createElement("link");
-      link.id = fontId;
-      link.rel = "stylesheet";
-      link.href =
-        batch.template === "mandi-ledger"
-          ? "https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,600;0,700;1,400;1,600;1,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap"
-          : "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap";
-      document.head.appendChild(link);
-    }
-
-    const container = document.createElement("div");
-    container.id = "catalogue-pdf-render-target";
-    container.style.position = "fixed";
-    container.style.left = "-9999px";
-    container.style.top = "0";
-    container.style.width = "794px";
-    container.style.background = "#fff";
-    container.style.zIndex = "-9999";
-    document.body.appendChild(container);
-
-    try {
-      const TemplateComponent = templateRegistry[batch.template];
-      const { createRoot } = await import("react-dom/client");
-      const printableBatch = {
-        ...batch,
-        categories: batch.categories.filter((cat) => cat.items && cat.items.length > 0),
-      };
-
-      const root = createRoot(container);
-      root.render(
-        React.createElement(TemplateComponent, {
-          batch: printableBatch,
-          pageNumber: 1,
-          totalPages: 1,
-          outletInfo,
-        })
-      );
-
-      // Give React DOM a moment to mount
-      await new Promise((r) => setTimeout(r, 600));
-
-      // Wait for images to load
-      const images = Array.from(container.querySelectorAll("img"));
-      await Promise.all(
-        images.map(
-          (img) =>
-            new Promise<void>((resolve) => {
-              if (img.complete && img.naturalWidth !== 0) return resolve();
-              img.onload = () => resolve();
-              img.onerror = () => resolve();
-              setTimeout(resolve, 2500);
-            })
-        )
-      );
-
-      const doc = new jsPDF({
-        orientation: "portrait",
-        unit: "mm",
-        format: "a4",
-        compress: true,
-      });
-
-      const safeFileName = `${(batch.name || "Catalogue").replace(/[/\\?%*:|"<>]/g, "_").trim()}.pdf`;
-
-      await new Promise<void>((resolve, reject) => {
-        doc.html(container, {
-          callback: (pdf) => {
-            try {
-              pdf.save(safeFileName);
-              resolve();
-            } catch (err) {
-              reject(err);
-            }
-          },
-          margin: [0, 0, 0, 0],
-          autoPaging: true,
-          width: 210,
-          windowWidth: 794,
-          html2canvas: {
-            scale: 1.5,
-            useCORS: true,
-            allowTaint: false,
-            logging: false,
-          },
-        });
-      });
-
-      root.unmount();
-      if (document.body.contains(container)) {
-        document.body.removeChild(container);
-      }
-
-      setStatusMsg({ type: "ok", text: "PDF downloaded successfully!" });
-      setTimeout(() => setStatusMsg(null), 3000);
-    } catch (err: any) {
-      console.error("PDF generation error:", err);
-      if (document.body.contains(container)) {
-        document.body.removeChild(container);
-      }
-      setStatusMsg({ type: "err", text: "Could not generate PDF. Please try again or use Preview." });
-      setTimeout(() => setStatusMsg(null), 4000);
-    } finally {
-      setIsGeneratingPdf(false);
-    }
+  const handleSavePdf = () => {
+    setStatusMsg({ type: "ok", text: "Opening Save as PDF dialog..." });
+    handlePrintOrPreview(true);
+    setTimeout(() => setStatusMsg(null), 3500);
   };
 
   // 🔸 Add Section flows 🔸🔸🔸🔸🔸🔸🔸🔸🔸🔸🔸🔸🔸🔸🔸🔸🔸🔸🔸🔸🔸🔸🔸🔸
@@ -859,16 +806,10 @@ export function BatchBuilder({
           <button
             type="button"
             onClick={handleSavePdf}
-            disabled={isGeneratingPdf}
-            className="flex items-center gap-1.5 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-4 py-2.5 text-xs font-bold text-[var(--text-primary)] hover:border-[var(--accent-brand)] disabled:opacity-50 transition"
-            title="Download PDF directly to your computer"
+            className="flex items-center gap-1.5 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-4 py-2.5 text-xs font-bold text-[var(--text-primary)] hover:border-[var(--accent-brand)] transition"
+            title="Download PDF directly in seconds"
           >
-            {isGeneratingPdf ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-[var(--accent-brand)]" />
-            ) : (
-              <FileDown className="h-3.5 w-3.5 text-emerald-500" />
-            )}
-            {isGeneratingPdf ? "Saving PDF..." : "Save PDF"}
+            <FileDown className="h-3.5 w-3.5 text-emerald-500" /> Save PDF
           </button>
         </div>
       </div>

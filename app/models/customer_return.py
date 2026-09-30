@@ -18,6 +18,7 @@ from app.database import Base
 if TYPE_CHECKING:
     from app.models.order import Order
     from app.models.outlet import Outlet
+    from app.models.user import User
 
 
 class CustomerReturn(Base):
@@ -82,6 +83,12 @@ class CustomerReturn(Base):
         nullable=True,
         index=True,
     )
+    created_by_staff_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -90,3 +97,4 @@ class CustomerReturn(Base):
     outlet: Mapped[Outlet] = relationship("Outlet")
     order: Mapped[Order | None] = relationship("Order", foreign_keys=[order_id])
     exchange_order: Mapped[Order | None] = relationship("Order", foreign_keys=[exchange_order_id])
+    created_by_staff: Mapped[User | None] = relationship("User", foreign_keys=[created_by_staff_id])

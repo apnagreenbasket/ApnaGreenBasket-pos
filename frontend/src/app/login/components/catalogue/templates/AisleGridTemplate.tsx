@@ -106,7 +106,7 @@ function AisleSection({ category, index }: { category: CatalogueCategory; index:
   const aisleNum = String(index + 1).padStart(2, "0");
 
   return (
-    <div style={{ display: "flex", gap: 0, pageBreakInside: "avoid" }}>
+    <div className="aisle-section" style={{ display: "flex", gap: 0, marginBottom: 12 }}>
       {/* Vertical rail label */}
       <div
         style={{
@@ -175,6 +175,7 @@ function AisleSection({ category, index }: { category: CatalogueCategory; index:
 function AisleCard({ item, accent }: { item: CatalogueItem; accent: string }) {
   return (
     <div
+      className="aisle-card"
       style={{
         width: "calc((100% - 16px) / 3)",
         background: C.card,
@@ -340,23 +341,39 @@ export function AisleGridTemplate({ batch, pageNumber, totalPages, outletInfo }:
     <div
       className="aisle-grid-page"
       style={{
-        width: 794,
-        minHeight: 1123,
-        maxHeight: 1123,
+        width: "100%",
+        maxWidth: 794,
+        minHeight: "100%",
         background: C.bg,
         fontFamily: "'Inter', sans-serif",
         color: C.text,
         display: "flex",
         flexDirection: "column",
-        overflow: "hidden",
         boxSizing: "border-box",
-        pageBreakAfter: "always",
       }}
     >
+      <style>{`
+        @media print {
+          .aisle-grid-page {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            max-height: none !important;
+            overflow: visible !important;
+          }
+          .aisle-card {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+          .aisle-section {
+            break-inside: auto !important;
+            page-break-inside: auto !important;
+          }
+        }
+      `}</style>
       <Topbar outletInfo={outletInfo} />
 
       {/* Body — aisle sections */}
-      <div style={{ flex: 1, overflow: "hidden", padding: "8px 0 4px" }}>
+      <div style={{ flex: 1, padding: "8px 0 16px" }}>
         {batch.categories
           .filter((cat) => cat.items && cat.items.length > 0)
           .map((cat, i) => (

@@ -14,8 +14,9 @@ type PunchInModalProps = {
   isOpen: boolean;
   activeStaff: StaffMember | null;
   userRole?: string | null;
+  currentDrawerBalance?: number;
   isPunchingIn: boolean;
-  onPunchIn: () => Promise<void>;
+  onPunchIn: (openingCash?: number) => Promise<void>;
   onSwitchUser: () => void;
   onLogout: () => void;
 };
@@ -24,6 +25,7 @@ export function PunchInModal({
   isOpen,
   activeStaff,
   userRole,
+  currentDrawerBalance = 0,
   isPunchingIn,
   onPunchIn,
   onSwitchUser,
@@ -31,6 +33,13 @@ export function PunchInModal({
 }: PunchInModalProps) {
   const [currentTime, setCurrentTime] = useState<string>("");
   const [currentDate, setCurrentDate] = useState<string>("");
+  const [openingCash, setOpeningCash] = useState<string>("");
+
+  useEffect(() => {
+    if (isOpen) {
+      setOpeningCash(currentDrawerBalance > 0 ? currentDrawerBalance.toString() : "0");
+    }
+  }, [isOpen, currentDrawerBalance]);
 
   useEffect(() => {
     const updateTime = () => {
@@ -109,6 +118,35 @@ export function PunchInModal({
             </div>
           </div>
 
+          {/* Starting Cash in Drawer Input */}
+          <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-4 space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <label htmlFor="opening-cash-input" className="font-bold text-[var(--text-primary)] flex items-center gap-1.5">
+                <span>💵</span> Starting Cash in Drawer
+              </label>
+              <span className="text-[11px] font-mono text-[var(--text-muted)]">
+                Live Drawer: ₹{(currentDrawerBalance || 0).toFixed(2)}
+              </span>
+            </div>
+            <div className="relative">
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-[var(--text-muted)]">₹</span>
+              <input
+                id="opening-cash-input"
+                type="number"
+                step="0.01"
+                min="0"
+                value={openingCash}
+                onChange={(e) => setOpeningCash(e.target.value)}
+                placeholder="0.00"
+                disabled={isPunchingIn}
+                className="w-full pl-8 pr-3.5 py-2.5 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-base)] text-sm font-mono font-bold text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none"
+              />
+            </div>
+            <p className="text-[11px] text-[var(--text-muted)]">
+              Opening float / change in cash drawer when you sit. Shift collection starts from this amount.
+            </p>
+          </div>
+
           {/* Explanation note */}
           <p className="text-xs text-[var(--text-muted)] text-center leading-relaxed px-2">
             Your counter bills, returns, and orders will be strictly tracked starting from this punch-in time. Shifts auto-expire after 12 hours.
@@ -117,7 +155,7 @@ export function PunchInModal({
           {/* Primary Action Button */}
           <button
             type="button"
-            onClick={onPunchIn}
+            onClick={() => onPunchIn(parseFloat(openingCash) || 0)}
             disabled={isPunchingIn}
             className="w-full flex items-center justify-center gap-2.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 py-3.5 px-4 text-sm font-bold text-white shadow-lg hover:from-emerald-700 hover:to-teal-700 transition active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
           >

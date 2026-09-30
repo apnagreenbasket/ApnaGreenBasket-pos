@@ -8,7 +8,7 @@
 
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   CreditCard,
   Percent,
@@ -241,6 +241,58 @@ export function BillingTab({
       return true;
     });
   }, [combinedBillsList, billingStatusFilter, billingSearchQuery]);
+
+  // Dual horizontal scroll sync (Top and Bottom scrollbars)
+  const topScrollRef = useRef<HTMLDivElement>(null);
+  const tableScrollRef = useRef<HTMLDivElement>(null);
+  const [tableScrollWidth, setTableScrollWidth] = useState(0);
+  const [hasHorizontalOverflow, setHasHorizontalOverflow] = useState(false);
+  const isSyncingTop = useRef(false);
+  const isSyncingTable = useRef(false);
+
+  useEffect(() => {
+    const updateScrollMetrics = () => {
+      if (tableScrollRef.current) {
+        const sw = tableScrollRef.current.scrollWidth;
+        const cw = tableScrollRef.current.clientWidth;
+        setTableScrollWidth(sw);
+        setHasHorizontalOverflow(sw > cw + 2);
+      }
+    };
+    updateScrollMetrics();
+    window.addEventListener("resize", updateScrollMetrics);
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined" && tableScrollRef.current) {
+      observer = new ResizeObserver(updateScrollMetrics);
+      observer.observe(tableScrollRef.current);
+    }
+    return () => {
+      window.removeEventListener("resize", updateScrollMetrics);
+      observer?.disconnect();
+    };
+  }, [filteredBills]);
+
+  const handleTopScroll = () => {
+    if (isSyncingTop.current) {
+      isSyncingTop.current = false;
+      return;
+    }
+    if (topScrollRef.current && tableScrollRef.current) {
+      isSyncingTable.current = true;
+      tableScrollRef.current.scrollLeft = topScrollRef.current.scrollLeft;
+    }
+  };
+
+  const handleTableScroll = () => {
+    if (isSyncingTable.current) {
+      isSyncingTable.current = false;
+      return;
+    }
+    if (topScrollRef.current && tableScrollRef.current) {
+      isSyncingTop.current = true;
+      topScrollRef.current.scrollLeft = tableScrollRef.current.scrollLeft;
+    }
+  };
 
 
   const handleExportBillsPdf = () => {
@@ -816,20 +868,41 @@ export function BillingTab({
           </div>
         </div>
 
+        {/* Top Horizontal Scrollbar for Laptops and Zoomed-in screens */}
+        {hasHorizontalOverflow && (
+          <div className="flex items-center gap-2.5 px-4 py-1.5 bg-[var(--bg-surface-elevated)] border-b border-[var(--border-subtle)] text-[11px] text-[var(--text-muted)] font-medium">
+            <span className="whitespace-nowrap shrink-0 flex items-center gap-1 font-semibold text-[var(--text-secondary)]">
+              ↔ Scroll Table:
+            </span>
+            <div
+              ref={topScrollRef}
+              onScroll={handleTopScroll}
+              className="flex-1 overflow-x-auto overflow-y-hidden scrollbar-thin"
+              style={{ height: 14 }}
+            >
+              <div style={{ width: tableScrollWidth, height: 1 }} />
+            </div>
+          </div>
+        )}
+
         {/* Bills List Table */}
-        <div className="overflow-x-auto min-h-[380px] pb-24">
+        <div
+          ref={tableScrollRef}
+          onScroll={handleTableScroll}
+          className="overflow-x-auto min-h-[380px] pb-24"
+        >
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
-                <th className="p-3.5">Bill ID &amp; Source</th>
-                <th className="p-3.5">Customer &amp; Basket</th>
-                <th className="p-3.5 text-center">Items</th>
-                <th className="p-3.5 text-right">Subtotal</th>
-                <th className="p-3.5 text-right">Discount</th>
-                <th className="p-3.5 text-right">Grand Total</th>
-                <th className="p-3.5 text-center">Status</th>
-                <th className="p-3.5 text-center">Date &amp; Time</th>
-                <th className="p-3.5 text-right">Actions</th>
+                <th className="p-3.5 whitespace-nowrap">Bill ID &amp; Source</th>
+                <th className="p-3.5 max-w-[170px]">Customer &amp; Basket</th>
+                <th className="p-3.5 text-center whitespace-nowrap">Items</th>
+                <th className="p-3.5 text-right whitespace-nowrap">Subtotal</th>
+                <th className="p-3.5 text-right whitespace-nowrap">Discount</th>
+                <th className="p-3.5 text-right min-w-[130px] max-w-[170px]">Grand Total</th>
+                <th className="p-3.5 text-center whitespace-nowrap">Status</th>
+                <th className="p-3.5 text-center whitespace-nowrap min-w-[95px]">Date &amp; Time</th>
+                <th className="p-3.5 text-right whitespace-nowrap min-w-[140px]">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border-subtle)] text-xs">
@@ -910,45 +983,45 @@ export function BillingTab({
                         )}
                       </td>
 
-                      <td className="p-3.5 text-right font-mono font-black text-base text-[var(--text-primary)]">
+                      <td className="p-3.5 text-right font-mono font-black text-base text-[var(--text-primary)] min-w-[130px] max-w-[170px]">
                         <div>₹{b.total_amount.toFixed(2)}</div>
                         {((b as any).total_refunded_amount > 0 || b.status === "PARTIALLY_REFUNDED") && (
-                          <div className="text-xs text-rose-400 font-bold mt-0.5 whitespace-nowrap">
+                          <div className="text-[11px] text-rose-400 font-bold mt-0.5 break-words leading-tight">
                             ↩ Refunded: -₹{Number((b as any).total_refunded_amount || 0).toFixed(2)}
                           </div>
                         )}
                         {b.status === "PARTIALLY_REFUNDED" && (
-                          <div className="text-xs text-amber-400 font-bold mt-0.5 whitespace-nowrap">
+                          <div className="text-[11px] text-amber-400 font-bold mt-0.5 break-words leading-tight">
                             Net: ₹{(b as any).net_amount !== undefined ? Number((b as any).net_amount).toFixed(2) : (b.total_amount - Number((b as any).total_refunded_amount || 0)).toFixed(2)}
                           </div>
                         )}
                         {(b as any).credit_applied > 0 && (
-                          <div className="text-xs text-emerald-500 font-bold mt-0.5 whitespace-nowrap">
+                          <div className="text-[11px] text-emerald-500 font-bold mt-0.5 break-words leading-tight">
                             Credit Used: ₹{(b as any).credit_applied}
                           </div>
                         )}
                         {Number((b as any).loyalty_discount_inr) > 0 && (
-                          <div className="text-xs text-purple-400 font-bold mt-0.5 whitespace-nowrap">
-                            Loyalty Redeemed: -₹{Number((b as any).loyalty_discount_inr).toFixed(2)}
+                          <div className="text-[11px] text-purple-400 font-bold mt-0.5 break-words leading-tight">
+                            Loyalty: -₹{Number((b as any).loyalty_discount_inr).toFixed(2)}
                           </div>
                         )}
                         {Number((b as any).debit_applied) > 0 && (
-                          <div className="text-xs text-red-500 font-bold mt-0.5 whitespace-nowrap">
-                            Debit Recorded: ₹{Number((b as any).debit_applied).toFixed(2)}
+                          <div className="text-[11px] text-red-500 font-bold mt-0.5 break-words leading-tight">
+                            Debit: ₹{Number((b as any).debit_applied).toFixed(2)}
                           </div>
                         )}
                         {Number((b as any).debt_settled) > 0 && (
-                          <div className="text-xs text-emerald-500 font-bold mt-0.5 whitespace-nowrap">
-                            Debt Settled (Payed Udhaar): +₹{Number((b as any).debt_settled).toFixed(2)}
+                          <div className="text-[11px] text-emerald-500 font-bold mt-0.5 break-words leading-tight">
+                            Debt Settled (Udhaar): +₹{Number((b as any).debt_settled).toFixed(2)}
                           </div>
                         )}
                         {Number((b as any).credit_awarded) > 0 && (
-                          <div className="text-xs text-sky-500 font-bold mt-0.5 whitespace-nowrap">
-                            Wallet Credited: +₹{Number((b as any).credit_awarded).toFixed(2)}
+                          <div className="text-[11px] text-sky-500 font-bold mt-0.5 break-words leading-tight">
+                            Wallet: +₹{Number((b as any).credit_awarded).toFixed(2)}
                           </div>
                         )}
                         {Number((b as any).credit_cashed_out) > 0 && (
-                          <div className="text-xs text-orange-400 font-bold mt-0.5 whitespace-nowrap">
+                          <div className="text-[11px] text-orange-400 font-bold mt-0.5 break-words leading-tight">
                             Credit Cashed Out: ₹{Number((b as any).credit_cashed_out).toFixed(2)}
                           </div>
                         )}
@@ -974,8 +1047,10 @@ export function BillingTab({
                                         - Number((b as any).credit_cashed_out || 0);
                                         
                           return (
-                            <div className="mt-1.5 pt-1.5 border-t border-[var(--border-subtle)] text-sm text-[var(--accent-brand)] font-black">
-                              <span className="bg-[var(--accent-brand)]/10 px-2 py-0.5 rounded-lg inline-block">NET PAID: ₹{netPaid.toFixed(2)}</span>
+                            <div className="mt-1.5 pt-1.5 border-t border-[var(--border-subtle)] text-xs text-[var(--accent-brand)] font-black">
+                              <span className="bg-[var(--accent-brand)]/10 px-1.5 py-0.5 rounded-lg inline-block whitespace-nowrap">
+                                NET PAID: ₹{netPaid.toFixed(2)}
+                              </span>
                             </div>
                           );
                         })()}
@@ -1022,11 +1097,11 @@ export function BillingTab({
                         ) : null}
                       </td>
 
-                      <td className="p-3.5 text-center">
-                        <div className="font-mono text-xs font-bold text-[var(--text-primary)]">
+                      <td className="p-3.5 text-center whitespace-nowrap">
+                        <div className="font-mono text-xs font-bold text-[var(--text-primary)] whitespace-nowrap">
                           {b.created_at ? parseUTCDate(b.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
                         </div>
-                        <div className="text-[10px] text-[var(--text-muted)] font-mono mt-0.5">
+                        <div className="text-[10px] text-[var(--text-muted)] font-mono mt-0.5 whitespace-nowrap">
                           {b.created_at ? parseUTCDate(b.created_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }).toUpperCase() : ""}
                         </div>
                       </td>

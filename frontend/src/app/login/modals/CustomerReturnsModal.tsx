@@ -496,6 +496,58 @@ export function CustomerReturnsModal({
   const [itemLedgerReason, setItemLedgerReason] = useState("ALL");
   const [isLoadingLedger, setIsLoadingLedger] = useState(false);
 
+  // Dual horizontal scroll for Item Ledger table
+  const ledgerTopScrollRef = useRef<HTMLDivElement>(null);
+  const ledgerTableScrollRef = useRef<HTMLDivElement>(null);
+  const [ledgerScrollWidth, setLedgerScrollWidth] = useState(0);
+  const [hasLedgerOverflow, setHasLedgerOverflow] = useState(false);
+  const isSyncingLedgerTop = useRef(false);
+  const isSyncingLedgerTable = useRef(false);
+
+  useEffect(() => {
+    const updateScrollMetrics = () => {
+      if (ledgerTableScrollRef.current) {
+        const sw = ledgerTableScrollRef.current.scrollWidth;
+        const cw = ledgerTableScrollRef.current.clientWidth;
+        setLedgerScrollWidth(sw);
+        setHasLedgerOverflow(sw > cw + 2);
+      }
+    };
+    updateScrollMetrics();
+    window.addEventListener("resize", updateScrollMetrics);
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined" && ledgerTableScrollRef.current) {
+      observer = new ResizeObserver(updateScrollMetrics);
+      observer.observe(ledgerTableScrollRef.current);
+    }
+    return () => {
+      window.removeEventListener("resize", updateScrollMetrics);
+      observer?.disconnect();
+    };
+  }, [itemLedgerData, historyViewMode]);
+
+  const handleLedgerTopScroll = () => {
+    if (isSyncingLedgerTop.current) {
+      isSyncingLedgerTop.current = false;
+      return;
+    }
+    if (ledgerTopScrollRef.current && ledgerTableScrollRef.current) {
+      isSyncingLedgerTable.current = true;
+      ledgerTableScrollRef.current.scrollLeft = ledgerTopScrollRef.current.scrollLeft;
+    }
+  };
+
+  const handleLedgerTableScroll = () => {
+    if (isSyncingLedgerTable.current) {
+      isSyncingLedgerTable.current = false;
+      return;
+    }
+    if (ledgerTopScrollRef.current && ledgerTableScrollRef.current) {
+      isSyncingLedgerTop.current = true;
+      ledgerTopScrollRef.current.scrollLeft = ledgerTableScrollRef.current.scrollLeft;
+    }
+  };
+
   const activeCatalog = useMemo(() => {
     return (menuItems && menuItems.length > 0) ? menuItems : localCatalogItems;
   }, [menuItems, localCatalogItems]);
@@ -2935,8 +2987,29 @@ export function CustomerReturnsModal({
                   </div>
                 )}
 
+                {/* Top Horizontal Scrollbar for Return Ledger */}
+                {historyViewMode === "ITEM_LEDGER" && hasLedgerOverflow && (
+                  <div className="flex items-center gap-2 px-3 py-1 bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] rounded-lg text-[10px] text-[var(--text-muted)] font-medium mb-1.5 shrink-0">
+                    <span className="whitespace-nowrap shrink-0 flex items-center gap-1 font-semibold text-[var(--text-secondary)]">
+                      ↔ Scroll Ledger:
+                    </span>
+                    <div
+                      ref={ledgerTopScrollRef}
+                      onScroll={handleLedgerTopScroll}
+                      className="flex-1 overflow-x-auto overflow-y-hidden scrollbar-thin"
+                      style={{ height: 12 }}
+                    >
+                      <div style={{ width: ledgerScrollWidth, height: 1 }} />
+                    </div>
+                  </div>
+                )}
+
                 {/* Content Area: Either Item Ledger Table or Vouchers Summary Grid */}
-                <div className="flex-1 overflow-y-auto border border-[var(--border-subtle)] rounded-xl bg-[var(--bg-surface)] min-h-0">
+                <div
+                  ref={ledgerTableScrollRef}
+                  onScroll={handleLedgerTableScroll}
+                  className="flex-1 overflow-y-auto overflow-x-auto border border-[var(--border-subtle)] rounded-xl bg-[var(--bg-surface)] min-h-0"
+                >
                   {historyViewMode === "ITEM_LEDGER" ? (
                     isLoadingLedger ? (
                       <div className="flex flex-col items-center justify-center py-20 text-xs text-[var(--text-muted)] space-y-2">
@@ -2956,17 +3029,17 @@ export function CustomerReturnsModal({
                       <table className="w-full text-left text-xs border-collapse">
                         <thead className="sticky top-0 bg-[var(--bg-surface-elevated)] border-b border-[var(--border-subtle)] text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)] z-10">
                           <tr>
-                            <th className="p-3">Date &amp; Time</th>
-                            <th className="p-3">Return #</th>
-                            <th className="p-3">Orig Bill</th>
-                            <th className="p-3">Customer</th>
-                            <th className="p-3">Item Name</th>
-                            <th className="p-3 text-center">Qty</th>
-                            <th className="p-3 text-right">Unit Price</th>
-                            <th className="p-3 text-right text-red-500">Refund</th>
-                            <th className="p-3">Reason</th>
-                            <th className="p-3 text-center">Payment</th>
-                            <th className="p-3 text-right">Receipt</th>
+                            <th className="p-3 whitespace-nowrap">Date &amp; Time</th>
+                            <th className="p-3 whitespace-nowrap">Return #</th>
+                            <th className="p-3 whitespace-nowrap">Orig Bill</th>
+                            <th className="p-3 max-w-[140px]">Customer</th>
+                            <th className="p-3 max-w-[170px]">Item Name</th>
+                            <th className="p-3 text-center whitespace-nowrap">Qty</th>
+                            <th className="p-3 text-right whitespace-nowrap">Unit Price</th>
+                            <th className="p-3 text-right text-red-500 whitespace-nowrap">Refund</th>
+                            <th className="p-3 whitespace-nowrap">Reason</th>
+                            <th className="p-3 text-center whitespace-nowrap">Payment</th>
+                            <th className="p-3 text-right whitespace-nowrap">Receipt</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[var(--border-subtle)]">
@@ -2994,8 +3067,8 @@ export function CustomerReturnsModal({
                                 <td className="p-3 font-mono text-[var(--text-secondary)] whitespace-nowrap text-[11px]">
                                   {row.original_bill_number}
                                 </td>
-                                <td className="p-3 whitespace-nowrap">
-                                  <span className="font-bold text-[var(--text-primary)] block">
+                                <td className="p-3 max-w-[140px]">
+                                  <span className="font-bold text-[var(--text-primary)] block truncate" title={row.customer_name || "Walk-In"}>
                                     {row.customer_name || "Walk-In"}
                                   </span>
                                   {row.customer_phone && (
@@ -3004,12 +3077,12 @@ export function CustomerReturnsModal({
                                     </span>
                                   )}
                                 </td>
-                                <td className="p-3">
-                                  <span className="font-bold text-[var(--text-primary)] block">
+                                <td className="p-3 max-w-[170px]">
+                                  <span className="font-bold text-[var(--text-primary)] block leading-tight break-words">
                                     {row.item_name}
                                   </span>
                                   {row.category_name && (
-                                    <span className="text-[10px] text-[var(--text-muted)] block">
+                                    <span className="text-[10px] text-[var(--text-muted)] block mt-0.5">
                                       {row.category_name}
                                     </span>
                                   )}

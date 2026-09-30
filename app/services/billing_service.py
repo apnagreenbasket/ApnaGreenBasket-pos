@@ -1702,6 +1702,7 @@ async def process_customer_return(
         credit_awarded=data.record_credit,
         credit_cashed_out=data.credit_cashed_out,
         customer_balance=customer.credit_balance if customer else None,
+        created_by_staff_id=_get_user_id(staff_user) if staff_user else None,
     )
     db.add(customer_return_rec)
     

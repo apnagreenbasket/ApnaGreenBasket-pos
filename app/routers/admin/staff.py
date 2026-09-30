@@ -8,6 +8,7 @@ from __future__ import annotations
 import math
 import uuid
 from datetime import datetime
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
@@ -36,15 +37,22 @@ from app.schemas.staff import (
     StaffLoginResponse,
     StaffPinLoginRequest,
     StaffPinSwitchRequest,
+    StaffPunchInRequest,
     StaffPunchOutRequest,
+    StaffPunchSessionItem,
     StaffPunchStatusResponse,
     StaffResponse,
     StaffUpdate,
+    ShiftFinancialSummary,
 )
 from app.services.staff_punch_service import (
     MAX_SHIFT_DURATION_SECONDS,
+    calculate_shift_financials,
+    format_duration,
     get_active_punch_session,
+    get_live_drawer_balance,
     is_role_exempt,
+    list_shift_sessions,
     punch_in_staff,
     punch_out_staff,
 )
@@ -606,8 +614,10 @@ async def get_punch_status_endpoint(
     current_user: AuthenticatedUser,
     db: DBSession,
 ):
-    """Fetch current shift punch status for the authenticated user."""
+    """Fetch current shift punch status and live shift collection for the authenticated user."""
     is_exempt = is_role_exempt(current_user.role)
+    drawer_balance = await get_live_drawer_balance(db, current_user.outlet_id) if current_user.outlet_id else Decimal("0.00")
+
     if is_exempt or not current_user.outlet_id:
         return StaffPunchStatusResponse(
             is_exempt=is_exempt,
@@ -616,6 +626,8 @@ async def get_punch_status_endpoint(
             punch_in_at=None,
             elapsed_seconds=0,
             max_shift_seconds=MAX_SHIFT_DURATION_SECONDS,
+            opening_cash=Decimal("0.00"),
+            current_drawer_balance=drawer_balance,
         )
 
     session = await get_active_punch_session(db, current_user.outlet_id, current_user.user_id)
@@ -627,12 +639,16 @@ async def get_punch_status_endpoint(
             punch_in_at=None,
             elapsed_seconds=0,
             max_shift_seconds=MAX_SHIFT_DURATION_SECONDS,
+            opening_cash=Decimal("0.00"),
+            current_drawer_balance=drawer_balance,
         )
 
     from app.core.datetime_utils import utc_now, ensure_naive_utc
     now = utc_now()
     punch_in_naive = ensure_naive_utc(session.punch_in_at)
     elapsed = max(0, int((now - punch_in_naive).total_seconds()))
+
+    stats = await calculate_shift_financials(db, session)
 
     return StaffPunchStatusResponse(
         is_exempt=False,
@@ -641,6 +657,14 @@ async def get_punch_status_endpoint(
         punch_in_at=session.punch_in_at,
         elapsed_seconds=elapsed,
         max_shift_seconds=MAX_SHIFT_DURATION_SECONDS,
+        opening_cash=session.opening_cash or Decimal("0.00"),
+        current_drawer_balance=drawer_balance,
+        live_bills_count=stats["total_bills_count"],
+        live_sales_amount=stats["total_sales_amount"],
+        live_cash_collected=stats["cash_collected"],
+        live_upi_collected=stats["upi_collected"],
+        live_returns_cash=stats["returns_refund_cash"],
+        live_expected_drawer_cash=stats["expected_cash_in_drawer"],
     )
 
 
@@ -648,15 +672,21 @@ async def get_punch_status_endpoint(
 async def punch_in_endpoint(
     current_user: AuthenticatedUser,
     db: DBSession,
+    data: StaffPunchInRequest | None = None,
 ):
-    """Punch in authenticated staff member for a new shift."""
+    """Punch in authenticated staff member for a new shift with optional opening cash float."""
     if not current_user.outlet_id:
         raise HTTPException(status_code=400, detail="Active outlet session required to punch in")
 
     staff_user = await db.get(User, current_user.user_id)
     staff_name = staff_user.name if staff_user and staff_user.name else "Team Member"
 
-    session = await punch_in_staff(db, current_user.outlet_id, current_user.user_id, staff_name)
+    opening_cash = data.opening_cash if data else None
+    session = await punch_in_staff(
+        db, current_user.outlet_id, current_user.user_id, staff_name, opening_cash=opening_cash
+    )
+
+    drawer_balance = await get_live_drawer_balance(db, current_user.outlet_id)
     from app.core.datetime_utils import utc_now, ensure_naive_utc
     now = utc_now()
     punch_in_naive = ensure_naive_utc(session.punch_in_at)
@@ -669,6 +699,14 @@ async def punch_in_endpoint(
         punch_in_at=session.punch_in_at,
         elapsed_seconds=elapsed,
         max_shift_seconds=MAX_SHIFT_DURATION_SECONDS,
+        opening_cash=session.opening_cash or Decimal("0.00"),
+        current_drawer_balance=drawer_balance,
+        live_bills_count=0,
+        live_sales_amount=Decimal("0.00"),
+        live_cash_collected=Decimal("0.00"),
+        live_upi_collected=Decimal("0.00"),
+        live_returns_cash=Decimal("0.00"),
+        live_expected_drawer_cash=session.opening_cash or Decimal("0.00"),
     )
 
 
@@ -678,16 +716,24 @@ async def punch_out_endpoint(
     current_user: AuthenticatedUser,
     db: DBSession,
 ):
-    """Punch out authenticated staff member, ending their active shift."""
+    """Punch out authenticated staff member, ending their active shift with settlement."""
     if not current_user.outlet_id:
         raise HTTPException(status_code=400, detail="Active outlet session required to punch out")
 
     staff_user = await db.get(User, current_user.user_id)
     staff_name = staff_user.name if staff_user and staff_user.name else "Team Member"
 
-    session, duration_str = await punch_out_staff(
-        db, current_user.outlet_id, current_user.user_id, staff_name, data.notes
+    session, duration_str, stats = await punch_out_staff(
+        db,
+        current_user.outlet_id,
+        current_user.user_id,
+        staff_name,
+        notes=data.notes,
+        actual_cash_handed_over=data.actual_cash_handed_over,
+        closing_notes=data.closing_notes,
     )
+
+    drawer_balance = await get_live_drawer_balance(db, current_user.outlet_id)
 
     return StaffPunchStatusResponse(
         is_exempt=is_role_exempt(current_user.role),
@@ -696,5 +742,133 @@ async def punch_out_endpoint(
         punch_in_at=None,
         elapsed_seconds=0,
         max_shift_seconds=MAX_SHIFT_DURATION_SECONDS,
+        opening_cash=Decimal("0.00"),
+        current_drawer_balance=drawer_balance,
     )
+
+
+@router.get("/punch/live-summary", response_model=ShiftFinancialSummary)
+async def get_live_shift_summary_endpoint(
+    current_user: AuthenticatedUser,
+    db: DBSession,
+    session_id: uuid.UUID | None = Query(None),
+):
+    """Get real-time live financial summary of current active shift or specific session."""
+    if not current_user.outlet_id:
+        raise HTTPException(status_code=400, detail="Active outlet session required")
+
+    session = None
+    if session_id:
+        session = await db.get(StaffPunchSession, session_id)
+        if session and session.outlet_id != current_user.outlet_id:
+            raise HTTPException(status_code=403, detail="Access denied to session")
+    else:
+        session = await get_active_punch_session(db, current_user.outlet_id, current_user.user_id)
+
+    if not session:
+        raise HTTPException(status_code=404, detail="No active shift session found")
+
+    staff_user = await db.get(User, session.staff_id)
+    staff_name = staff_user.name if staff_user and staff_user.name else "Team Member"
+    staff_role = staff_user.role.value if staff_user and staff_user.role else "STAFF"
+
+    stats = await calculate_shift_financials(db, session)
+    from app.core.datetime_utils import utc_now, ensure_naive_utc
+    now = utc_now()
+    punch_in_naive = ensure_naive_utc(session.punch_in_at)
+    elapsed = max(0, int((now - punch_in_naive).total_seconds()))
+
+    expected = stats["expected_cash_in_drawer"]
+    actual = session.actual_cash_handed_over if session.status == "SETTLED" else expected
+    diff = session.cash_difference if session.status == "SETTLED" else Decimal("0.00")
+
+    return ShiftFinancialSummary(
+        session_id=session.id,
+        staff_id=session.staff_id,
+        staff_name=staff_name,
+        staff_role=staff_role,
+        punch_in_at=session.punch_in_at,
+        punch_out_at=session.punch_out_at,
+        duration_seconds=session.duration_seconds or elapsed,
+        duration_formatted=format_duration(session.duration_seconds or elapsed),
+        opening_cash=session.opening_cash or Decimal("0.00"),
+        total_bills_count=stats["total_bills_count"],
+        total_sales_amount=stats["total_sales_amount"],
+        cash_collected=stats["cash_collected"],
+        upi_collected=stats["upi_collected"],
+        card_collected=stats["card_collected"],
+        returns_refund_cash=stats["returns_refund_cash"],
+        expected_cash_in_drawer=expected,
+        actual_cash_handed_over=actual,
+        cash_difference=diff,
+        status=session.status or "OPEN",
+        notes=session.notes,
+    )
+
+
+@router.get("/punch/sessions", response_model=list[StaffPunchSessionItem])
+async def list_shift_sessions_endpoint(
+    current_user: AuthenticatedUser,
+    db: DBSession,
+    staff_id: uuid.UUID | None = Query(None),
+    start_date: str | None = Query(None),
+    end_date: str | None = Query(None),
+    status: str | None = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+):
+    """List historical shift sessions with full collection, drawer tally, and handover records."""
+    if not current_user.outlet_id:
+        raise HTTPException(status_code=400, detail="Active outlet session required")
+
+    # Non-exempt staff can only view their own shifts
+    target_staff_id = staff_id
+    if not is_role_exempt(current_user.role):
+        target_staff_id = current_user.user_id
+
+    sessions = await list_shift_sessions(
+        db=db,
+        outlet_id=current_user.outlet_id,
+        staff_id=target_staff_id,
+        start_date=start_date,
+        end_date=end_date,
+        status=status,
+        limit=limit,
+    )
+
+    items: list[StaffPunchSessionItem] = []
+    for s in sessions:
+        staff_name = s.staff.name if s.staff and s.staff.name else "Staff Member"
+        staff_email = s.staff.email if s.staff else None
+        staff_role = s.staff.role.value if s.staff and s.staff.role else "STAFF"
+        dur_str = format_duration(s.duration_seconds) if s.duration_seconds else None
+
+        items.append(
+            StaffPunchSessionItem(
+                id=s.id,
+                staff_id=s.staff_id,
+                staff_name=staff_name,
+                staff_email=staff_email,
+                staff_role=staff_role,
+                punch_in_at=s.punch_in_at,
+                punch_out_at=s.punch_out_at,
+                duration_seconds=s.duration_seconds,
+                duration_formatted=dur_str,
+                opening_cash=s.opening_cash or Decimal("0.00"),
+                total_bills_count=s.total_bills_count or 0,
+                total_sales_amount=s.total_sales_amount or Decimal("0.00"),
+                cash_collected=s.cash_collected or Decimal("0.00"),
+                upi_collected=s.upi_collected or Decimal("0.00"),
+                card_collected=s.card_collected or Decimal("0.00"),
+                returns_refund_cash=s.returns_refund_cash or Decimal("0.00"),
+                expected_cash_in_drawer=s.expected_cash_in_drawer or Decimal("0.00"),
+                actual_cash_handed_over=s.actual_cash_handed_over or Decimal("0.00"),
+                cash_difference=s.cash_difference or Decimal("0.00"),
+                status=s.status or "SETTLED",
+                auto_punched_out=s.auto_punched_out or False,
+                notes=s.notes,
+                created_at=s.created_at,
+            )
+        )
+
+    return items
 

@@ -231,3 +231,115 @@ async def test_shift_scoped_billing_isolation(client, db_session: AsyncSession):
     search_bills = resp_search.json()
     assert len(search_bills) == 1
     assert search_bills[0]["basket_number"] == "B-OLD"
+
+
+@pytest.mark.asyncio
+async def test_shift_handover_reconciliation_and_history(client, db_session: AsyncSession):
+    """
+    Test starting drawer cash, sales collection (cash & UPI), punch-out handover reconciliation,
+    and querying shift sessions history.
+    """
+    db = db_session
+    outlet_id = uuid.uuid4()
+    outlet = Outlet(
+        id=outlet_id,
+        name="Handover Test Outlet",
+        slug=f"handover-outlet-{uuid.uuid4().hex[:6]}",
+        payment_mode=PaymentModeEnum.PAY_AT_COUNTER,
+    )
+    db.add(outlet)
+
+    cashier = User(
+        id=uuid.uuid4(),
+        outlet_id=outlet_id,
+        name="Rahul Cashier",
+        email="rahul@handover.com",
+        role=RoleEnum.CASHIER,
+        password_hash=hash_password("pw123"),
+        status="active",
+    )
+    db.add(cashier)
+    await db.commit()
+
+    token = create_access_token(user_id=cashier.id, outlet_id=outlet_id, role=cashier.role.value)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # 1. Punch In with ₹100 starting drawer cash
+    p_in = await client.post("/api/staff/punch/in", headers=headers, json={"opening_cash": 100.0})
+    assert p_in.status_code == 200
+    p_in_data = p_in.json()
+    assert p_in_data["is_punched_in"] is True
+    assert float(p_in_data["opening_cash"]) == 100.0
+
+    # 2. Cashier generates 2 bills:
+    #    Bill 1: ₹500 Cash
+    #    Bill 2: ₹500 UPI
+    now = ensure_naive_utc(datetime.utcnow() + timedelta(seconds=1))
+    order_cash = Order(
+        id=uuid.uuid4(),
+        outlet_id=outlet_id,
+        basket_number="B-001",
+        created_by_staff_id=cashier.id,
+        status=OrderStatusEnum.PAID,
+        payment_method="CASH",
+        cash_amount=500.0,
+        total_amount=500.0,
+        created_at=now,
+        updated_at=now,
+    )
+    order_upi = Order(
+        id=uuid.uuid4(),
+        outlet_id=outlet_id,
+        basket_number="B-002",
+        created_by_staff_id=cashier.id,
+        status=OrderStatusEnum.PAID,
+        payment_method="UPI",
+        upi_amount=500.0,
+        total_amount=500.0,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add_all([order_cash, order_upi])
+    await db.commit()
+
+    # 3. Check live summary during active shift
+    live_res = await client.get("/api/staff/punch/live-summary", headers=headers)
+    assert live_res.status_code == 200
+    live_data = live_res.json()
+    assert live_data["total_bills_count"] == 2
+    assert float(live_data["total_sales_amount"]) == 1000.0
+    assert float(live_data["cash_collected"]) == 500.0
+    assert float(live_data["upi_collected"]) == 500.0
+    assert float(live_data["opening_cash"]) == 100.0
+    # Expected in drawer: ₹100 opening + ₹500 cash sales = ₹600!
+    assert float(live_data["expected_cash_in_drawer"]) == 600.0
+
+    # 4. Punch Out and hand over ₹600 physical cash to owner
+    p_out = await client.post(
+        "/api/staff/punch/out",
+        headers=headers,
+        json={
+            "actual_cash_handed_over": 600.0,
+            "notes": "Handed over to owner Rahul",
+        },
+    )
+    assert p_out.status_code == 200
+    assert p_out.json()["is_punched_in"] is False
+
+    # 5. Check shift history sessions endpoint
+    sessions_res = await client.get("/api/staff/punch/sessions", headers=headers)
+    assert sessions_res.status_code == 200
+    sessions = sessions_res.json()
+    assert len(sessions) == 1
+    shift = sessions[0]
+    assert shift["staff_name"] == "Rahul Cashier"
+    assert shift["status"] == "SETTLED"
+    assert float(shift["opening_cash"]) == 100.0
+    assert float(shift["total_sales_amount"]) == 1000.0
+    assert float(shift["cash_collected"]) == 500.0
+    assert float(shift["upi_collected"]) == 500.0
+    assert float(shift["expected_cash_in_drawer"]) == 600.0
+    assert float(shift["actual_cash_handed_over"]) == 600.0
+    assert float(shift["cash_difference"]) == 0.0
+    assert shift["notes"] == "Handed over to owner Rahul"
+

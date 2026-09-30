@@ -99,40 +99,60 @@ export function useStaffPunch({
     }
   }, [accessToken, userRole, isAdminRole, fetchPunchStatus]);
 
-  const handlePunchIn = useCallback(async () => {
-    setIsPunchingIn(true);
-    try {
-      const res = await apiRequest<StaffPunchStatus>("/api/staff/punch/in", {
-        method: "POST",
-      });
-      setPunchStatus(res);
-      setLiveShiftSeconds(res.elapsed_seconds || 0);
-      setPunchInModalOpen(false);
-      setNotice("Shift started. Punched in successfully.");
+  const handlePunchIn = useCallback(
+    async (openingCash?: number) => {
+      setIsPunchingIn(true);
       try {
-        onReloadDashboardData?.();
-      } catch (reloadErr) {
-        console.warn("Failed to reload dashboard after punch in:", reloadErr);
+        const body = openingCash !== undefined ? { opening_cash: openingCash } : {};
+        const res = await apiRequest<StaffPunchStatus>("/api/staff/punch/in", {
+          method: "POST",
+          body: JSON.stringify(body),
+        });
+        setPunchStatus(res);
+        setLiveShiftSeconds(res.elapsed_seconds || 0);
+        setPunchInModalOpen(false);
+        setNotice("Shift started. Punched in successfully.");
+        try {
+          onReloadDashboardData?.();
+        } catch (reloadErr) {
+          console.warn("Failed to reload dashboard after punch in:", reloadErr);
+        }
+      } catch (err: any) {
+        setError(err instanceof Error ? err.message : "Failed to punch in.");
+      } finally {
+        setIsPunchingIn(false);
       }
-    } catch (err: any) {
-      setError(err instanceof Error ? err.message : "Failed to punch in.");
-    } finally {
-      setIsPunchingIn(false);
-    }
-  }, [apiRequest, setNotice, setError, onReloadDashboardData]);
+    },
+    [apiRequest, setNotice, setError, onReloadDashboardData]
+  );
+
+  const fetchLiveShiftSummary = useCallback(
+    async (sessionId?: string) => {
+      const url = sessionId
+        ? `/api/staff/punch/live-summary?session_id=${sessionId}`
+        : "/api/staff/punch/live-summary";
+      return await apiRequest<import("../adminTypes").ShiftFinancialSummary>(url);
+    },
+    [apiRequest]
+  );
 
   const handlePunchOut = useCallback(
-    async (notes?: string) => {
+    async (actualCashHandedOver?: number, notes?: string, closingNotes?: string) => {
       setIsPunchingOut(true);
       try {
+        const payload: Record<string, any> = {};
+        if (notes) payload.notes = notes;
+        if (actualCashHandedOver !== undefined) payload.actual_cash_handed_over = actualCashHandedOver;
+        if (closingNotes) payload.closing_notes = closingNotes;
+
         const res = await apiRequest<StaffPunchStatus>("/api/staff/punch/out", {
           method: "POST",
-          body: JSON.stringify(notes ? { notes } : {}),
+          body: JSON.stringify(payload),
         });
         setPunchStatus(res);
         setLiveShiftSeconds(0);
         setPunchOutModalOpen(false);
-        setNotice("Shift ended. Punched out successfully.");
+        setNotice("Shift ended & settled. Punched out successfully.");
         try {
           onReloadDashboardData?.();
         } catch (reloadErr) {
@@ -160,6 +180,7 @@ export function useStaffPunch({
     setPunchOutModalOpen,
     liveShiftSeconds,
     fetchPunchStatus,
+    fetchLiveShiftSummary,
     handlePunchIn,
     handlePunchOut,
   };

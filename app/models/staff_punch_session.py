@@ -6,9 +6,10 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -48,6 +49,39 @@ class StaffPunchSession(Base):
     )
     duration_seconds: Mapped[int | None] = mapped_column(
         Integer, nullable=True
+    )
+    opening_cash: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), nullable=False, default=Decimal("0.00"), server_default="0.00"
+    )
+    total_bills_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    total_sales_amount: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), nullable=False, default=Decimal("0.00"), server_default="0.00"
+    )
+    cash_collected: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), nullable=False, default=Decimal("0.00"), server_default="0.00"
+    )
+    upi_collected: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), nullable=False, default=Decimal("0.00"), server_default="0.00"
+    )
+    card_collected: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), nullable=False, default=Decimal("0.00"), server_default="0.00"
+    )
+    returns_refund_cash: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), nullable=False, default=Decimal("0.00"), server_default="0.00"
+    )
+    expected_cash_in_drawer: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), nullable=False, default=Decimal("0.00"), server_default="0.00"
+    )
+    actual_cash_handed_over: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), nullable=False, default=Decimal("0.00"), server_default="0.00"
+    )
+    cash_difference: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), nullable=False, default=Decimal("0.00"), server_default="0.00"
+    )
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="OPEN", server_default="OPEN"
     )
     notes: Mapped[str | None] = mapped_column(
         Text, nullable=True

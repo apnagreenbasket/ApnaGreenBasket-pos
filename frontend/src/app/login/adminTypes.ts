@@ -39,6 +39,63 @@ export interface StaffPunchStatus {
   punch_in_at?: string | null;
   elapsed_seconds: number;
   max_shift_seconds: number;
+  opening_cash?: number;
+  current_drawer_balance?: number;
+  live_bills_count?: number;
+  live_sales_amount?: number;
+  live_cash_collected?: number;
+  live_upi_collected?: number;
+  live_returns_cash?: number;
+  live_expected_drawer_cash?: number;
+}
+
+export interface ShiftFinancialSummary {
+  session_id: string;
+  staff_id: string;
+  staff_name: string;
+  staff_role: string;
+  punch_in_at: string;
+  punch_out_at?: string | null;
+  duration_seconds: number;
+  duration_formatted: string;
+  opening_cash: number;
+  total_bills_count: number;
+  total_sales_amount: number;
+  cash_collected: number;
+  upi_collected: number;
+  card_collected: number;
+  returns_refund_cash: number;
+  expected_cash_in_drawer: number;
+  actual_cash_handed_over: number;
+  cash_difference: number;
+  status: string;
+  notes?: string | null;
+}
+
+export interface StaffPunchSessionItem {
+  id: string;
+  staff_id: string;
+  staff_name: string;
+  staff_email?: string | null;
+  staff_role: string;
+  punch_in_at: string;
+  punch_out_at?: string | null;
+  duration_seconds?: number | null;
+  duration_formatted?: string | null;
+  opening_cash: number;
+  total_bills_count: number;
+  total_sales_amount: number;
+  cash_collected: number;
+  upi_collected: number;
+  card_collected: number;
+  returns_refund_cash: number;
+  expected_cash_in_drawer: number;
+  actual_cash_handed_over: number;
+  cash_difference: number;
+  status: string;
+  auto_punched_out: boolean;
+  notes?: string | null;
+  created_at: string;
 }
 
 export interface LoginResponse {

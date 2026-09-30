@@ -713,6 +713,7 @@ export default function AdminDashboardPage() {
             auditTotalPages={staffState.auditTotalPages}
             currentUserRole={userRole}
             currentUserId={currentUserId || staffState.activeStaff?.id || null}
+            apiRequest={apiRequest}
             loadStaffMembers={staffState.loadStaffMembers}
             loadStaffAuditLogs={staffState.loadStaffAuditLogs}
             onDeactivateStaffMember={staffState.onDeactivateStaffMember}
@@ -1054,6 +1055,7 @@ export default function AdminDashboardPage() {
         isOpen={punchState.punchInModalOpen}
         activeStaff={staffState.activeStaff}
         userRole={userRole}
+        currentDrawerBalance={punchState.punchStatus?.current_drawer_balance ?? 0}
         isPunchingIn={punchState.isPunchingIn}
         onPunchIn={punchState.handlePunchIn}
         onSwitchUser={() => {
@@ -1072,6 +1074,8 @@ export default function AdminDashboardPage() {
         punchInAt={punchState.punchStatus?.punch_in_at}
         elapsedSeconds={punchState.liveShiftSeconds}
         isPunchingOut={punchState.isPunchingOut}
+        fetchShiftSummary={punchState.fetchLiveShiftSummary}
+        outlet={restaurant}
         onConfirmPunchOut={punchState.handlePunchOut}
       />
     </div>

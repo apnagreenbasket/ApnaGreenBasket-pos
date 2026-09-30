@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from decimal import Decimal
 
 from typing import Any
 
@@ -150,6 +151,10 @@ class StaffAuditLogPageResponse(BaseResponse):
     total_pages: int
 
 
+class StaffPunchInRequest(StrictSchema):
+    opening_cash: Decimal | None = None
+
+
 class StaffPunchStatusResponse(BaseResponse):
     is_exempt: bool
     is_punched_in: bool
@@ -157,8 +162,67 @@ class StaffPunchStatusResponse(BaseResponse):
     punch_in_at: datetime | None = None
     elapsed_seconds: int = 0
     max_shift_seconds: int = 43200
+    opening_cash: Decimal = Decimal("0.00")
+    current_drawer_balance: Decimal = Decimal("0.00")
+    live_bills_count: int = 0
+    live_sales_amount: Decimal = Decimal("0.00")
+    live_cash_collected: Decimal = Decimal("0.00")
+    live_upi_collected: Decimal = Decimal("0.00")
+    live_returns_cash: Decimal = Decimal("0.00")
+    live_expected_drawer_cash: Decimal = Decimal("0.00")
 
 
 class StaffPunchOutRequest(StrictSchema):
     notes: str | None = None
+    actual_cash_handed_over: Decimal | None = None
+    closing_notes: str | None = None
+
+
+class ShiftFinancialSummary(BaseResponse):
+    session_id: uuid.UUID
+    staff_id: uuid.UUID
+    staff_name: str
+    staff_role: str
+    punch_in_at: datetime
+    punch_out_at: datetime | None = None
+    duration_seconds: int = 0
+    duration_formatted: str = "0s"
+    opening_cash: Decimal = Decimal("0.00")
+    total_bills_count: int = 0
+    total_sales_amount: Decimal = Decimal("0.00")
+    cash_collected: Decimal = Decimal("0.00")
+    upi_collected: Decimal = Decimal("0.00")
+    card_collected: Decimal = Decimal("0.00")
+    returns_refund_cash: Decimal = Decimal("0.00")
+    expected_cash_in_drawer: Decimal = Decimal("0.00")
+    actual_cash_handed_over: Decimal = Decimal("0.00")
+    cash_difference: Decimal = Decimal("0.00")
+    status: str = "OPEN"
+    notes: str | None = None
+
+
+class StaffPunchSessionItem(BaseResponse):
+    id: uuid.UUID
+    staff_id: uuid.UUID
+    staff_name: str
+    staff_email: str | None = None
+    staff_role: str
+    punch_in_at: datetime
+    punch_out_at: datetime | None = None
+    duration_seconds: int | None = None
+    duration_formatted: str | None = None
+    opening_cash: Decimal = Decimal("0.00")
+    total_bills_count: int = 0
+    total_sales_amount: Decimal = Decimal("0.00")
+    cash_collected: Decimal = Decimal("0.00")
+    upi_collected: Decimal = Decimal("0.00")
+    card_collected: Decimal = Decimal("0.00")
+    returns_refund_cash: Decimal = Decimal("0.00")
+    expected_cash_in_drawer: Decimal = Decimal("0.00")
+    actual_cash_handed_over: Decimal = Decimal("0.00")
+    cash_difference: Decimal = Decimal("0.00")
+    status: str = "OPEN"
+    auto_punched_out: bool = False
+    notes: str | None = None
+    created_at: datetime
 

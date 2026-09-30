@@ -137,9 +137,9 @@ export async function generateReceiptPDF(
   const [logoBase64, qrDataUrl, playStoreBase64, appStoreBase64] = await Promise.all([
     logoUrl
       ? Promise.race([
-          fetchImageAsBase64(logoUrl),
-          new Promise<string>((_, reject) => setTimeout(() => reject("Timeout"), 2500))
-        ]).catch(() => null)
+        fetchImageAsBase64(logoUrl),
+        new Promise<string>((_, reject) => setTimeout(() => reject("Timeout"), 2500))
+      ]).catch(() => null)
       : Promise.resolve(null),
     billQrUrlRaw
       ? QRCode.toDataURL(billQrUrlRaw, { margin: 1, width: 80 }).catch(() => null)
@@ -211,527 +211,527 @@ export async function generateReceiptPDF(
       }
     }
 
-  const rawStoreName =
-    getOutletField("name") ||
-    (restaurantName && restaurantName !== "Outlet Receipt" && restaurantName !== "ApnaGreen Basket" && restaurantName !== "APNAGREEN BASKET" ? restaurantName : null) ||
-    "ApnaGreen Basket";
-  const storeName = rawStoreName;
+    const rawStoreName =
+      getOutletField("name") ||
+      (restaurantName && restaurantName !== "Outlet Receipt" && restaurantName !== "ApnaGreen Basket" && restaurantName !== "APNAGREEN BASKET" ? restaurantName : null) ||
+      "ApnaGreen Basket";
+    const storeName = rawStoreName;
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.setTextColor(0, 0, 0);
-  doc.text(storeName, pageWidth / 2, y, { align: "center", maxWidth: contentWidth });
-
-  y += 4;
-  const addressStr = getOutletField("address");
-  if (addressStr) {
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
-    doc.text(addressStr, pageWidth / 2, y, { align: "center", maxWidth: contentWidth });
-    y += 3.5;
-  }
-  
-  const billQrUrlRaw = getOutletField("bill_qr_url");
-  if (billQrUrlRaw) {
-    try {
-      const parsedUrl = new URL(billQrUrlRaw);
+    doc.setFontSize(11);
+    doc.setTextColor(0, 0, 0);
+    doc.text(storeName, pageWidth / 2, y, { align: "center", maxWidth: contentWidth });
+
+    y += 4;
+    const addressStr = getOutletField("address");
+    if (addressStr) {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(7);
-      doc.text(parsedUrl.hostname, pageWidth / 2, y, { align: "center" });
+      doc.text(addressStr, pageWidth / 2, y, { align: "center", maxWidth: contentWidth });
       y += 3.5;
-    } catch {
-      // Ignore if not a valid URL
     }
-  }
 
-  const fssai = getOutletField("fssai_no");
-  if (fssai) {
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(6.5);
-    doc.text(`FSSAI Reg No: ${fssai}`, pageWidth / 2, y, { align: "center" });
-    y += 3.5;
-  }
+    const billQrUrlRaw = getOutletField("bill_qr_url");
+    if (billQrUrlRaw) {
+      try {
+        const parsedUrl = new URL(billQrUrlRaw);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(7);
+        doc.text(parsedUrl.hostname, pageWidth / 2, y, { align: "center" });
+        y += 3.5;
+      } catch {
+        // Ignore if not a valid URL
+      }
+    }
 
-  const gstin = getOutletField("gstin") || "01AAFCB7044K1ZV";
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(7);
-  doc.text(`GSTIN: ${gstin}`, pageWidth / 2, y, { align: "center" });
-  y += 3.5;
-  
-  const phoneStr = getOutletField("phone");
-  if (phoneStr) {
+    const fssai = getOutletField("fssai_no");
+    if (fssai) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6.5);
+      doc.text(`FSSAI Reg No: ${fssai}`, pageWidth / 2, y, { align: "center" });
+      y += 3.5;
+    }
+
+    const gstin = getOutletField("gstin") || "01AAFCB7044K1ZV";
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7);
-    doc.text(`Phone: ${phoneStr}`, pageWidth / 2, y, { align: "center" });
+    doc.text(`GSTIN: ${gstin}`, pageWidth / 2, y, { align: "center" });
     y += 3.5;
-  }
-  
-  const emailStr = getOutletField("email");
-  if (emailStr) {
+
+    const phoneStr = getOutletField("phone");
+    if (phoneStr) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7);
+      doc.text(`Phone: ${phoneStr}`, pageWidth / 2, y, { align: "center" });
+      y += 3.5;
+    }
+
+    const emailStr = getOutletField("email");
+    if (emailStr) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7);
+      doc.text(`Email: ${emailStr}`, pageWidth / 2, y, { align: "center", maxWidth: contentWidth });
+      y += 3.5;
+    }
+
+    y -= 1; // Adjust spacing before dashed line
+    drawDashedLine(y);
+
+    // 2. CASH MEMO TITLE & BILL METADATA (Grid Aligned)
+    y += 4;
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
-    doc.text(`Email: ${emailStr}`, pageWidth / 2, y, { align: "center", maxWidth: contentWidth });
-    y += 3.5;
-  }
+    doc.setFontSize(8.5);
+    doc.text("TAX INVOICE", pageWidth / 2, y, { align: "center" });
 
-  y -= 1; // Adjust spacing before dashed line
-  drawDashedLine(y);
-
-  // 2. CASH MEMO TITLE & BILL METADATA (Grid Aligned)
-  y += 4;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8.5);
-  doc.text("TAX INVOICE", pageWidth / 2, y, { align: "center" });
-
-  y += 4;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(7.5);
-
-  const invoiceNo = (order as any).invoice_no || (order as any).id?.slice(0, 8).toUpperCase() || "RECEIPT";
-  let orderDateStr = (order as any).date_time;
-  if (!orderDateStr && (order as any).created_at) {
-    const d = parseUTCDate((order as any).created_at);
-    const day = d.getDate().toString().padStart(2, '0');
-    const month = (d.getMonth() + 1).toString().padStart(2, '0');
-    const year = d.getFullYear();
-    const hours = d.getHours();
-    const minutes = d.getMinutes().toString().padStart(2, '0');
-    const ampm = hours >= 12 ? 'pm' : 'am';
-    const formattedHours = (hours % 12 || 12).toString().padStart(2, '0');
-    orderDateStr = `${day}/${month}/${year}, ${formattedHours}:${minutes} ${ampm}`;
-  }
-  
-  doc.text(`Bill No : #${invoiceNo}`, margin, y);
-  
-  y += 3.5;
-  doc.text(`Date    : ${orderDateStr || "N/A"}`, margin, y);
-
-  y += 3.5;
-  const guestName = (order as any).customer?.name || (order as any).customer_name || "Walk-In";
-  const guestPhone = (order as any).customer?.phone || (order as any).customer_phone;
-  const mobText = guestPhone ? `Mob: ${guestPhone}` : "";
-  const mobWidth = mobText ? doc.getTextWidth(mobText) : 0;
-  const availCustWidth = mobText ? Math.max(25, contentWidth - mobWidth - 2) : contentWidth;
-
-  const fullCustText = `Customer: ${guestName}`;
-  let custLines: string[];
-  if (!mobText) {
-    custLines = doc.splitTextToSize(fullCustText, contentWidth);
-  } else {
-    const lines1 = doc.splitTextToSize(fullCustText, availCustWidth);
-    if (lines1.length <= 1) {
-      custLines = lines1;
-    } else {
-      const firstLine = lines1[0];
-      const remainder = fullCustText.slice(firstLine.length).trim();
-      const restLines = doc.splitTextToSize(remainder, contentWidth);
-      custLines = [firstLine, ...restLines];
-    }
-  }
-
-  doc.text(custLines[0], margin, y);
-  if (mobText) {
-    doc.text(mobText, pageWidth - margin, y, { align: "right" });
-  }
-
-  for (let i = 1; i < custLines.length; i++) {
-    y += 3.5;
-    doc.text(custLines[i], margin, y);
-  }
-
-  const custGstin = (order as any).customer_gstin || (order as any).customer?.gstin;
-  const custLegalName = (order as any).customer_legal_name || (order as any).customer?.legal_name;
-  if (custGstin) {
-    y += 3.5;
-    doc.text(`GSTIN   : ${custGstin}`, margin, y);
-  }
-  if (custLegalName && custLegalName !== guestName) {
-    const legalLines = doc.splitTextToSize(`Legal   : ${custLegalName}`, contentWidth);
-    for (const line of legalLines) {
-      y += 3.5;
-      doc.text(line, margin, y);
-    }
-  }
-
-  const isInterstate = Boolean((order as any).is_interstate);
-  const placeOfSupply = (order as any).place_of_supply || getOutletField("place_of_supply");
-  if (placeOfSupply) {
-    const posLines = doc.splitTextToSize(`Place of Supply: ${placeOfSupply}${isInterstate ? " (Inter-State)" : ""}`, contentWidth);
-    for (const line of posLines) {
-      y += 3.5;
-      doc.text(line, margin, y);
-    }
-  } else if (isInterstate) {
-    y += 3.5;
-    doc.text(`Supply Type    : Inter-State (IGST)`, margin, y);
-  }
-
-  y += 2.5;
-  drawSolidLine(y);
-
-  // 3. ITEMIZED TABLE GRID (Consolidates identical items for single-line customer presentation)
-  const rawItems = ((order as any).items || []);
-  const consolidatedItems: any[] = [];
-  const itemConsolidationMap = new Map<string, any>();
-
-  for (const it of rawItems) {
-    const rawDishName =
-      it.item_name ||
-      menuItemsMap?.[it.menu_item_id]?.name ||
-      it.name ||
-      "Item";
-    // Strip internal cashier POS tags such as [Oversold Backorder] or Lot # from customer receipt
-    const cleanDishName = rawDishName
-      .replace(/\[Oversold Backorder\]/gi, "")
-      .replace(/\(Oversold\)/gi, "")
-      .replace(/Lot\s*#[A-Za-z0-9_-]+/gi, "")
-      .trim();
-
-    const price = parseFloat(String(it.unit_price || "0"));
-    const rawUnit =
-      it.selected_unit ||
-      it.unit ||
-      it.unit_label ||
-      menuItemsMap?.[it.menu_item_id]?.unit_label ||
-      menuItemsMap?.[it.menu_item_id]?.unit ||
-      "";
-    const cleanUnit = typeof rawUnit === "string" ? rawUnit.trim() : "";
-    const isComp = Boolean(it.is_complimentary);
-    const taxRate = parseFloat(String(it.tax_rate ?? it.item_tax_rate ?? menuItemsMap?.[it.menu_item_id]?.tax_rate ?? 0));
-    const mrpVal = it.mrp ? parseFloat(String(it.mrp)) : price;
-
-    // Merge key: identity of item + price + unit + complimentary + tax rate
-    const key = `${it.menu_item_id || cleanDishName}|${price.toFixed(2)}|${cleanUnit}|${isComp}|${taxRate.toFixed(2)}`;
-
-    if (itemConsolidationMap.has(key)) {
-      const existing = itemConsolidationMap.get(key);
-      const existingQty = parseFloat(String(existing.quantity || "0"));
-      const newQty = parseFloat(String(it.quantity || "0"));
-      existing.quantity = existingQty + newQty;
-      const itLineTotal = (it.line_total !== undefined && it.line_total !== null)
-        ? parseFloat(String(it.line_total))
-        : newQty * price;
-      existing.line_total = parseFloat(String(existing.line_total || "0")) + itLineTotal;
-      if (mrpVal > (existing.mrp || 0)) {
-        existing.mrp = mrpVal;
-      }
-    } else {
-      const itLineTotal = (it.line_total !== undefined && it.line_total !== null)
-        ? parseFloat(String(it.line_total))
-        : parseFloat(String(it.quantity || "0")) * price;
-      const copy = {
-        ...it,
-        item_name: cleanDishName,
-        quantity: parseFloat(String(it.quantity || "0")),
-        unit_price: price,
-        mrp: mrpVal,
-        selected_unit: cleanUnit,
-        line_total: itLineTotal,
-        tax_rate: taxRate,
-        is_complimentary: isComp,
-      };
-      itemConsolidationMap.set(key, copy);
-      consolidatedItems.push(copy);
-    }
-  }
-
-  const tableData = consolidatedItems.map((item: any, idx: number) => {
-    const dishName = item.item_name || `Item #${idx + 1}`;
-    const qtyVal = parseFloat(String(item.quantity || "0"));
-    const cleanUnit = item.selected_unit || "";
-    const qtyFormatted = qtyVal % 1 === 0 ? qtyVal.toFixed(0) : String(qtyVal);
-    const qtyStr = cleanUnit ? `${qtyFormatted} ${cleanUnit}` : qtyFormatted;
-    const price = parseFloat(String(item.unit_price || "0"));
-    const mrpVal = item.mrp ? parseFloat(String(item.mrp)) : price;
-    const lineTotal = (item.line_total !== undefined && item.line_total !== null) ? parseFloat(String(item.line_total)) : qtyVal * price;
-
-    return [
-      `${idx + 1}. ${dishName}`,
-      qtyStr,
-      `${mrpVal.toFixed(2)}`,
-      `${price.toFixed(2)}`,
-      `${lineTotal.toFixed(2)}`,
-    ];
-  });
-
-  autoTable(doc, {
-    startY: y + 1.5,
-    margin: { left: margin, right: margin },
-    head: [["#  Item", "Qty", "MRP", "Rate", "Amt"]],
-    body: tableData,
-    theme: "plain",
-    styles: {
-      font: "helvetica",
-      fontStyle: "bold",
-      fontSize: 7,
-      cellPadding: { top: 1, bottom: 1, left: 0, right: 0 },
-      textColor: [0, 0, 0],
-      lineWidth: 0,
-    },
-    headStyles: {
-      font: "helvetica",
-      fontStyle: "bold",
-      fontSize: 7,
-      textColor: [0, 0, 0],
-      fillColor: false,
-    },
-    columnStyles: {
-      0: { cellWidth: 20, halign: "left" },
-      1: { cellWidth: 11, halign: "center" },
-      2: { cellWidth: 11, halign: "right" },
-      3: { cellWidth: 11, halign: "right" },
-      4: { cellWidth: 11, halign: "right" },
-    },
-  });
-
-  const finalY = (doc as any).lastAutoTable.finalY + 2;
-  drawDashedLine(finalY);
-
-  // 4. TAX & FINANCIAL SUMMARY GRID (Structured User Format with Per-Item Catalog GST Referencing)
-  let summaryY = finalY + 4;
-  
-  const deliveryCharge = parseFloat(String((order as any).delivery_charge || 0));
-  const handlingCharge = parseFloat(String((order as any).handling_charge || 0));
-
-  let totalMrpVal = 0;
-  let totalSellingSubtotal = 0;
-
-  ((order as any).items || []).forEach((it: any) => {
-    const qty = parseFloat(String(it.quantity || "1"));
-    const price = parseFloat(String(it.unit_price || "0"));
-    const mrp = it.mrp ? parseFloat(String(it.mrp)) : price;
-    totalMrpVal += mrp * qty;
-    totalSellingSubtotal += price * qty;
-  });
-
-  const mrpSavings = Math.max(0, totalMrpVal - totalSellingSubtotal);
-
-  const discType = (order as any).discount_type;
-  const discVal = (order as any).discount_value ? parseFloat(String((order as any).discount_value)) : 0;
-
-  let extraDiscountRupees = 0;
-  let extraDiscountLabel = "Extra Discount";
-
-  if (discType === "PERCENT" && discVal > 0) {
-    extraDiscountRupees = totalSellingSubtotal * (discVal / 100);
-    extraDiscountLabel = `Extra Discount (${discVal}% OFF)`;
-  } else if (discType === "FLAT" && discVal > 0) {
-    extraDiscountRupees = discVal;
-    extraDiscountLabel = `Extra Discount (Flat Rs.${discVal})`;
-  } else if (discType === "COMPLIMENTARY_ITEMS" && discVal > 0) {
-    extraDiscountRupees = discVal;
-    extraDiscountLabel = `Extra Discount (Items)`;
-  } else if (discType === "COMPLIMENTARY") {
-    extraDiscountRupees = totalSellingSubtotal;
-    extraDiscountLabel = `Extra Discount (Complimentary)`;
-  }
-
-  const pointsRedeemed = (order as any).loyalty_points_redeemed || 0;
-  let loyaltyDiscountRupees = 0;
-  if (pointsRedeemed > 0) {
-    const rest = getOutletField("loyalty_redemption_tiers") ? {
-      loyalty_redemption_tiers: getOutletField("loyalty_redemption_tiers"),
-      loyalty_max_bill_percentage: getOutletField("loyalty_max_bill_percentage"),
-    } : (storeDetails || (order as any).restaurant || {});
-    
-    // We try to find the tier that gives the discount. Since we don't have the historical total balance here,
-    // we use the current balance from customer, or default to the highest tier that pointsRedeemed could fit in.
-    const currentBalance = (order as any).customer?.loyalty_points || pointsRedeemed; // Best effort fallback
-    const tiers: any[] = rest.loyalty_redemption_tiers || [];
-    const sortedTiers = [...tiers].sort((a, b) => b.min_points - a.min_points);
-    const applicableTier = sortedTiers.find(t => currentBalance >= t.min_points);
-    
-    const pointValue = applicableTier ? (applicableTier.discount_percentage / 100) : 0;
-    const maxBillPercentage = parseFloat(String(rest.loyalty_max_bill_percentage || "100.00"));
-    
-    const requestedDiscount = pointsRedeemed * pointValue;
-    const maxAllowedDiscount = (maxBillPercentage / 100) * totalSellingSubtotal;
-    loyaltyDiscountRupees = Math.min(requestedDiscount, maxAllowedDiscount);
-  }
-
-  const amountPayable = Math.max(0, totalSellingSubtotal - extraDiscountRupees);
-
-  const creditApplied = parseFloat(String((order as any).credit_applied || 0)) || 0;
-  const debitApplied = parseFloat(String((order as any).debit_applied || 0)) || 0;
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(7.5);
-  doc.setTextColor(0, 0, 0);
-
-  if (mrpSavings > 0 || extraDiscountRupees > 0) {
-    doc.text("Total MRP Value", margin, summaryY);
-    doc.text(`INR ${totalMrpVal.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
-    summaryY += 3.5;
-
-    if (mrpSavings > 0) {
-      doc.text("Product Discount", margin, summaryY);
-      doc.text(`- INR ${mrpSavings.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
-      summaryY += 3.5;
-    }
-
-    if (extraDiscountRupees > 0) {
-      doc.text(extraDiscountLabel, margin, summaryY);
-      doc.text(`- INR ${extraDiscountRupees.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
-      summaryY += 3.5;
-    }
-    
-    summaryY += 1;
-    drawDashedLine(summaryY);
-    summaryY += 4.5;
-  }
-
-  // Calculate ratio of actual paid amount to the taxable subtotal (handles FLAT/PERCENT)
-  let taxableSubtotal = totalSellingSubtotal;
-  if (discType === "COMPLIMENTARY_ITEMS" || discType === "COMPLIMENTARY") {
-    taxableSubtotal = amountPayable; // Paid items subtotal before bill-level discounts
-  }
-  const discountRatio = taxableSubtotal > 0 ? (amountPayable / taxableSubtotal) : 0;
-
-  const isInterstateOrder = Boolean((order as any).is_interstate);
-
-  interface HsnSummaryItem {
-    hsn: string;
-    rate: number;
-    base: number;
-    tax: number;
-  }
-  const hsnSummaryMap: Record<string, HsnSummaryItem> = {};
-
-  ((order as any).items || []).forEach((item: any) => {
-    if (item.is_complimentary === true || item.is_complimentary === 1 || item.is_complimentary === "true" || item.is_complimentary === "1") return;
-    const qtyVal = parseFloat(String(item.quantity || "0"));
-    const unitPrice = parseFloat(String(item.unit_price || "0"));
-    const itemLineTotal = (qtyVal * unitPrice) * discountRatio;
-
-    let itemTaxRate = 0;
-    if (item.tax_rate !== undefined && item.tax_rate !== null) {
-      itemTaxRate = parseFloat(String(item.tax_rate));
-    } else if (item.item_tax_rate !== undefined && item.item_tax_rate !== null) {
-      itemTaxRate = parseFloat(String(item.item_tax_rate));
-    } else if (menuItemsMap && item.menu_item_id && menuItemsMap[item.menu_item_id]?.tax_rate !== undefined && menuItemsMap[item.menu_item_id]?.tax_rate !== null) {
-      itemTaxRate = parseFloat(String(menuItemsMap[item.menu_item_id].tax_rate));
-    }
-    if (isNaN(itemTaxRate)) itemTaxRate = 0;
-
-    let itemHsn = (item as any).hsn_code || (menuItemsMap && item.menu_item_id && (menuItemsMap[item.menu_item_id] as any)?.hsn_code) || "-";
-
-    if (itemTaxRate >= 0) {
-      const base = itemLineTotal / (1 + (itemTaxRate / 100));
-      const taxAmount = itemLineTotal - base;
-
-      const groupKey = `${itemHsn}_${itemTaxRate}`;
-      if (!hsnSummaryMap[groupKey]) {
-        hsnSummaryMap[groupKey] = { hsn: itemHsn, rate: itemTaxRate, base: 0, tax: 0 };
-      }
-      hsnSummaryMap[groupKey].base += base;
-      hsnSummaryMap[groupKey].tax += taxAmount;
-    }
-  });
-
-  const hsnList = Object.values(hsnSummaryMap).sort((a, b) => a.hsn.localeCompare(b.hsn) || a.rate - b.rate);
-
-  // Subtotal & Final Bill Charges
-  const billAmount = amountPayable;
-  const totalBeforeRound = billAmount + deliveryCharge + handlingCharge;
-  
-  // ALWAYS enforce standard rounding to nearest integer for POS systems
-  const netTotal = Math.round(totalBeforeRound);
-  const roundOff = netTotal - totalBeforeRound;
-
-  const hasExtraLines = deliveryCharge > 0 || handlingCharge > 0 || Math.abs(roundOff) > 0.001 || extraDiscountRupees > 0 || loyaltyDiscountRupees > 0 || mrpSavings > 0;
-
-  if (hasExtraLines) {
+    y += 4;
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7.5);
-    doc.text("Bill Amount", margin, summaryY);
-    doc.text(`INR ${billAmount.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
-    summaryY += 3.8;
 
-    if (deliveryCharge > 0) {
-      doc.text("Delivery Charge", margin, summaryY);
-      doc.text(`INR ${deliveryCharge.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
-      summaryY += 3.5;
+    const invoiceNo = (order as any).invoice_no || (order as any).id?.slice(0, 8).toUpperCase() || "RECEIPT";
+    let orderDateStr = (order as any).date_time;
+    if (!orderDateStr && (order as any).created_at) {
+      const d = parseUTCDate((order as any).created_at);
+      const day = d.getDate().toString().padStart(2, '0');
+      const month = (d.getMonth() + 1).toString().padStart(2, '0');
+      const year = d.getFullYear();
+      const hours = d.getHours();
+      const minutes = d.getMinutes().toString().padStart(2, '0');
+      const ampm = hours >= 12 ? 'pm' : 'am';
+      const formattedHours = (hours % 12 || 12).toString().padStart(2, '0');
+      orderDateStr = `${day}/${month}/${year}, ${formattedHours}:${minutes} ${ampm}`;
     }
-    
-    if (handlingCharge > 0) {
-      doc.text("Handling Charge", margin, summaryY);
-      doc.text(`INR ${handlingCharge.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
-      summaryY += 3.5;
+
+    doc.text(`Bill No : #${invoiceNo}`, margin, y);
+
+    y += 3.5;
+    doc.text(`Date    : ${orderDateStr || "N/A"}`, margin, y);
+
+    y += 3.5;
+    const guestName = (order as any).customer?.name || (order as any).customer_name || "Walk-In";
+    const guestPhone = (order as any).customer?.phone || (order as any).customer_phone;
+    const mobText = guestPhone ? `Mob: ${guestPhone}` : "";
+    const mobWidth = mobText ? doc.getTextWidth(mobText) : 0;
+    const availCustWidth = mobText ? Math.max(25, contentWidth - mobWidth - 2) : contentWidth;
+
+    const fullCustText = `Customer: ${guestName}`;
+    let custLines: string[];
+    if (!mobText) {
+      custLines = doc.splitTextToSize(fullCustText, contentWidth);
+    } else {
+      const lines1 = doc.splitTextToSize(fullCustText, availCustWidth);
+      if (lines1.length <= 1) {
+        custLines = lines1;
+      } else {
+        const firstLine = lines1[0];
+        const remainder = fullCustText.slice(firstLine.length).trim();
+        const restLines = doc.splitTextToSize(remainder, contentWidth);
+        custLines = [firstLine, ...restLines];
+      }
     }
-    
-    if (Math.abs(roundOff) > 0.001) {
-      doc.text("Round Off", margin, summaryY);
-      const sign = roundOff > 0 ? "+" : "";
-      doc.text(`${sign}${roundOff.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
-      summaryY += 3.5;
+
+    doc.text(custLines[0], margin, y);
+    if (mobText) {
+      doc.text(mobText, pageWidth - margin, y, { align: "right" });
     }
-    
-    summaryY += 1.5;
-    drawSolidLine(summaryY);
-    summaryY += 4.5;
-  }
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8.5);
-  doc.text("NET TOTAL", margin, summaryY);
-  doc.text(`INR ${netTotal.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
-  
-  summaryY += 2;
-  drawSolidLine(summaryY);
-  summaryY += 4.5;
+    for (let i = 1; i < custLines.length; i++) {
+      y += 3.5;
+      doc.text(custLines[i], margin, y);
+    }
 
-  const debtSettled = parseFloat(String((order as any).debt_settled || 0)) || 0;
-  const creditAwarded = parseFloat(String((order as any).credit_awarded || 0)) || 0;
-  const creditCashedOut = parseFloat(String((order as any).credit_cashed_out || 0)) || 0;
-  
-  let netPaid = netTotal;
+    const custGstin = (order as any).customer_gstin || (order as any).customer?.gstin;
+    const custLegalName = (order as any).customer_legal_name || (order as any).customer?.legal_name;
+    if (custGstin) {
+      y += 3.5;
+      doc.text(`GSTIN   : ${custGstin}`, margin, y);
+    }
+    if (custLegalName && custLegalName !== guestName) {
+      const legalLines = doc.splitTextToSize(`Legal   : ${custLegalName}`, contentWidth);
+      for (const line of legalLines) {
+        y += 3.5;
+        doc.text(line, margin, y);
+      }
+    }
 
-  if (loyaltyDiscountRupees > 0 || creditApplied > 0 || debitApplied > 0 || debtSettled > 0 || creditAwarded > 0 || creditCashedOut > 0) {
+    const isInterstate = Boolean((order as any).is_interstate);
+    const placeOfSupply = (order as any).place_of_supply || getOutletField("place_of_supply");
+    if (placeOfSupply) {
+      const posLines = doc.splitTextToSize(`Place of Supply: ${placeOfSupply}${isInterstate ? " (Inter-State)" : ""}`, contentWidth);
+      for (const line of posLines) {
+        y += 3.5;
+        doc.text(line, margin, y);
+      }
+    } else if (isInterstate) {
+      y += 3.5;
+      doc.text(`Supply Type    : Inter-State (IGST)`, margin, y);
+    }
+
+    y += 2.5;
+    drawSolidLine(y);
+
+    // 3. ITEMIZED TABLE GRID (Consolidates identical items for single-line customer presentation)
+    const rawItems = ((order as any).items || []);
+    const consolidatedItems: any[] = [];
+    const itemConsolidationMap = new Map<string, any>();
+
+    for (const it of rawItems) {
+      const rawDishName =
+        it.item_name ||
+        menuItemsMap?.[it.menu_item_id]?.name ||
+        it.name ||
+        "Item";
+      // Strip internal cashier POS tags such as [Oversold Backorder] or Lot # from customer receipt
+      const cleanDishName = rawDishName
+        .replace(/\[Oversold Backorder\]/gi, "")
+        .replace(/\(Oversold\)/gi, "")
+        .replace(/Lot\s*#[A-Za-z0-9_-]+/gi, "")
+        .trim();
+
+      const price = parseFloat(String(it.unit_price || "0"));
+      const rawUnit =
+        it.selected_unit ||
+        it.unit ||
+        it.unit_label ||
+        menuItemsMap?.[it.menu_item_id]?.unit_label ||
+        menuItemsMap?.[it.menu_item_id]?.unit ||
+        "";
+      const cleanUnit = typeof rawUnit === "string" ? rawUnit.trim() : "";
+      const isComp = Boolean(it.is_complimentary);
+      const taxRate = parseFloat(String(it.tax_rate ?? it.item_tax_rate ?? menuItemsMap?.[it.menu_item_id]?.tax_rate ?? 0));
+      const mrpVal = it.mrp ? parseFloat(String(it.mrp)) : price;
+
+      // Merge key: identity of item + price + unit + complimentary + tax rate
+      const key = `${it.menu_item_id || cleanDishName}|${price.toFixed(2)}|${cleanUnit}|${isComp}|${taxRate.toFixed(2)}`;
+
+      if (itemConsolidationMap.has(key)) {
+        const existing = itemConsolidationMap.get(key);
+        const existingQty = parseFloat(String(existing.quantity || "0"));
+        const newQty = parseFloat(String(it.quantity || "0"));
+        existing.quantity = existingQty + newQty;
+        const itLineTotal = (it.line_total !== undefined && it.line_total !== null)
+          ? parseFloat(String(it.line_total))
+          : newQty * price;
+        existing.line_total = parseFloat(String(existing.line_total || "0")) + itLineTotal;
+        if (mrpVal > (existing.mrp || 0)) {
+          existing.mrp = mrpVal;
+        }
+      } else {
+        const itLineTotal = (it.line_total !== undefined && it.line_total !== null)
+          ? parseFloat(String(it.line_total))
+          : parseFloat(String(it.quantity || "0")) * price;
+        const copy = {
+          ...it,
+          item_name: cleanDishName,
+          quantity: parseFloat(String(it.quantity || "0")),
+          unit_price: price,
+          mrp: mrpVal,
+          selected_unit: cleanUnit,
+          line_total: itLineTotal,
+          tax_rate: taxRate,
+          is_complimentary: isComp,
+        };
+        itemConsolidationMap.set(key, copy);
+        consolidatedItems.push(copy);
+      }
+    }
+
+    const tableData = consolidatedItems.map((item: any, idx: number) => {
+      const dishName = item.item_name || `Item #${idx + 1}`;
+      const qtyVal = parseFloat(String(item.quantity || "0"));
+      const cleanUnit = item.selected_unit || "";
+      const qtyFormatted = qtyVal % 1 === 0 ? qtyVal.toFixed(0) : String(qtyVal);
+      const qtyStr = cleanUnit ? `${qtyFormatted} ${cleanUnit}` : qtyFormatted;
+      const price = parseFloat(String(item.unit_price || "0"));
+      const mrpVal = item.mrp ? parseFloat(String(item.mrp)) : price;
+      const lineTotal = (item.line_total !== undefined && item.line_total !== null) ? parseFloat(String(item.line_total)) : qtyVal * price;
+
+      return [
+        `${idx + 1}. ${dishName}`,
+        qtyStr,
+        `${mrpVal.toFixed(2)}`,
+        `${price.toFixed(2)}`,
+        `${lineTotal.toFixed(2)}`,
+      ];
+    });
+
+    autoTable(doc, {
+      startY: y + 1.5,
+      margin: { left: margin, right: margin },
+      head: [["#  Item", "Qty", "MRP", "Rate", "Amt"]],
+      body: tableData,
+      theme: "plain",
+      styles: {
+        font: "helvetica",
+        fontStyle: "bold",
+        fontSize: 7,
+        cellPadding: { top: 1, bottom: 1, left: 0, right: 0 },
+        textColor: [0, 0, 0],
+        lineWidth: 0,
+      },
+      headStyles: {
+        font: "helvetica",
+        fontStyle: "bold",
+        fontSize: 7,
+        textColor: [0, 0, 0],
+        fillColor: false,
+      },
+      columnStyles: {
+        0: { cellWidth: 20, halign: "left" },
+        1: { cellWidth: 11, halign: "center" },
+        2: { cellWidth: 11, halign: "right" },
+        3: { cellWidth: 11, halign: "right" },
+        4: { cellWidth: 11, halign: "right" },
+      },
+    });
+
+    const finalY = (doc as any).lastAutoTable.finalY + 2;
+    drawDashedLine(finalY);
+
+    // 4. TAX & FINANCIAL SUMMARY GRID (Structured User Format with Per-Item Catalog GST Referencing)
+    let summaryY = finalY + 4;
+
+    const deliveryCharge = parseFloat(String((order as any).delivery_charge || 0));
+    const handlingCharge = parseFloat(String((order as any).handling_charge || 0));
+
+    let totalMrpVal = 0;
+    let totalSellingSubtotal = 0;
+
+    ((order as any).items || []).forEach((it: any) => {
+      const qty = parseFloat(String(it.quantity || "1"));
+      const price = parseFloat(String(it.unit_price || "0"));
+      const mrp = it.mrp ? parseFloat(String(it.mrp)) : price;
+      totalMrpVal += mrp * qty;
+      totalSellingSubtotal += price * qty;
+    });
+
+    const mrpSavings = Math.max(0, totalMrpVal - totalSellingSubtotal);
+
+    const discType = (order as any).discount_type;
+    const discVal = (order as any).discount_value ? parseFloat(String((order as any).discount_value)) : 0;
+
+    let extraDiscountRupees = 0;
+    let extraDiscountLabel = "Extra Discount";
+
+    if (discType === "PERCENT" && discVal > 0) {
+      extraDiscountRupees = totalSellingSubtotal * (discVal / 100);
+      extraDiscountLabel = `Extra Discount (${discVal}% OFF)`;
+    } else if (discType === "FLAT" && discVal > 0) {
+      extraDiscountRupees = discVal;
+      extraDiscountLabel = `Extra Discount (Flat Rs.${discVal})`;
+    } else if (discType === "COMPLIMENTARY_ITEMS" && discVal > 0) {
+      extraDiscountRupees = discVal;
+      extraDiscountLabel = `Extra Discount (Items)`;
+    } else if (discType === "COMPLIMENTARY") {
+      extraDiscountRupees = totalSellingSubtotal;
+      extraDiscountLabel = `Extra Discount (Complimentary)`;
+    }
+
+    const pointsRedeemed = (order as any).loyalty_points_redeemed || 0;
+    let loyaltyDiscountRupees = 0;
+    if (pointsRedeemed > 0) {
+      const rest = getOutletField("loyalty_redemption_tiers") ? {
+        loyalty_redemption_tiers: getOutletField("loyalty_redemption_tiers"),
+        loyalty_max_bill_percentage: getOutletField("loyalty_max_bill_percentage"),
+      } : (storeDetails || (order as any).restaurant || {});
+
+      // We try to find the tier that gives the discount. Since we don't have the historical total balance here,
+      // we use the current balance from customer, or default to the highest tier that pointsRedeemed could fit in.
+      const currentBalance = (order as any).customer?.loyalty_points || pointsRedeemed; // Best effort fallback
+      const tiers: any[] = rest.loyalty_redemption_tiers || [];
+      const sortedTiers = [...tiers].sort((a, b) => b.min_points - a.min_points);
+      const applicableTier = sortedTiers.find(t => currentBalance >= t.min_points);
+
+      const pointValue = applicableTier ? (applicableTier.discount_percentage / 100) : 0;
+      const maxBillPercentage = parseFloat(String(rest.loyalty_max_bill_percentage || "100.00"));
+
+      const requestedDiscount = pointsRedeemed * pointValue;
+      const maxAllowedDiscount = (maxBillPercentage / 100) * totalSellingSubtotal;
+      loyaltyDiscountRupees = Math.min(requestedDiscount, maxAllowedDiscount);
+    }
+
+    const amountPayable = Math.max(0, totalSellingSubtotal - extraDiscountRupees);
+
+    const creditApplied = parseFloat(String((order as any).credit_applied || 0)) || 0;
+    const debitApplied = parseFloat(String((order as any).debit_applied || 0)) || 0;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(0, 0, 0);
+
+    if (mrpSavings > 0 || extraDiscountRupees > 0) {
+      doc.text("Total MRP Value", margin, summaryY);
+      doc.text(`INR ${totalMrpVal.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
+      summaryY += 3.5;
+
+      if (mrpSavings > 0) {
+        doc.text("Product Discount", margin, summaryY);
+        doc.text(`- INR ${mrpSavings.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
+        summaryY += 3.5;
+      }
+
+      if (extraDiscountRupees > 0) {
+        doc.text(extraDiscountLabel, margin, summaryY);
+        doc.text(`- INR ${extraDiscountRupees.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
+        summaryY += 3.5;
+      }
+
+      summaryY += 1;
+      drawDashedLine(summaryY);
+      summaryY += 4.5;
+    }
+
+    // Calculate ratio of actual paid amount to the taxable subtotal (handles FLAT/PERCENT)
+    let taxableSubtotal = totalSellingSubtotal;
+    if (discType === "COMPLIMENTARY_ITEMS" || discType === "COMPLIMENTARY") {
+      taxableSubtotal = amountPayable; // Paid items subtotal before bill-level discounts
+    }
+    const discountRatio = taxableSubtotal > 0 ? (amountPayable / taxableSubtotal) : 0;
+
+    const isInterstateOrder = Boolean((order as any).is_interstate);
+
+    interface HsnSummaryItem {
+      hsn: string;
+      rate: number;
+      base: number;
+      tax: number;
+    }
+    const hsnSummaryMap: Record<string, HsnSummaryItem> = {};
+
+    ((order as any).items || []).forEach((item: any) => {
+      if (item.is_complimentary === true || item.is_complimentary === 1 || item.is_complimentary === "true" || item.is_complimentary === "1") return;
+      const qtyVal = parseFloat(String(item.quantity || "0"));
+      const unitPrice = parseFloat(String(item.unit_price || "0"));
+      const itemLineTotal = (qtyVal * unitPrice) * discountRatio;
+
+      let itemTaxRate = 0;
+      if (item.tax_rate !== undefined && item.tax_rate !== null) {
+        itemTaxRate = parseFloat(String(item.tax_rate));
+      } else if (item.item_tax_rate !== undefined && item.item_tax_rate !== null) {
+        itemTaxRate = parseFloat(String(item.item_tax_rate));
+      } else if (menuItemsMap && item.menu_item_id && menuItemsMap[item.menu_item_id]?.tax_rate !== undefined && menuItemsMap[item.menu_item_id]?.tax_rate !== null) {
+        itemTaxRate = parseFloat(String(menuItemsMap[item.menu_item_id].tax_rate));
+      }
+      if (isNaN(itemTaxRate)) itemTaxRate = 0;
+
+      let itemHsn = (item as any).hsn_code || (menuItemsMap && item.menu_item_id && (menuItemsMap[item.menu_item_id] as any)?.hsn_code) || "-";
+
+      if (itemTaxRate >= 0) {
+        const base = itemLineTotal / (1 + (itemTaxRate / 100));
+        const taxAmount = itemLineTotal - base;
+
+        const groupKey = `${itemHsn}_${itemTaxRate}`;
+        if (!hsnSummaryMap[groupKey]) {
+          hsnSummaryMap[groupKey] = { hsn: itemHsn, rate: itemTaxRate, base: 0, tax: 0 };
+        }
+        hsnSummaryMap[groupKey].base += base;
+        hsnSummaryMap[groupKey].tax += taxAmount;
+      }
+    });
+
+    const hsnList = Object.values(hsnSummaryMap).sort((a, b) => a.hsn.localeCompare(b.hsn) || a.rate - b.rate);
+
+    // Subtotal & Final Bill Charges
+    const billAmount = amountPayable;
+    const totalBeforeRound = billAmount + deliveryCharge + handlingCharge;
+
+    // ALWAYS enforce standard rounding to nearest integer for POS systems
+    const netTotal = Math.round(totalBeforeRound);
+    const roundOff = netTotal - totalBeforeRound;
+
+    const hasExtraLines = deliveryCharge > 0 || handlingCharge > 0 || Math.abs(roundOff) > 0.001 || extraDiscountRupees > 0 || loyaltyDiscountRupees > 0 || mrpSavings > 0;
+
+    if (hasExtraLines) {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(7.5);
-      
+      doc.text("Bill Amount", margin, summaryY);
+      doc.text(`INR ${billAmount.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
+      summaryY += 3.8;
+
+      if (deliveryCharge > 0) {
+        doc.text("Delivery Charge", margin, summaryY);
+        doc.text(`INR ${deliveryCharge.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
+        summaryY += 3.5;
+      }
+
+      if (handlingCharge > 0) {
+        doc.text("Handling Charge", margin, summaryY);
+        doc.text(`INR ${handlingCharge.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
+        summaryY += 3.5;
+      }
+
+      if (Math.abs(roundOff) > 0.001) {
+        doc.text("Round Off", margin, summaryY);
+        const sign = roundOff > 0 ? "+" : "";
+        doc.text(`${sign}${roundOff.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
+        summaryY += 3.5;
+      }
+
+      summaryY += 1.5;
+      drawSolidLine(summaryY);
+      summaryY += 4.5;
+    }
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.text("NET TOTAL", margin, summaryY);
+    doc.text(`INR ${netTotal.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
+
+    summaryY += 2;
+    drawSolidLine(summaryY);
+    summaryY += 4.5;
+
+    const debtSettled = parseFloat(String((order as any).debt_settled || 0)) || 0;
+    const creditAwarded = parseFloat(String((order as any).credit_awarded || 0)) || 0;
+    const creditCashedOut = parseFloat(String((order as any).credit_cashed_out || 0)) || 0;
+
+    let netPaid = netTotal;
+
+    if (loyaltyDiscountRupees > 0 || creditApplied > 0 || debitApplied > 0 || debtSettled > 0 || creditAwarded > 0 || creditCashedOut > 0) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7.5);
+
       if (loyaltyDiscountRupees > 0) {
-          doc.text(`Loyalty Redeemed (${pointsRedeemed} pts)`, margin, summaryY);
-          doc.text(`- INR ${loyaltyDiscountRupees.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
-          summaryY += 3.5;
-          netPaid -= loyaltyDiscountRupees;
+        doc.text(`Loyalty Redeemed (${pointsRedeemed} pts)`, margin, summaryY);
+        doc.text(`- INR ${loyaltyDiscountRupees.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
+        summaryY += 3.5;
+        netPaid -= loyaltyDiscountRupees;
       }
-      
+
       if (creditApplied > 0) {
-          doc.text("Credit Applied", margin, summaryY);
-          doc.text(`- INR ${creditApplied.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
-          summaryY += 3.5;
-          netPaid -= creditApplied;
+        doc.text("Credit Applied", margin, summaryY);
+        doc.text(`- INR ${creditApplied.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
+        summaryY += 3.5;
+        netPaid -= creditApplied;
       }
-      
+
       if (debitApplied > 0) {
-          doc.text("Debit (Shortfall)", margin, summaryY);
-          doc.text(`- INR ${debitApplied.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
-          summaryY += 3.5;
-          netPaid -= debitApplied;
+        doc.text("Debit (Shortfall)", margin, summaryY);
+        doc.text(`- INR ${debitApplied.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
+        summaryY += 3.5;
+        netPaid -= debitApplied;
       }
-      
+
       if (debtSettled > 0) {
-          doc.text("Debt Settled", margin, summaryY);
-          doc.text(`+ INR ${debtSettled.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
-          summaryY += 3.5;
-          netPaid += debtSettled;
+        doc.text("Debt Settled", margin, summaryY);
+        doc.text(`+ INR ${debtSettled.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
+        summaryY += 3.5;
+        netPaid += debtSettled;
       }
-      
+
       if (creditAwarded > 0) {
-          doc.text("Credit Awarded", margin, summaryY);
-          doc.text(`+ INR ${creditAwarded.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
-          summaryY += 3.5;
-          netPaid += creditAwarded;
+        doc.text("Credit Awarded", margin, summaryY);
+        doc.text(`+ INR ${creditAwarded.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
+        summaryY += 3.5;
+        netPaid += creditAwarded;
       }
-      
+
       if (creditCashedOut > 0) {
-          doc.text("Credit Cashed Out", margin, summaryY);
-          doc.text(`- INR ${creditCashedOut.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
-          summaryY += 3.5;
-          netPaid -= creditCashedOut;
+        doc.text("Credit Cashed Out", margin, summaryY);
+        doc.text(`- INR ${creditCashedOut.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
+        summaryY += 3.5;
+        netPaid -= creditCashedOut;
       }
-      
+
       summaryY += 1.5;
       drawSolidLine(summaryY);
       summaryY += 4.5;
@@ -742,42 +742,42 @@ export async function generateReceiptPDF(
       summaryY += 2;
       drawSolidLine(summaryY);
       summaryY += 4.5;
-  }
+    }
 
-  const customerBalanceRaw = (order as any).customer_balance ?? (order as any).customer?.credit_balance;
-  if (customerBalanceRaw !== undefined && customerBalanceRaw !== null) {
+    const customerBalanceRaw = (order as any).customer_balance ?? (order as any).customer?.credit_balance;
+    if (customerBalanceRaw !== undefined && customerBalanceRaw !== null) {
       const customerBalance = parseFloat(String(customerBalanceRaw)) || 0;
       summaryY += 2;
       doc.setFont("helvetica", "bold");
       doc.setFontSize(7.5);
       if (customerBalance > 0) {
-          doc.text("Store Credit", margin, summaryY);
-          doc.text(`INR ${customerBalance.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
+        doc.text("Store Credit", margin, summaryY);
+        doc.text(`INR ${customerBalance.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
       } else if (customerBalance < 0) {
-          doc.text("Outstanding Debit", margin, summaryY);
-          doc.text(`INR ${Math.abs(customerBalance).toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
+        doc.text("Outstanding Debit", margin, summaryY);
+        doc.text(`INR ${Math.abs(customerBalance).toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
       } else {
-          doc.text("Customer Balance", margin, summaryY);
-          doc.text(`INR 0.00`, pageWidth - margin, summaryY, { align: "right" });
+        doc.text("Customer Balance", margin, summaryY);
+        doc.text(`INR 0.00`, pageWidth - margin, summaryY, { align: "right" });
       }
       summaryY += 3.5;
-  }
+    }
 
-  const customerLoyaltyRaw = (order as any).customer_loyalty_points ?? (order as any).customer_loyalty_balance ?? (order as any).customer?.loyalty_points;
-  if (customerLoyaltyRaw !== undefined && customerLoyaltyRaw !== null) {
+    const customerLoyaltyRaw = (order as any).customer_loyalty_points ?? (order as any).customer_loyalty_balance ?? (order as any).customer?.loyalty_points;
+    if (customerLoyaltyRaw !== undefined && customerLoyaltyRaw !== null) {
       const loyaltyPts = parseInt(String(customerLoyaltyRaw), 10) || 0;
       doc.setFont("helvetica", "bold");
       doc.setFontSize(7.5);
       doc.text("Loyalty Points", margin, summaryY);
       doc.text(`${loyaltyPts} pts`, pageWidth - margin, summaryY, { align: "right" });
       summaryY += 3.5;
-  }
+    }
 
-  const pMethod = (order as any).payment_method || "CASH";
-  const cashAmt = parseFloat(String((order as any).cash_amount || 0)) || 0;
-  const upiAmt = parseFloat(String((order as any).upi_amount || 0)) || 0;
+    const pMethod = (order as any).payment_method || "CASH";
+    const cashAmt = parseFloat(String((order as any).cash_amount || 0)) || 0;
+    const upiAmt = parseFloat(String((order as any).upi_amount || 0)) || 0;
 
-  if (pMethod === "SPLIT" || (cashAmt > 0 && upiAmt > 0)) {
+    if (pMethod === "SPLIT" || (cashAmt > 0 && upiAmt > 0)) {
       summaryY += 1.5;
       drawDashedLine(summaryY);
       summaryY += 4.0;
@@ -793,7 +793,7 @@ export async function generateReceiptPDF(
       doc.text("  UPI Paid", margin, summaryY);
       doc.text(`INR ${upiAmt.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
       summaryY += 3.5;
-  } else if ((order as any).payment_method) {
+    } else if ((order as any).payment_method) {
       summaryY += 1.5;
       drawDashedLine(summaryY);
       summaryY += 4.0;
@@ -801,174 +801,174 @@ export async function generateReceiptPDF(
       doc.setFontSize(7.5);
       doc.text(`Payment Mode: ${(order as any).payment_method}`, margin, summaryY);
       summaryY += 3.5;
-  }
-
-  // 4. STATUTORY GST BREAKDOWN TABLE (Spacious & Clean Layout)
-  if (hsnList.length > 0) {
-    summaryY += 5;
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7.5);
-    doc.text("GST TAX SUMMARY", pageWidth / 2, summaryY, { align: "center" });
-    summaryY += 3.2;
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(6.5);
-    doc.text(isInterstateOrder ? "(INTER-STATE / IGST)" : "(INTRA-STATE SALE)", pageWidth / 2, summaryY, { align: "center" });
-    summaryY += 3.0;
-
-    drawDashedLine(summaryY);
-    summaryY += 4.0;
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(6.5);
-    if (isInterstateOrder) {
-      doc.text("HSN/SAC", margin, summaryY);
-      doc.text("Taxable", 32, summaryY, { align: "right" });
-      doc.text("Rate", 48, summaryY, { align: "right" });
-      doc.text("IGST Amt", pageWidth - margin, summaryY, { align: "right" });
-    } else {
-      doc.text("HSN/SAC", margin, summaryY);
-      doc.text("Taxable", 26, summaryY, { align: "right" });
-      doc.text("CGST", 40, summaryY, { align: "right" });
-      doc.text("SGST", 54, summaryY, { align: "right" });
-      doc.text("Total Tax", pageWidth - margin, summaryY, { align: "right" });
     }
-    summaryY += 1.8;
-    drawDashedLine(summaryY);
-    summaryY += 4.0;
 
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(6.5);
+    // 4. STATUTORY GST BREAKDOWN TABLE (Spacious & Clean Layout)
+    if (hsnList.length > 0) {
+      summaryY += 5;
 
-    let totHsnBase = 0;
-    let totHsnTax = 0;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7.5);
+      doc.text("GST TAX SUMMARY", pageWidth / 2, summaryY, { align: "center" });
+      summaryY += 3.2;
 
-    hsnList.forEach((grp) => {
-      totHsnBase += grp.base;
-      totHsnTax += grp.tax;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6.5);
+      doc.text(isInterstateOrder ? "(INTER-STATE / IGST)" : "(INTRA-STATE SALE)", pageWidth / 2, summaryY, { align: "center" });
+      summaryY += 3.0;
 
-      const displayHsn = grp.hsn && grp.hsn !== "null" && grp.hsn !== "undefined"
-        ? (grp.hsn.length > 8 ? grp.hsn.substring(0, 8) : grp.hsn)
-        : "-";
-      doc.text(displayHsn, margin, summaryY);
+      drawDashedLine(summaryY);
+      summaryY += 4.0;
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6.5);
+      if (isInterstateOrder) {
+        doc.text("HSN/SAC", margin, summaryY);
+        doc.text("Taxable", 32, summaryY, { align: "right" });
+        doc.text("Rate", 48, summaryY, { align: "right" });
+        doc.text("IGST Amt", pageWidth - margin, summaryY, { align: "right" });
+      } else {
+        doc.text("HSN/SAC", margin, summaryY);
+        doc.text("Taxable", 26, summaryY, { align: "right" });
+        doc.text("CGST", 40, summaryY, { align: "right" });
+        doc.text("SGST", 54, summaryY, { align: "right" });
+        doc.text("Total Tax", pageWidth - margin, summaryY, { align: "right" });
+      }
+      summaryY += 1.8;
+      drawDashedLine(summaryY);
+      summaryY += 4.0;
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6.5);
+
+      let totHsnBase = 0;
+      let totHsnTax = 0;
+
+      hsnList.forEach((grp) => {
+        totHsnBase += grp.base;
+        totHsnTax += grp.tax;
+
+        const displayHsn = grp.hsn && grp.hsn !== "null" && grp.hsn !== "undefined"
+          ? (grp.hsn.length > 8 ? grp.hsn.substring(0, 8) : grp.hsn)
+          : "-";
+        doc.text(displayHsn, margin, summaryY);
+
+        if (isInterstateOrder) {
+          doc.text(grp.base.toFixed(2), 32, summaryY, { align: "right" });
+          doc.text(`${grp.rate.toFixed(1).replace(/\.0$/, "")}%`, 48, summaryY, { align: "right" });
+          doc.text(grp.tax.toFixed(2), pageWidth - margin, summaryY, { align: "right" });
+        } else {
+          const halfTax = grp.tax / 2;
+          doc.text(grp.base.toFixed(2), 26, summaryY, { align: "right" });
+          doc.text(halfTax.toFixed(2), 40, summaryY, { align: "right" });
+          doc.text(halfTax.toFixed(2), 54, summaryY, { align: "right" });
+          doc.text(grp.tax.toFixed(2), pageWidth - margin, summaryY, { align: "right" });
+        }
+        summaryY += 3.8;
+      });
+
+      summaryY += 0.8;
+      drawDashedLine(summaryY);
+      summaryY += 3.8;
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6.5);
+      doc.text("Total", margin, summaryY);
 
       if (isInterstateOrder) {
-        doc.text(grp.base.toFixed(2), 32, summaryY, { align: "right" });
-        doc.text(`${grp.rate.toFixed(1).replace(/\.0$/, "")}%`, 48, summaryY, { align: "right" });
-        doc.text(grp.tax.toFixed(2), pageWidth - margin, summaryY, { align: "right" });
+        doc.text(totHsnBase.toFixed(2), 32, summaryY, { align: "right" });
+        doc.text(totHsnTax.toFixed(2), pageWidth - margin, summaryY, { align: "right" });
       } else {
-        const halfTax = grp.tax / 2;
-        doc.text(grp.base.toFixed(2), 26, summaryY, { align: "right" });
-        doc.text(halfTax.toFixed(2), 40, summaryY, { align: "right" });
-        doc.text(halfTax.toFixed(2), 54, summaryY, { align: "right" });
-        doc.text(grp.tax.toFixed(2), pageWidth - margin, summaryY, { align: "right" });
+        const halfTot = totHsnTax / 2;
+        doc.text(totHsnBase.toFixed(2), 26, summaryY, { align: "right" });
+        doc.text(halfTot.toFixed(2), 40, summaryY, { align: "right" });
+        doc.text(halfTot.toFixed(2), 54, summaryY, { align: "right" });
+        doc.text(totHsnTax.toFixed(2), pageWidth - margin, summaryY, { align: "right" });
       }
-      summaryY += 3.8;
-    });
 
-    summaryY += 0.8;
-    drawDashedLine(summaryY);
-    summaryY += 3.8;
+      summaryY += 2.0;
+      drawDashedLine(summaryY);
+    }
 
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(6.5);
-    doc.text("Total", margin, summaryY);
+    // 5. FOOTER & QR CODE + APP STORE BADGES (Side-by-side: QR Code on Left, Google Play & App Store stacked on Right)
+    summaryY += 4;
 
-    if (isInterstateOrder) {
-      doc.text(totHsnBase.toFixed(2), 32, summaryY, { align: "right" });
-      doc.text(totHsnTax.toFixed(2), pageWidth - margin, summaryY, { align: "right" });
+    const qrSize = 22;
+    const badgeWidth = 28;
+    const badgeHeight = 9.5;
+    const badgeGapY = 2;
+    const qrBadgeGapX = 4.5;
+
+    const hasQr = Boolean(billQrUrlRaw);
+    const totalBlockWidth = hasQr ? (qrSize + qrBadgeGapX + badgeWidth) : badgeWidth;
+    const blockStartX = (pageWidth - totalBlockWidth) / 2;
+    const qrX = blockStartX;
+    const badgesX = hasQr ? (blockStartX + qrSize + qrBadgeGapX) : blockStartX;
+
+    const googlePlayY = summaryY + 0.5;
+    const appStoreY = googlePlayY + badgeHeight + badgeGapY;
+
+    // Draw QR Code on the Left
+    if (hasQr && qrDataUrl) {
+      try {
+        doc.addImage(qrDataUrl, "PNG", qrX, summaryY, qrSize, qrSize);
+      } catch (e) {
+        console.warn("Failed to draw QR code", e);
+      }
+    }
+
+    // Draw Google Play on top and App Store below it on the Right
+    const drawBadge = (x: number, yPos: number, width: number, height: number, text: string) => {
+      doc.setFillColor(0, 0, 0);
+      doc.roundedRect(x, yPos, width, height, 1.5, 1.5, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(6.5);
+      doc.setFont("helvetica", "bold");
+      doc.text(text, x + width / 2, yPos + height / 2 + 1, { align: "center" });
+      doc.setTextColor(0, 0, 0);
+    };
+
+    if (playStoreBase64) {
+      try {
+        doc.addImage(playStoreBase64, badgesX, googlePlayY, badgeWidth, badgeHeight);
+      } catch {
+        drawBadge(badgesX, googlePlayY, badgeWidth, badgeHeight, "Google Play");
+      }
     } else {
-      const halfTot = totHsnTax / 2;
-      doc.text(totHsnBase.toFixed(2), 26, summaryY, { align: "right" });
-      doc.text(halfTot.toFixed(2), 40, summaryY, { align: "right" });
-      doc.text(halfTot.toFixed(2), 54, summaryY, { align: "right" });
-      doc.text(totHsnTax.toFixed(2), pageWidth - margin, summaryY, { align: "right" });
-    }
-
-    summaryY += 2.0;
-    drawDashedLine(summaryY);
-  }
-
-  // 5. FOOTER & QR CODE + APP STORE BADGES (Side-by-side: QR Code on Left, Google Play & App Store stacked on Right)
-  summaryY += 4;
-  
-  const qrSize = 22;
-  const badgeWidth = 28;
-  const badgeHeight = 9.5;
-  const badgeGapY = 2;
-  const qrBadgeGapX = 4.5;
-
-  const hasQr = Boolean(billQrUrlRaw);
-  const totalBlockWidth = hasQr ? (qrSize + qrBadgeGapX + badgeWidth) : badgeWidth;
-  const blockStartX = (pageWidth - totalBlockWidth) / 2;
-  const qrX = blockStartX;
-  const badgesX = hasQr ? (blockStartX + qrSize + qrBadgeGapX) : blockStartX;
-
-  const googlePlayY = summaryY + 0.5;
-  const appStoreY = googlePlayY + badgeHeight + badgeGapY;
-
-  // Draw QR Code on the Left
-  if (hasQr && qrDataUrl) {
-    try {
-      doc.addImage(qrDataUrl, "PNG", qrX, summaryY, qrSize, qrSize);
-    } catch (e) {
-      console.warn("Failed to draw QR code", e);
-    }
-  }
-
-  // Draw Google Play on top and App Store below it on the Right
-  const drawBadge = (x: number, yPos: number, width: number, height: number, text: string) => {
-    doc.setFillColor(0, 0, 0);
-    doc.roundedRect(x, yPos, width, height, 1.5, 1.5, "F");
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(6.5);
-    doc.setFont("helvetica", "bold");
-    doc.text(text, x + width / 2, yPos + height / 2 + 1, { align: "center" });
-    doc.setTextColor(0, 0, 0);
-  };
-
-  if (playStoreBase64) {
-    try {
-      doc.addImage(playStoreBase64, badgesX, googlePlayY, badgeWidth, badgeHeight);
-    } catch {
       drawBadge(badgesX, googlePlayY, badgeWidth, badgeHeight, "Google Play");
     }
-  } else {
-    drawBadge(badgesX, googlePlayY, badgeWidth, badgeHeight, "Google Play");
-  }
 
-  if (appStoreBase64) {
-    try {
-      doc.addImage(appStoreBase64, badgesX, appStoreY, badgeWidth, badgeHeight);
-    } catch {
+    if (appStoreBase64) {
+      try {
+        doc.addImage(appStoreBase64, badgesX, appStoreY, badgeWidth, badgeHeight);
+      } catch {
+        drawBadge(badgesX, appStoreY, badgeWidth, badgeHeight, "App Store");
+      }
+    } else {
       drawBadge(badgesX, appStoreY, badgeWidth, badgeHeight, "App Store");
     }
-  } else {
-    drawBadge(badgesX, appStoreY, badgeWidth, badgeHeight, "App Store");
-  }
-  
-  // Interactive links for digital receipt viewing
-  doc.link(badgesX, googlePlayY, badgeWidth, badgeHeight, { url: "https://play.google.com/store/apps/details?id=com.apnagreenbasket" });
-  doc.link(badgesX, appStoreY, badgeWidth, badgeHeight, { url: "https://www.apple.com/app-store/" });
-  
-  const blockHeight = hasQr ? Math.max(qrSize, badgeHeight * 2 + badgeGapY + 1) : (badgeHeight * 2 + badgeGapY);
-  summaryY += blockHeight + 5;
 
-  // 6. PAYMENT STATUS STAMP & FOOTER BLOCK
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8);
-  doc.text("STATUS: PAID & SETTLED", pageWidth / 2, summaryY, { align: "center" });
+    // Interactive links for digital receipt viewing
+    doc.link(badgesX, googlePlayY, badgeWidth, badgeHeight, { url: "https://play.google.com/store/apps/details?id=com.apnagreenbasket" });
+    doc.link(badgesX, appStoreY, badgeWidth, badgeHeight, { url: "https://www.apple.com/app-store/" });
 
-  summaryY += 4.5;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(7.5);
-  doc.text("THANK YOU", pageWidth / 2, summaryY, { align: "center" });
+    const blockHeight = hasQr ? Math.max(qrSize, badgeHeight * 2 + badgeGapY + 1) : (badgeHeight * 2 + badgeGapY);
+    summaryY += blockHeight + 5;
 
-  summaryY += 3.5;
-  doc.text("*** HAVE A GREAT DAY ***", pageWidth / 2, summaryY, { align: "center" });
+    // 6. PAYMENT STATUS STAMP & FOOTER BLOCK
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.text("STATUS: PAID & SETTLED", pageWidth / 2, summaryY, { align: "center" });
 
-  if (barcodeDataUrl) {
+    summaryY += 4.5;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.text("THANK YOU", pageWidth / 2, summaryY, { align: "center" });
+
+    summaryY += 3.5;
+    doc.text("*** HAVE A GREAT DAY ***", pageWidth / 2, summaryY, { align: "center" });
+
+    if (barcodeDataUrl) {
       summaryY += 3;
       const bcWidth = 32;
       const bcHeight = 6;
@@ -983,7 +983,7 @@ export async function generateReceiptPDF(
         summaryY += bcHeight;
       }
     }
-    
+
     summaryY += 5; // End margin
     return summaryY;
   };
@@ -1203,9 +1203,9 @@ export async function generateReturnReceiptPDF(
   const [logoBase64, qrDataUrl, playStoreBase64, appStoreBase64] = await Promise.all([
     logoUrl
       ? Promise.race([
-          fetchImageAsBase64(logoUrl),
-          new Promise<string>((_, reject) => setTimeout(() => reject("Timeout"), 2500))
-        ]).catch(() => null)
+        fetchImageAsBase64(logoUrl),
+        new Promise<string>((_, reject) => setTimeout(() => reject("Timeout"), 2500))
+      ]).catch(() => null)
       : Promise.resolve(null),
     billQrUrlRaw
       ? QRCode.toDataURL(billQrUrlRaw, { margin: 1, width: 80 }).catch(() => null)
@@ -1272,255 +1272,198 @@ export async function generateReturnReceiptPDF(
       }
     }
 
-  const rawStoreName =
-    getOutletField("name") ||
-    (restaurantName && restaurantName !== "Outlet Receipt" && restaurantName !== "ApnaGreen Basket" && restaurantName !== "APNAGREEN BASKET" ? restaurantName : null) ||
-    "ApnaGreen Basket";
-  const storeName = rawStoreName;
+    const rawStoreName =
+      getOutletField("name") ||
+      (restaurantName && restaurantName !== "Outlet Receipt" && restaurantName !== "ApnaGreen Basket" && restaurantName !== "APNAGREEN BASKET" ? restaurantName : null) ||
+      "ApnaGreen Basket";
+    const storeName = rawStoreName;
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.setTextColor(0, 0, 0);
-  doc.text(storeName, pageWidth / 2, y, { align: "center", maxWidth: contentWidth });
-
-  y += 4;
-  const addressStr = getOutletField("address");
-  if (addressStr) {
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
-    doc.text(addressStr, pageWidth / 2, y, { align: "center", maxWidth: contentWidth });
-    y += 3.5;
-  }
-  
-  const billQrUrlRaw = getOutletField("bill_qr_url");
-  if (billQrUrlRaw) {
-    try {
-      const parsedUrl = new URL(billQrUrlRaw);
+    doc.setFontSize(11);
+    doc.setTextColor(0, 0, 0);
+    doc.text(storeName, pageWidth / 2, y, { align: "center", maxWidth: contentWidth });
+
+    y += 4;
+    const addressStr = getOutletField("address");
+    if (addressStr) {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(7);
-      doc.text(parsedUrl.hostname, pageWidth / 2, y, { align: "center" });
+      doc.text(addressStr, pageWidth / 2, y, { align: "center", maxWidth: contentWidth });
       y += 3.5;
-    } catch { }
-  }
+    }
 
-  const fssai = getOutletField("fssai_no");
-  if (fssai) {
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(6.5);
-    doc.text(`FSSAI Reg No: ${fssai}`, pageWidth / 2, y, { align: "center" });
-    y += 3.5;
-  }
+    const billQrUrlRaw = getOutletField("bill_qr_url");
+    if (billQrUrlRaw) {
+      try {
+        const parsedUrl = new URL(billQrUrlRaw);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(7);
+        doc.text(parsedUrl.hostname, pageWidth / 2, y, { align: "center" });
+        y += 3.5;
+      } catch { }
+    }
 
-  const gstin = getOutletField("gstin") || "01AAFCB7044K1ZV";
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(7);
-  doc.text(`GSTIN: ${gstin}`, pageWidth / 2, y, { align: "center" });
-  y += 3.5;
-  
-  const phoneStr = getOutletField("phone");
-  if (phoneStr) {
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
-    doc.text(`Phone: ${phoneStr}`, pageWidth / 2, y, { align: "center" });
-    y += 3.5;
-  }
-  
-  const emailStr = getOutletField("email");
-  if (emailStr) {
+    const fssai = getOutletField("fssai_no");
+    if (fssai) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6.5);
+      doc.text(`FSSAI Reg No: ${fssai}`, pageWidth / 2, y, { align: "center" });
+      y += 3.5;
+    }
+
+    const gstin = getOutletField("gstin") || "01AAFCB7044K1ZV";
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7);
-    doc.text(`Email: ${emailStr}`, pageWidth / 2, y, { align: "center", maxWidth: contentWidth });
+    doc.text(`GSTIN: ${gstin}`, pageWidth / 2, y, { align: "center" });
     y += 3.5;
-  }
 
-  y -= 1;
-  drawDashedLine(y);
+    const phoneStr = getOutletField("phone");
+    if (phoneStr) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7);
+      doc.text(`Phone: ${phoneStr}`, pageWidth / 2, y, { align: "center" });
+      y += 3.5;
+    }
 
-  // 2. CASH MEMO TITLE & BILL METADATA
-  y += 4;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8.5);
-  doc.text("RETURN INVOICE", pageWidth / 2, y, { align: "center" });
+    const emailStr = getOutletField("email");
+    if (emailStr) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7);
+      doc.text(`Email: ${emailStr}`, pageWidth / 2, y, { align: "center", maxWidth: contentWidth });
+      y += 3.5;
+    }
 
-  y += 4;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(7.5);
+    y -= 1;
+    drawDashedLine(y);
 
-  const invoiceNo = returnData.return_number;
-  const timestamp = returnData.processed_at || returnData.created_at || new Date().toISOString();
-  let orderDateStr = "";
-  if (timestamp) {
-    const d = parseUTCDate(timestamp);
-    const day = d.getDate().toString().padStart(2, '0');
-    const month = (d.getMonth() + 1).toString().padStart(2, '0');
-    const year = d.getFullYear();
-    const hours = d.getHours();
-    const minutes = d.getMinutes().toString().padStart(2, '0');
-    const ampm = hours >= 12 ? 'pm' : 'am';
-    const formattedHours = (hours % 12 || 12).toString().padStart(2, '0');
-    orderDateStr = `${day}/${month}/${year}, ${formattedHours}:${minutes} ${ampm}`;
-  }
-  
-  doc.text(`Return No : #${invoiceNo}`, margin, y);
-  
-  y += 3.5;
-  const origBill = returnData.original_bill_number || (returnData.order_id ? `#${returnData.order_id.slice(0, 8).toUpperCase()}` : "Direct Return");
-  doc.text(`Orig Bill : ${origBill}`, margin, y);
+    // 2. CASH MEMO TITLE & BILL METADATA
+    y += 4;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.text("RETURN INVOICE", pageWidth / 2, y, { align: "center" });
 
-  y += 3.5;
-  doc.text(`Date      : ${orderDateStr || "N/A"}`, margin, y);
+    y += 4;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
 
-  y += 3.5;
-  const guestName = returnData.customer_name || "Walk-In";
-  const guestPhone = returnData.customer_phone;
-  const mobText = guestPhone ? `Mob: ${guestPhone}` : "";
-  const mobWidth = mobText ? doc.getTextWidth(mobText) : 0;
-  const availCustWidth = mobText ? Math.max(25, contentWidth - mobWidth - 2) : contentWidth;
+    const invoiceNo = returnData.return_number;
+    const timestamp = returnData.processed_at || returnData.created_at || new Date().toISOString();
+    let orderDateStr = "";
+    if (timestamp) {
+      const d = parseUTCDate(timestamp);
+      const day = d.getDate().toString().padStart(2, '0');
+      const month = (d.getMonth() + 1).toString().padStart(2, '0');
+      const year = d.getFullYear();
+      const hours = d.getHours();
+      const minutes = d.getMinutes().toString().padStart(2, '0');
+      const ampm = hours >= 12 ? 'pm' : 'am';
+      const formattedHours = (hours % 12 || 12).toString().padStart(2, '0');
+      orderDateStr = `${day}/${month}/${year}, ${formattedHours}:${minutes} ${ampm}`;
+    }
 
-  const fullCustText = `Customer  : ${guestName}`;
-  let custLines: string[];
-  if (!mobText) {
-    custLines = doc.splitTextToSize(fullCustText, contentWidth);
-  } else {
-    const lines1 = doc.splitTextToSize(fullCustText, availCustWidth);
-    if (lines1.length <= 1) {
-      custLines = lines1;
+    doc.text(`Return No : #${invoiceNo}`, margin, y);
+
+    y += 3.5;
+    const origBill = returnData.original_bill_number || (returnData.order_id ? `#${returnData.order_id.slice(0, 8).toUpperCase()}` : "Direct Return");
+    doc.text(`Orig Bill : ${origBill}`, margin, y);
+
+    y += 3.5;
+    doc.text(`Date      : ${orderDateStr || "N/A"}`, margin, y);
+
+    y += 3.5;
+    const guestName = returnData.customer_name || "Walk-In";
+    const guestPhone = returnData.customer_phone;
+    const mobText = guestPhone ? `Mob: ${guestPhone}` : "";
+    const mobWidth = mobText ? doc.getTextWidth(mobText) : 0;
+    const availCustWidth = mobText ? Math.max(25, contentWidth - mobWidth - 2) : contentWidth;
+
+    const fullCustText = `Customer  : ${guestName}`;
+    let custLines: string[];
+    if (!mobText) {
+      custLines = doc.splitTextToSize(fullCustText, contentWidth);
     } else {
-      const firstLine = lines1[0];
-      const remainder = fullCustText.slice(firstLine.length).trim();
-      const restLines = doc.splitTextToSize(remainder, contentWidth);
-      custLines = [firstLine, ...restLines];
+      const lines1 = doc.splitTextToSize(fullCustText, availCustWidth);
+      if (lines1.length <= 1) {
+        custLines = lines1;
+      } else {
+        const firstLine = lines1[0];
+        const remainder = fullCustText.slice(firstLine.length).trim();
+        const restLines = doc.splitTextToSize(remainder, contentWidth);
+        custLines = [firstLine, ...restLines];
+      }
     }
-  }
 
-  doc.text(custLines[0], margin, y);
-  if (mobText) {
-    doc.text(mobText, pageWidth - margin, y, { align: "right" });
-  }
+    doc.text(custLines[0], margin, y);
+    if (mobText) {
+      doc.text(mobText, pageWidth - margin, y, { align: "right" });
+    }
 
-  for (let i = 1; i < custLines.length; i++) {
-    y += 3.5;
-    doc.text(custLines[i], margin, y);
-  }
-  
-  // Determine if interstate based strictly on original bill if present; fallback to outlet settings
-  let isInterstateOrder = false;
-  if ((returnData as any).is_interstate !== undefined && (returnData as any).is_interstate !== null) {
-    isInterstateOrder = Boolean((returnData as any).is_interstate);
-  } else if ((returnData as any).order?.is_interstate !== undefined && (returnData as any).order?.is_interstate !== null) {
-    isInterstateOrder = Boolean((returnData as any).order?.is_interstate);
-  } else {
-    const outletInterstateMode = getOutletField("interstate_mode");
-    isInterstateOrder = (outletInterstateMode === "ALWAYS_ON");
-  }
-
-  const placeOfSupply = (returnData as any).place_of_supply ||
-    (returnData as any).order?.place_of_supply ||
-    getOutletField("place_of_supply");
-
-  if (placeOfSupply) {
-    const posLines = doc.splitTextToSize(`Place of Supply: ${placeOfSupply}${isInterstateOrder ? " (Inter-State)" : ""}`, contentWidth);
-    for (const line of posLines) {
+    for (let i = 1; i < custLines.length; i++) {
       y += 3.5;
-      doc.text(line, margin, y);
+      doc.text(custLines[i], margin, y);
     }
-  } else if (isInterstateOrder) {
-    y += 3.5;
-    doc.text(`Supply Type    : Inter-State (IGST)`, margin, y);
-  }
 
-  y += 2.5;
-  drawSolidLine(y);
+    // Determine if interstate based strictly on original bill if present; fallback to outlet settings
+    let isInterstateOrder = false;
+    if ((returnData as any).is_interstate !== undefined && (returnData as any).is_interstate !== null) {
+      isInterstateOrder = Boolean((returnData as any).is_interstate);
+    } else if ((returnData as any).order?.is_interstate !== undefined && (returnData as any).order?.is_interstate !== null) {
+      isInterstateOrder = Boolean((returnData as any).order?.is_interstate);
+    } else {
+      const outletInterstateMode = getOutletField("interstate_mode");
+      isInterstateOrder = (outletInterstateMode === "ALWAYS_ON");
+    }
 
-  // 3. ITEMIZED TABLE GRID (Courier Monospaced Column Alignment)
-  let totalMrpVal = 0;
-  let totalRefundValue = 0;
-  
-  const tableData = (returnData.returned_items || []).map((item: any, idx: number) => {
-    const dishName = item.item_name || `Item #${idx + 1}`;
-    const qtyVal = parseFloat(String(item.quantity || "0"));
-    const rawUnit = item.selected_unit || item.unit || item.unit_label || (item.menu_item_id && effectiveMenuItemsMap?.[item.menu_item_id]?.unit_label) || "";
-    const cleanUnit = typeof rawUnit === "string" ? rawUnit.trim() : "";
-    const qtyFormatted = qtyVal % 1 === 0 ? qtyVal.toFixed(0) : String(qtyVal);
-    const qtyStr = cleanUnit ? `${qtyFormatted} ${cleanUnit}` : qtyFormatted;
-    const price = parseFloat(String(item.unit_price || "0"));
-    const mrpVal = item.mrp ? parseFloat(String(item.mrp)) : price;
-    const lineTotal = item.line_refund !== undefined ? parseFloat(String(item.line_refund)) : qtyVal * price;
+    const placeOfSupply = (returnData as any).place_of_supply ||
+      (returnData as any).order?.place_of_supply ||
+      getOutletField("place_of_supply");
 
-    totalMrpVal += mrpVal * qtyVal;
-    totalRefundValue += lineTotal;
+    if (placeOfSupply) {
+      const posLines = doc.splitTextToSize(`Place of Supply: ${placeOfSupply}${isInterstateOrder ? " (Inter-State)" : ""}`, contentWidth);
+      for (const line of posLines) {
+        y += 3.5;
+        doc.text(line, margin, y);
+      }
+    } else if (isInterstateOrder) {
+      y += 3.5;
+      doc.text(`Supply Type    : Inter-State (IGST)`, margin, y);
+    }
 
-    return [
-      `${idx + 1}. ${dishName}`,
-      qtyStr,
-      `${mrpVal.toFixed(2)}`,
-      `${price.toFixed(2)}`,
-      `${lineTotal.toFixed(2)}`,
-    ];
-  });
+    y += 2.5;
+    drawSolidLine(y);
 
-  autoTable(doc, {
-    startY: y + 1.5,
-    margin: { left: margin, right: margin },
-    head: [["#  Item", "Qty", "MRP", "Rate", "Amt"]],
-    body: tableData,
-    theme: "plain",
-    styles: {
-      font: "helvetica",
-      fontStyle: "bold",
-      fontSize: 7,
-      cellPadding: { top: 1, bottom: 1, left: 0, right: 0 },
-      textColor: [0, 0, 0],
-      lineWidth: 0,
-    },
-    headStyles: {
-      font: "helvetica",
-      fontStyle: "bold",
-      fontSize: 7,
-      textColor: [0, 0, 0],
-      fillColor: false,
-    },
-    columnStyles: {
-      0: { cellWidth: 20, halign: "left" },
-      1: { cellWidth: 11, halign: "center" },
-      2: { cellWidth: 11, halign: "right" },
-      3: { cellWidth: 11, halign: "right" },
-      4: { cellWidth: 11, halign: "right" },
-    },
-  });
+    // 3. ITEMIZED TABLE GRID (Courier Monospaced Column Alignment)
+    let totalMrpVal = 0;
+    let totalRefundValue = 0;
 
-  let currentTableFinalY = (doc as any).lastAutoTable.finalY + 2;
-
-  if (returnData.exchange_items && returnData.exchange_items.length > 0) {
-    drawDashedLine(currentTableFinalY);
-    currentTableFinalY += 3;
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
-    doc.text("EXCHANGE / REPLACEMENT ITEMS", margin, currentTableFinalY);
-
-    const exchangeTableData = returnData.exchange_items.map((item: any, idx: number) => {
-      const dishName = item.item_name || `Exchange #${idx + 1}`;
+    const tableData = (returnData.returned_items || []).map((item: any, idx: number) => {
+      const dishName = item.item_name || `Item #${idx + 1}`;
       const qtyVal = parseFloat(String(item.quantity || "0"));
       const rawUnit = item.selected_unit || item.unit || item.unit_label || (item.menu_item_id && effectiveMenuItemsMap?.[item.menu_item_id]?.unit_label) || "";
       const cleanUnit = typeof rawUnit === "string" ? rawUnit.trim() : "";
       const qtyFormatted = qtyVal % 1 === 0 ? qtyVal.toFixed(0) : String(qtyVal);
       const qtyStr = cleanUnit ? `${qtyFormatted} ${cleanUnit}` : qtyFormatted;
       const price = parseFloat(String(item.unit_price || "0"));
-      const lineTotal = item.line_total !== undefined ? parseFloat(String(item.line_total)) : qtyVal * price;
+      const mrpVal = item.mrp ? parseFloat(String(item.mrp)) : price;
+      const lineTotal = item.line_refund !== undefined ? parseFloat(String(item.line_refund)) : qtyVal * price;
+
+      totalMrpVal += mrpVal * qtyVal;
+      totalRefundValue += lineTotal;
 
       return [
         `${idx + 1}. ${dishName}`,
         qtyStr,
+        `${mrpVal.toFixed(2)}`,
         `${price.toFixed(2)}`,
         `${lineTotal.toFixed(2)}`,
       ];
     });
 
     autoTable(doc, {
-      startY: currentTableFinalY + 1.5,
+      startY: y + 1.5,
       margin: { left: margin, right: margin },
-      head: [["#  Item", "Qty", "Rate", "Amt"]],
-      body: exchangeTableData,
+      head: [["#  Item", "Qty", "MRP", "Rate", "Amt"]],
+      body: tableData,
       theme: "plain",
       styles: {
         font: "helvetica",
@@ -1538,173 +1481,230 @@ export async function generateReturnReceiptPDF(
         fillColor: false,
       },
       columnStyles: {
-        0: { cellWidth: 28, halign: "left" },
-        1: { cellWidth: 14, halign: "center" },
+        0: { cellWidth: 20, halign: "left" },
+        1: { cellWidth: 11, halign: "center" },
         2: { cellWidth: 11, halign: "right" },
         3: { cellWidth: 11, halign: "right" },
+        4: { cellWidth: 11, halign: "right" },
       },
     });
 
-    currentTableFinalY = (doc as any).lastAutoTable.finalY + 2;
-  }
+    let currentTableFinalY = (doc as any).lastAutoTable.finalY + 2;
 
-  const finalY = currentTableFinalY;
-  drawDashedLine(finalY);
+    if (returnData.exchange_items && returnData.exchange_items.length > 0) {
+      drawDashedLine(currentTableFinalY);
+      currentTableFinalY += 3;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7);
+      doc.text("EXCHANGE / REPLACEMENT ITEMS", margin, currentTableFinalY);
 
-  // Group GST by HSN code and Tax Rate
-  interface HsnSummaryItem {
-    hsn: string;
-    rate: number;
-    base: number;
-    tax: number;
-  }
-  const hsnSummaryMap: Record<string, HsnSummaryItem> = {};
+      const exchangeTableData = returnData.exchange_items.map((item: any, idx: number) => {
+        const dishName = item.item_name || `Exchange #${idx + 1}`;
+        const qtyVal = parseFloat(String(item.quantity || "0"));
+        const rawUnit = item.selected_unit || item.unit || item.unit_label || (item.menu_item_id && effectiveMenuItemsMap?.[item.menu_item_id]?.unit_label) || "";
+        const cleanUnit = typeof rawUnit === "string" ? rawUnit.trim() : "";
+        const qtyFormatted = qtyVal % 1 === 0 ? qtyVal.toFixed(0) : String(qtyVal);
+        const qtyStr = cleanUnit ? `${qtyFormatted} ${cleanUnit}` : qtyFormatted;
+        const price = parseFloat(String(item.unit_price || "0"));
+        const lineTotal = item.line_total !== undefined ? parseFloat(String(item.line_total)) : qtyVal * price;
 
-  (returnData.returned_items || []).forEach((item: any) => {
-    const qtyVal = parseFloat(String(item.quantity || "0"));
-    const price = parseFloat(String(item.unit_price || "0"));
-    const lineTotal = item.line_refund !== undefined ? parseFloat(String(item.line_refund)) : qtyVal * price;
+        return [
+          `${idx + 1}. ${dishName}`,
+          qtyStr,
+          `${price.toFixed(2)}`,
+          `${lineTotal.toFixed(2)}`,
+        ];
+      });
 
-    let itemTaxRate = 0;
-    if (item.tax_rate !== undefined && item.tax_rate !== null) {
-      itemTaxRate = parseFloat(String(item.tax_rate));
-    } else if (item.item_tax_rate !== undefined && item.item_tax_rate !== null) {
-      itemTaxRate = parseFloat(String(item.item_tax_rate));
-    } else if (effectiveMenuItemsMap && item.menu_item_id && effectiveMenuItemsMap[item.menu_item_id]?.tax_rate !== undefined && effectiveMenuItemsMap[item.menu_item_id]?.tax_rate !== null) {
-      itemTaxRate = parseFloat(String(effectiveMenuItemsMap[item.menu_item_id].tax_rate));
+      autoTable(doc, {
+        startY: currentTableFinalY + 1.5,
+        margin: { left: margin, right: margin },
+        head: [["#  Item", "Qty", "Rate", "Amt"]],
+        body: exchangeTableData,
+        theme: "plain",
+        styles: {
+          font: "helvetica",
+          fontStyle: "bold",
+          fontSize: 7,
+          cellPadding: { top: 1, bottom: 1, left: 0, right: 0 },
+          textColor: [0, 0, 0],
+          lineWidth: 0,
+        },
+        headStyles: {
+          font: "helvetica",
+          fontStyle: "bold",
+          fontSize: 7,
+          textColor: [0, 0, 0],
+          fillColor: false,
+        },
+        columnStyles: {
+          0: { cellWidth: 28, halign: "left" },
+          1: { cellWidth: 14, halign: "center" },
+          2: { cellWidth: 11, halign: "right" },
+          3: { cellWidth: 11, halign: "right" },
+        },
+      });
+
+      currentTableFinalY = (doc as any).lastAutoTable.finalY + 2;
     }
-    if (isNaN(itemTaxRate)) itemTaxRate = 0;
 
-    let itemHsn = item.hsn_code || (effectiveMenuItemsMap && item.menu_item_id && (effectiveMenuItemsMap[item.menu_item_id] as any)?.hsn_code) || "-";
+    const finalY = currentTableFinalY;
+    drawDashedLine(finalY);
 
-    if (itemTaxRate >= 0) {
-      const base = lineTotal / (1 + (itemTaxRate / 100));
-      const taxAmount = lineTotal - base;
+    // Group GST by HSN code and Tax Rate
+    interface HsnSummaryItem {
+      hsn: string;
+      rate: number;
+      base: number;
+      tax: number;
+    }
+    const hsnSummaryMap: Record<string, HsnSummaryItem> = {};
 
-      const groupKey = `${itemHsn}_${itemTaxRate}`;
-      if (!hsnSummaryMap[groupKey]) {
-        hsnSummaryMap[groupKey] = { hsn: itemHsn, rate: itemTaxRate, base: 0, tax: 0 };
+    (returnData.returned_items || []).forEach((item: any) => {
+      const qtyVal = parseFloat(String(item.quantity || "0"));
+      const price = parseFloat(String(item.unit_price || "0"));
+      const lineTotal = item.line_refund !== undefined ? parseFloat(String(item.line_refund)) : qtyVal * price;
+
+      let itemTaxRate = 0;
+      if (item.tax_rate !== undefined && item.tax_rate !== null) {
+        itemTaxRate = parseFloat(String(item.tax_rate));
+      } else if (item.item_tax_rate !== undefined && item.item_tax_rate !== null) {
+        itemTaxRate = parseFloat(String(item.item_tax_rate));
+      } else if (effectiveMenuItemsMap && item.menu_item_id && effectiveMenuItemsMap[item.menu_item_id]?.tax_rate !== undefined && effectiveMenuItemsMap[item.menu_item_id]?.tax_rate !== null) {
+        itemTaxRate = parseFloat(String(effectiveMenuItemsMap[item.menu_item_id].tax_rate));
       }
-      hsnSummaryMap[groupKey].base += base;
-      hsnSummaryMap[groupKey].tax += taxAmount;
-    }
-  });
+      if (isNaN(itemTaxRate)) itemTaxRate = 0;
 
-  const hsnList = Object.values(hsnSummaryMap).sort((a, b) => a.hsn.localeCompare(b.hsn) || a.rate - b.rate);
+      let itemHsn = item.hsn_code || (effectiveMenuItemsMap && item.menu_item_id && (effectiveMenuItemsMap[item.menu_item_id] as any)?.hsn_code) || "-";
 
-  // 4. FINANCIAL SUMMARY GRID
-  let summaryY = finalY + 4;
-  
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(7.5);
-  doc.setTextColor(0, 0, 0);
+      if (itemTaxRate >= 0) {
+        const base = lineTotal / (1 + (itemTaxRate / 100));
+        const taxAmount = lineTotal - base;
 
-  const mrpSavings = Math.max(0, totalMrpVal - totalRefundValue);
-
-  if (mrpSavings > 0) {
-    doc.text("Total MRP Value", margin, summaryY);
-    doc.text(`INR ${totalMrpVal.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
-    summaryY += 3.5;
-
-    doc.text("Product Discount", margin, summaryY);
-    doc.text(`- INR ${mrpSavings.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
-    summaryY += 3.5;
-    
-    summaryY += 1;
-    drawDashedLine(summaryY);
-    summaryY += 4.5;
-  }
-
-  let totalExchangeVal = 0;
-  if (returnData.exchange_items && returnData.exchange_items.length > 0) {
-    returnData.exchange_items.forEach((it) => {
-      totalExchangeVal += Number(it.line_total || (Number(it.quantity) * Number(it.unit_price)));
+        const groupKey = `${itemHsn}_${itemTaxRate}`;
+        if (!hsnSummaryMap[groupKey]) {
+          hsnSummaryMap[groupKey] = { hsn: itemHsn, rate: itemTaxRate, base: 0, tax: 0 };
+        }
+        hsnSummaryMap[groupKey].base += base;
+        hsnSummaryMap[groupKey].tax += taxAmount;
+      }
     });
-  }
 
-  doc.text("Total Return Credit", margin, summaryY);
-  doc.text(`INR ${totalRefundValue.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
-  summaryY += 3.8;
+    const hsnList = Object.values(hsnSummaryMap).sort((a, b) => a.hsn.localeCompare(b.hsn) || a.rate - b.rate);
 
-  if (totalExchangeVal > 0) {
-    doc.text("Less Exchange Value", margin, summaryY);
-    doc.text(`- INR ${totalExchangeVal.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
-    summaryY += 3.5;
-  }
+    // 4. FINANCIAL SUMMARY GRID
+    let summaryY = finalY + 4;
 
-  const netBeforeRound = totalRefundValue - totalExchangeVal;
-  const roundOff = returnData.round_off !== undefined ? Number(returnData.round_off) : (Math.round(netBeforeRound) - netBeforeRound);
-  const netRefund = netBeforeRound + roundOff;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(0, 0, 0);
 
-  if (Math.abs(roundOff) > 0.001) {
-    doc.text("Round Off", margin, summaryY);
-    const sign = roundOff > 0 ? "+" : "";
-    doc.text(`${sign}${roundOff.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
-    summaryY += 3.5;
-    summaryY += 1;
+    const mrpSavings = Math.max(0, totalMrpVal - totalRefundValue);
+
+    if (mrpSavings > 0) {
+      doc.text("Total MRP Value", margin, summaryY);
+      doc.text(`INR ${totalMrpVal.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
+      summaryY += 3.5;
+
+      doc.text("Product Discount", margin, summaryY);
+      doc.text(`- INR ${mrpSavings.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
+      summaryY += 3.5;
+
+      summaryY += 1;
+      drawDashedLine(summaryY);
+      summaryY += 4.5;
+    }
+
+    let totalExchangeVal = 0;
+    if (returnData.exchange_items && returnData.exchange_items.length > 0) {
+      returnData.exchange_items.forEach((it) => {
+        totalExchangeVal += Number(it.line_total || (Number(it.quantity) * Number(it.unit_price)));
+      });
+    }
+
+    doc.text("Total Return Credit", margin, summaryY);
+    doc.text(`INR ${totalRefundValue.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
+    summaryY += 3.8;
+
+    if (totalExchangeVal > 0) {
+      doc.text("Less Exchange Value", margin, summaryY);
+      doc.text(`- INR ${totalExchangeVal.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
+      summaryY += 3.5;
+    }
+
+    const netBeforeRound = totalRefundValue - totalExchangeVal;
+    const roundOff = returnData.round_off !== undefined ? Number(returnData.round_off) : (Math.round(netBeforeRound) - netBeforeRound);
+    const netRefund = netBeforeRound + roundOff;
+
+    if (Math.abs(roundOff) > 0.001) {
+      doc.text("Round Off", margin, summaryY);
+      const sign = roundOff > 0 ? "+" : "";
+      doc.text(`${sign}${roundOff.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
+      summaryY += 3.5;
+      summaryY += 1;
+      drawSolidLine(summaryY);
+      summaryY += 4.5;
+    } else {
+      summaryY += 1;
+      drawSolidLine(summaryY);
+      summaryY += 4.5;
+    }
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.text(netRefund >= 0 ? "NET REFUND" : "NET PAYABLE", margin, summaryY);
+    doc.text(`INR ${Math.abs(netRefund).toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
+
+    summaryY += 2;
     drawSolidLine(summaryY);
     summaryY += 4.5;
-  } else {
-    summaryY += 1;
-    drawSolidLine(summaryY);
-    summaryY += 4.5;
-  }
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8.5);
-  doc.text(netRefund >= 0 ? "NET REFUND" : "NET PAYABLE", margin, summaryY);
-  doc.text(`INR ${Math.abs(netRefund).toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
-  
-  summaryY += 2;
-  drawSolidLine(summaryY);
-  summaryY += 4.5;
+    let netPaid = netRefund;
+    const creditApplied = returnData.credit_applied || 0;
+    const debitApplied = returnData.debit_applied || 0;
+    const debtSettled = returnData.debt_settled || 0;
+    const creditAwarded = returnData.credit_awarded || 0;
+    const creditCashedOut = returnData.credit_cashed_out || 0;
 
-  let netPaid = netRefund;
-  const creditApplied = returnData.credit_applied || 0;
-  const debitApplied = returnData.debit_applied || 0;
-  const debtSettled = returnData.debt_settled || 0;
-  const creditAwarded = returnData.credit_awarded || 0;
-  const creditCashedOut = returnData.credit_cashed_out || 0;
-
-  if (creditApplied > 0 || debitApplied > 0 || debtSettled > 0 || creditAwarded > 0 || creditCashedOut > 0) {
+    if (creditApplied > 0 || debitApplied > 0 || debtSettled > 0 || creditAwarded > 0 || creditCashedOut > 0) {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(7.5);
-      
+
       if (creditApplied > 0) {
-          doc.text("Credit Applied (to Exchange)", margin, summaryY);
-          doc.text(`+ INR ${creditApplied.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
-          summaryY += 3.5;
-          netPaid += creditApplied;
+        doc.text("Credit Applied (to Exchange)", margin, summaryY);
+        doc.text(`+ INR ${creditApplied.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
+        summaryY += 3.5;
+        netPaid += creditApplied;
       }
-      
+
       if (debitApplied > 0) {
-          doc.text("Debit (Shortfall Unpaid)", margin, summaryY);
-          doc.text(`+ INR ${debitApplied.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
-          summaryY += 3.5;
-          netPaid += debitApplied;
+        doc.text("Debit (Shortfall Unpaid)", margin, summaryY);
+        doc.text(`+ INR ${debitApplied.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
+        summaryY += 3.5;
+        netPaid += debitApplied;
       }
-      
+
       if (debtSettled > 0) {
-          doc.text("Debt Settled", margin, summaryY);
-          doc.text(`- INR ${debtSettled.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
-          summaryY += 3.5;
-          netPaid -= debtSettled;
+        doc.text("Debt Settled", margin, summaryY);
+        doc.text(`- INR ${debtSettled.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
+        summaryY += 3.5;
+        netPaid -= debtSettled;
       }
-      
+
       if (creditAwarded > 0) {
-          doc.text("Credit Awarded", margin, summaryY);
-          doc.text(`- INR ${creditAwarded.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
-          summaryY += 3.5;
-          netPaid -= creditAwarded;
+        doc.text("Credit Awarded", margin, summaryY);
+        doc.text(`- INR ${creditAwarded.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
+        summaryY += 3.5;
+        netPaid -= creditAwarded;
       }
-      
+
       if (creditCashedOut > 0) {
-          doc.text("Credit Cashed Out", margin, summaryY);
-          doc.text(`+ INR ${creditCashedOut.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
-          summaryY += 3.5;
-          netPaid += creditCashedOut;
+        doc.text("Credit Cashed Out", margin, summaryY);
+        doc.text(`+ INR ${creditCashedOut.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
+        summaryY += 3.5;
+        netPaid += creditCashedOut;
       }
-      
+
       summaryY += 1.5;
       drawSolidLine(summaryY);
       summaryY += 4.5;
@@ -1716,188 +1716,188 @@ export async function generateReturnReceiptPDF(
       summaryY += 2;
       drawSolidLine(summaryY);
       summaryY += 4.5;
-  }
+    }
 
-  const customerBalanceRaw = returnData.wallet_balance_after ?? returnData.customer_balance;
-  if (customerBalanceRaw !== undefined && customerBalanceRaw !== null) {
+    const customerBalanceRaw = returnData.wallet_balance_after ?? returnData.customer_balance;
+    if (customerBalanceRaw !== undefined && customerBalanceRaw !== null) {
       const customerBalance = parseFloat(String(customerBalanceRaw)) || 0;
       summaryY += 2;
       doc.setFont("helvetica", "bold");
       doc.setFontSize(7.5);
       if (customerBalance >= 0) {
-          doc.text("Store Credit Balance", margin, summaryY);
-          doc.text(`INR ${customerBalance.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
+        doc.text("Store Credit Balance", margin, summaryY);
+        doc.text(`INR ${customerBalance.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
       } else {
-          doc.text("Outstanding Debit", margin, summaryY);
-          doc.text(`INR ${Math.abs(customerBalance).toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
+        doc.text("Outstanding Debit", margin, summaryY);
+        doc.text(`INR ${Math.abs(customerBalance).toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
       }
       summaryY += 3.5;
-  }
-
-  // 5. STATUTORY GST BREAKDOWN TABLE (Spacious & Clean Layout matching standard bill)
-  if (hsnList.length > 0) {
-    summaryY += 4;
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7.5);
-    doc.text("GST TAX SUMMARY", pageWidth / 2, summaryY, { align: "center" });
-    summaryY += 3.2;
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(6.5);
-    doc.text(isInterstateOrder ? "(INTER-STATE / IGST)" : "(INTRA-STATE SALE)", pageWidth / 2, summaryY, { align: "center" });
-    summaryY += 3.0;
-
-    drawDashedLine(summaryY);
-    summaryY += 4.0;
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(6.5);
-    if (isInterstateOrder) {
-      doc.text("HSN/SAC", margin, summaryY);
-      doc.text("Taxable", 32, summaryY, { align: "right" });
-      doc.text("Rate", 48, summaryY, { align: "right" });
-      doc.text("IGST Amt", pageWidth - margin, summaryY, { align: "right" });
-    } else {
-      doc.text("HSN/SAC", margin, summaryY);
-      doc.text("Taxable", 26, summaryY, { align: "right" });
-      doc.text("CGST", 40, summaryY, { align: "right" });
-      doc.text("SGST", 54, summaryY, { align: "right" });
-      doc.text("Total Tax", pageWidth - margin, summaryY, { align: "right" });
     }
-    summaryY += 1.8;
-    drawDashedLine(summaryY);
-    summaryY += 4.0;
 
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(6.5);
+    // 5. STATUTORY GST BREAKDOWN TABLE (Spacious & Clean Layout matching standard bill)
+    if (hsnList.length > 0) {
+      summaryY += 4;
 
-    let totHsnBase = 0;
-    let totHsnTax = 0;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7.5);
+      doc.text("GST TAX SUMMARY", pageWidth / 2, summaryY, { align: "center" });
+      summaryY += 3.2;
 
-    hsnList.forEach((grp) => {
-      totHsnBase += grp.base;
-      totHsnTax += grp.tax;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6.5);
+      doc.text(isInterstateOrder ? "(INTER-STATE / IGST)" : "(INTRA-STATE SALE)", pageWidth / 2, summaryY, { align: "center" });
+      summaryY += 3.0;
 
-      const displayHsn = grp.hsn && grp.hsn !== "null" && grp.hsn !== "undefined"
-        ? (grp.hsn.length > 8 ? grp.hsn.substring(0, 8) : grp.hsn)
-        : "-";
-      doc.text(displayHsn, margin, summaryY);
+      drawDashedLine(summaryY);
+      summaryY += 4.0;
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6.5);
+      if (isInterstateOrder) {
+        doc.text("HSN/SAC", margin, summaryY);
+        doc.text("Taxable", 32, summaryY, { align: "right" });
+        doc.text("Rate", 48, summaryY, { align: "right" });
+        doc.text("IGST Amt", pageWidth - margin, summaryY, { align: "right" });
+      } else {
+        doc.text("HSN/SAC", margin, summaryY);
+        doc.text("Taxable", 26, summaryY, { align: "right" });
+        doc.text("CGST", 40, summaryY, { align: "right" });
+        doc.text("SGST", 54, summaryY, { align: "right" });
+        doc.text("Total Tax", pageWidth - margin, summaryY, { align: "right" });
+      }
+      summaryY += 1.8;
+      drawDashedLine(summaryY);
+      summaryY += 4.0;
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6.5);
+
+      let totHsnBase = 0;
+      let totHsnTax = 0;
+
+      hsnList.forEach((grp) => {
+        totHsnBase += grp.base;
+        totHsnTax += grp.tax;
+
+        const displayHsn = grp.hsn && grp.hsn !== "null" && grp.hsn !== "undefined"
+          ? (grp.hsn.length > 8 ? grp.hsn.substring(0, 8) : grp.hsn)
+          : "-";
+        doc.text(displayHsn, margin, summaryY);
+
+        if (isInterstateOrder) {
+          doc.text(grp.base.toFixed(2), 32, summaryY, { align: "right" });
+          doc.text(`${grp.rate.toFixed(1).replace(/\.0$/, "")}%`, 48, summaryY, { align: "right" });
+          doc.text(grp.tax.toFixed(2), pageWidth - margin, summaryY, { align: "right" });
+        } else {
+          const halfTax = grp.tax / 2;
+          doc.text(grp.base.toFixed(2), 26, summaryY, { align: "right" });
+          doc.text(halfTax.toFixed(2), 40, summaryY, { align: "right" });
+          doc.text(halfTax.toFixed(2), 54, summaryY, { align: "right" });
+          doc.text(grp.tax.toFixed(2), pageWidth - margin, summaryY, { align: "right" });
+        }
+        summaryY += 3.8;
+      });
+
+      summaryY += 0.8;
+      drawDashedLine(summaryY);
+      summaryY += 3.8;
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6.5);
+      doc.text("Total", margin, summaryY);
 
       if (isInterstateOrder) {
-        doc.text(grp.base.toFixed(2), 32, summaryY, { align: "right" });
-        doc.text(`${grp.rate.toFixed(1).replace(/\.0$/, "")}%`, 48, summaryY, { align: "right" });
-        doc.text(grp.tax.toFixed(2), pageWidth - margin, summaryY, { align: "right" });
+        doc.text(totHsnBase.toFixed(2), 32, summaryY, { align: "right" });
+        doc.text(totHsnTax.toFixed(2), pageWidth - margin, summaryY, { align: "right" });
       } else {
-        const halfTax = grp.tax / 2;
-        doc.text(grp.base.toFixed(2), 26, summaryY, { align: "right" });
-        doc.text(halfTax.toFixed(2), 40, summaryY, { align: "right" });
-        doc.text(halfTax.toFixed(2), 54, summaryY, { align: "right" });
-        doc.text(grp.tax.toFixed(2), pageWidth - margin, summaryY, { align: "right" });
+        const halfTot = totHsnTax / 2;
+        doc.text(totHsnBase.toFixed(2), 26, summaryY, { align: "right" });
+        doc.text(halfTot.toFixed(2), 40, summaryY, { align: "right" });
+        doc.text(halfTot.toFixed(2), 54, summaryY, { align: "right" });
+        doc.text(totHsnTax.toFixed(2), pageWidth - margin, summaryY, { align: "right" });
       }
-      summaryY += 3.8;
-    });
 
-    summaryY += 0.8;
-    drawDashedLine(summaryY);
-    summaryY += 3.8;
+      summaryY += 2.0;
+      drawDashedLine(summaryY);
+      summaryY += 4.5;
+    }
 
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(6.5);
-    doc.text("Total", margin, summaryY);
+    // 5. FOOTER & QR CODE + APP STORE BADGES (Side-by-side: QR Code on Left, Google Play & App Store stacked on Right)
+    summaryY += 4;
 
-    if (isInterstateOrder) {
-      doc.text(totHsnBase.toFixed(2), 32, summaryY, { align: "right" });
-      doc.text(totHsnTax.toFixed(2), pageWidth - margin, summaryY, { align: "right" });
+    const qrSize = 22;
+    const badgeWidth = 28;
+    const badgeHeight = 9.5;
+    const badgeGapY = 2;
+    const qrBadgeGapX = 4.5;
+
+    const hasQr = Boolean(billQrUrlRaw);
+    const totalBlockWidth = hasQr ? (qrSize + qrBadgeGapX + badgeWidth) : badgeWidth;
+    const blockStartX = (pageWidth - totalBlockWidth) / 2;
+    const qrX = blockStartX;
+    const badgesX = hasQr ? (blockStartX + qrSize + qrBadgeGapX) : blockStartX;
+
+    const googlePlayY = summaryY + 0.5;
+    const appStoreY = googlePlayY + badgeHeight + badgeGapY;
+
+    if (hasQr && qrDataUrl) {
+      try {
+        doc.addImage(qrDataUrl, "PNG", qrX, summaryY, qrSize, qrSize);
+      } catch (e) {
+        console.warn("Failed to draw QR code", e);
+      }
+    }
+
+    const drawBadge = (x: number, yPos: number, width: number, height: number, text: string) => {
+      doc.setFillColor(0, 0, 0);
+      doc.roundedRect(x, yPos, width, height, 1.5, 1.5, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(6.5);
+      doc.setFont("helvetica", "bold");
+      doc.text(text, x + width / 2, yPos + height / 2 + 1, { align: "center" });
+      doc.setTextColor(0, 0, 0);
+    };
+
+    if (playStoreBase64) {
+      try {
+        doc.addImage(playStoreBase64, badgesX, googlePlayY, badgeWidth, badgeHeight);
+      } catch {
+        drawBadge(badgesX, googlePlayY, badgeWidth, badgeHeight, "Google Play");
+      }
     } else {
-      const halfTot = totHsnTax / 2;
-      doc.text(totHsnBase.toFixed(2), 26, summaryY, { align: "right" });
-      doc.text(halfTot.toFixed(2), 40, summaryY, { align: "right" });
-      doc.text(halfTot.toFixed(2), 54, summaryY, { align: "right" });
-      doc.text(totHsnTax.toFixed(2), pageWidth - margin, summaryY, { align: "right" });
-    }
-
-    summaryY += 2.0;
-    drawDashedLine(summaryY);
-    summaryY += 4.5;
-  }
-
-  // 5. FOOTER & QR CODE + APP STORE BADGES (Side-by-side: QR Code on Left, Google Play & App Store stacked on Right)
-  summaryY += 4;
-  
-  const qrSize = 22;
-  const badgeWidth = 28;
-  const badgeHeight = 9.5;
-  const badgeGapY = 2;
-  const qrBadgeGapX = 4.5;
-
-  const hasQr = Boolean(billQrUrlRaw);
-  const totalBlockWidth = hasQr ? (qrSize + qrBadgeGapX + badgeWidth) : badgeWidth;
-  const blockStartX = (pageWidth - totalBlockWidth) / 2;
-  const qrX = blockStartX;
-  const badgesX = hasQr ? (blockStartX + qrSize + qrBadgeGapX) : blockStartX;
-
-  const googlePlayY = summaryY + 0.5;
-  const appStoreY = googlePlayY + badgeHeight + badgeGapY;
-
-  if (hasQr && qrDataUrl) {
-    try {
-      doc.addImage(qrDataUrl, "PNG", qrX, summaryY, qrSize, qrSize);
-    } catch (e) {
-      console.warn("Failed to draw QR code", e);
-    }
-  }
-
-  const drawBadge = (x: number, yPos: number, width: number, height: number, text: string) => {
-    doc.setFillColor(0, 0, 0);
-    doc.roundedRect(x, yPos, width, height, 1.5, 1.5, "F");
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(6.5);
-    doc.setFont("helvetica", "bold");
-    doc.text(text, x + width / 2, yPos + height / 2 + 1, { align: "center" });
-    doc.setTextColor(0, 0, 0);
-  };
-
-  if (playStoreBase64) {
-    try {
-      doc.addImage(playStoreBase64, badgesX, googlePlayY, badgeWidth, badgeHeight);
-    } catch {
       drawBadge(badgesX, googlePlayY, badgeWidth, badgeHeight, "Google Play");
     }
-  } else {
-    drawBadge(badgesX, googlePlayY, badgeWidth, badgeHeight, "Google Play");
-  }
 
-  if (appStoreBase64) {
-    try {
-      doc.addImage(appStoreBase64, badgesX, appStoreY, badgeWidth, badgeHeight);
-    } catch {
+    if (appStoreBase64) {
+      try {
+        doc.addImage(appStoreBase64, badgesX, appStoreY, badgeWidth, badgeHeight);
+      } catch {
+        drawBadge(badgesX, appStoreY, badgeWidth, badgeHeight, "App Store");
+      }
+    } else {
       drawBadge(badgesX, appStoreY, badgeWidth, badgeHeight, "App Store");
     }
-  } else {
-    drawBadge(badgesX, appStoreY, badgeWidth, badgeHeight, "App Store");
-  }
-  
-  doc.link(badgesX, googlePlayY, badgeWidth, badgeHeight, { url: "https://play.google.com/store/apps/details?id=com.apnagreenbasket" });
-  doc.link(badgesX, appStoreY, badgeWidth, badgeHeight, { url: "https://www.apple.com/app-store/" });
-  
-  const blockHeight = hasQr ? Math.max(qrSize, badgeHeight * 2 + badgeGapY + 1) : (badgeHeight * 2 + badgeGapY);
-  summaryY += blockHeight + 5;
 
-  // 6. STATUS STAMP & FOOTER
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8);
-  doc.text(`STATUS: REFUND PROCESSED (${returnData.refund_payment_method || "CASH"})`, pageWidth / 2, summaryY, { align: "center" });
+    doc.link(badgesX, googlePlayY, badgeWidth, badgeHeight, { url: "https://play.google.com/store/apps/details?id=com.apnagreenbasket" });
+    doc.link(badgesX, appStoreY, badgeWidth, badgeHeight, { url: "https://www.apple.com/app-store/" });
 
-  summaryY += 4.5;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(7.5);
-  doc.text("*** INVENTORY RESTOCKED ***", pageWidth / 2, summaryY, { align: "center" });
+    const blockHeight = hasQr ? Math.max(qrSize, badgeHeight * 2 + badgeGapY + 1) : (badgeHeight * 2 + badgeGapY);
+    summaryY += blockHeight + 5;
 
-  summaryY += 3.5;
-  doc.text("Thank you for shopping with us!", pageWidth / 2, summaryY, { align: "center" });
+    // 6. STATUS STAMP & FOOTER
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.text(`STATUS: REFUND PROCESSED (${returnData.refund_payment_method || "CASH"})`, pageWidth / 2, summaryY, { align: "center" });
 
-  if (barcodeDataUrl) {
+    summaryY += 4.5;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.text("*** INVENTORY RESTOCKED ***", pageWidth / 2, summaryY, { align: "center" });
+
+    summaryY += 3.5;
+    doc.text("Thank you for shopping with us!", pageWidth / 2, summaryY, { align: "center" });
+
+    if (barcodeDataUrl) {
       summaryY += 3;
       const bcWidth = 32;
       const bcHeight = 6;
@@ -1912,7 +1912,7 @@ export async function generateReturnReceiptPDF(
         summaryY += bcHeight;
       }
     }
-    
+
     summaryY += 5;
     return summaryY;
   };
@@ -1955,10 +1955,10 @@ export async function generateReturnReceiptPDF(
 
 function drawHeader(doc: any, restaurant: any, title: string, dateRangeLabel: string) {
   const pageWidth = doc.internal.pageSize.getWidth();
-  
+
   doc.setFillColor(0, 112, 243);
   doc.rect(0, 0, pageWidth, 35, "F");
-  
+
   doc.setTextColor(255, 255, 255);
 
   const resName = restaurant?.name || "ApnaGreen Basket";
@@ -1967,11 +1967,11 @@ function drawHeader(doc: any, restaurant: any, title: string, dateRangeLabel: st
   doc.setFontSize(16);
   doc.setFont("helvetica", "bold");
   doc.text(resName, 14, 14);
-  
+
   doc.setFontSize(12);
   doc.setFont("helvetica", "normal");
   doc.text(title, 14, 21);
-  
+
   doc.setFontSize(9);
   doc.text(`Period: ${dateRangeLabel} | Generated: ${new Date().toLocaleDateString("en-IN")}`, 14, 28);
 
@@ -1979,19 +1979,19 @@ function drawHeader(doc: any, restaurant: any, title: string, dateRangeLabel: st
   if (restaurant) {
     const startX = pageWidth - 14;
     let currentY = 14;
-    
+
     doc.setFontSize(8);
     const rightAlign = (txt: string, y: number) => {
       if (txt) doc.text(txt, startX, y, { align: "right" });
     };
 
     if (restaurant.address) { rightAlign(restaurant.address, currentY); currentY += 5; }
-    
+
     const contactParts = [];
     if (restaurant.phone) contactParts.push(restaurant.phone);
     if (restaurant.email) contactParts.push(restaurant.email);
     if (contactParts.length) { rightAlign(contactParts.join(" | "), currentY); currentY += 5; }
-    
+
     const legalParts = [];
     if (restaurant.gstin) legalParts.push(`GSTIN: ${restaurant.gstin}`);
     if (restaurant.fssai_no) legalParts.push(`FSSAI: ${restaurant.fssai_no}`);
@@ -2056,7 +2056,7 @@ export function generateDashboardPdfReport(
   doc.text("1. Executive Performance Metrics", 14, y);
   y += 5;
 
-  const grossBilledText = (kpiData.total_return_amount || 0) > 0 
+  const grossBilledText = (kpiData.total_return_amount || 0) > 0
     ? `Gross: INR ${(kpiData.gross_revenue ?? (kpiData.total_revenue + kpiData.total_return_amount)).toLocaleString("en-IN", { minimumFractionDigits: 2 })} | Returns: -INR ${(kpiData.total_return_amount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`
     : "Net billed sales after customer concessions";
 
@@ -2719,15 +2719,15 @@ export function generateCustomerSpendsPdfReport(
     body: customers.length === 0
       ? [["No customer spend records found.", "-", "-", "-", "-", "-", "-", "-"]]
       : customers.map((c: any) => [
-          c.customer_name || "Unknown",
-          c.customer_phone || "N/A",
-          c.total_orders ?? 0,
-          `INR ${(c.total_spent ?? 0).toFixed(2)}`,
-          c.total_returns_count ? `${c.total_returns_count} (INR ${(c.total_returned_amount ?? 0).toFixed(2)})` : "0",
-          `INR ${(c.net_spent ?? c.total_spent ?? 0).toFixed(2)}`,
-          `INR ${(c.avg_order_value ?? 0).toFixed(2)}`,
-          c.credit_balance !== undefined ? `${c.credit_balance >= 0 ? "+" : "-"}INR ${Math.abs(c.credit_balance).toFixed(2)}` : "0.00"
-        ]),
+        c.customer_name || "Unknown",
+        c.customer_phone || "N/A",
+        c.total_orders ?? 0,
+        `INR ${(c.total_spent ?? 0).toFixed(2)}`,
+        c.total_returns_count ? `${c.total_returns_count} (INR ${(c.total_returned_amount ?? 0).toFixed(2)})` : "0",
+        `INR ${(c.net_spent ?? c.total_spent ?? 0).toFixed(2)}`,
+        `INR ${(c.avg_order_value ?? 0).toFixed(2)}`,
+        c.credit_balance !== undefined ? `${c.credit_balance >= 0 ? "+" : "-"}INR ${Math.abs(c.credit_balance).toFixed(2)}` : "0.00"
+      ]),
     theme: "grid",
     headStyles: { fillColor: [15, 23, 42], fontStyle: "bold", fontSize: 7.5 },
     styles: { fontSize: 7.5 },
@@ -4924,8 +4924,8 @@ export function generateFlatItemSalesPdfReport(
   filterCategoryName?: string
 ) {
   const doc = new (jsPDF as any)({ orientation: "portrait", unit: "mm", format: "a4" });
-  const title = filterCategoryName 
-    ? `ITEM SALES REPORT (${filterCategoryName.toUpperCase()})` 
+  const title = filterCategoryName
+    ? `ITEM SALES REPORT (${filterCategoryName.toUpperCase()})`
     : "ITEM SALES & PROFITABILITY REPORT";
   let y = drawHeader(doc, restaurant, title, dateRangeLabel);
 
@@ -5111,7 +5111,7 @@ export function generateBillsHistoryPdfReport({
 
   const tableRows = bills.map((b: any, idx: number) => {
     const billId = b.id ? `#${b.id.slice(0, 8).toUpperCase()}` : "—";
-    
+
     // Format timestamp
     let dtStr = "—";
     if (b.created_at) {
@@ -5138,10 +5138,10 @@ export function generateBillsHistoryPdfReport({
     const itemsCount = `${b.items?.length || 0} item${b.items?.length === 1 ? "" : "s"}`;
     const payMethod = b.payment_method || (b.status === "PAID" ? "CASH" : "—");
     const subtotal = `Rs. ${(Number(b.subtotal_amount) || Number(b.total_amount) || 0).toFixed(2)}`;
-    
+
     const discVal = Number(b.discount_value || 0) || Math.max(0, (Number(b.subtotal_amount) || 0) - (Number(b.total_amount) || 0));
     const discount = discVal > 0 ? `Rs. ${discVal.toFixed(2)}` : "—";
-    
+
     const grandTotal = `Rs. ${(Number(b.total_amount) || 0).toFixed(2)}`;
     const status = (b.status || "DRAFT").toUpperCase();
 
@@ -5250,7 +5250,7 @@ export function generateBillsHistoryPdfReport({
       doc.setFontSize(7.5);
       doc.setFont("helvetica", "normal");
       doc.setTextColor(148, 163, 184);
-      
+
       const footerText = `Page ${data.pageNumber} of ${pageCount}  •  Apna Green Basket POS  •  Exported on ${new Date().toLocaleString("en-IN")}`;
       doc.text(footerText, 14, doc.internal.pageSize.height - 8);
     },
@@ -5261,3 +5261,261 @@ export function generateBillsHistoryPdfReport({
   const filename = `Bills_History_${cleanStoreName}_${cleanFilter}_${new Date().toISOString().slice(0, 10)}.pdf`;
   doc.save(filename);
 }
+
+// ==========================================
+// 19. SHIFT HANDOVER & CASH COLLECTION RECEIPT SLIP (Thermal 80mm / 72mm Roll)
+// ==========================================
+
+export function generateShiftHandoverReceiptPDF(
+  shift: any,
+  restaurant?: any,
+  action: "print" | "view" | "download" = "print"
+) {
+  const pageWidth = 72;
+  const margin = 3.5;
+  const contentWidth = pageWidth - (margin * 2);
+
+  const drawDashedLine = (d: any, y: number) => {
+    d.setLineWidth(0.2);
+    d.setDrawColor(0, 0, 0);
+    d.setLineDashPattern([1.2, 1.2], 0);
+    d.line(margin, y, pageWidth - margin, y);
+    d.setLineDashPattern([], 0);
+  };
+
+  const drawSolidLine = (d: any, y: number) => {
+    d.setLineWidth(0.3);
+    d.setDrawColor(0, 0, 0);
+    d.setLineDashPattern([], 0);
+    d.line(margin, y, pageWidth - margin, y);
+  };
+
+  const renderReceipt = (d: any) => {
+    let y = 6;
+    const storeName = restaurant?.name || "ApnaGreen Basket";
+    d.setFont("helvetica", "bold");
+    d.setFontSize(11);
+    d.setTextColor(0, 0, 0);
+    d.text(storeName, pageWidth / 2, y, { align: "center", maxWidth: contentWidth });
+    y += 4;
+
+    if (restaurant?.address) {
+      d.setFont("helvetica", "normal");
+      d.setFontSize(7);
+      d.text(restaurant.address, pageWidth / 2, y, { align: "center", maxWidth: contentWidth });
+      y += 3.5;
+    }
+
+    if (restaurant?.phone) {
+      d.setFont("helvetica", "normal");
+      d.setFontSize(7);
+      d.text(`Phone: ${restaurant.phone}`, pageWidth / 2, y, { align: "center" });
+      y += 3.5;
+    }
+
+    drawDashedLine(d, y);
+    y += 4;
+
+    d.setFont("helvetica", "bold");
+    d.setFontSize(9);
+    d.text("SHIFT HANDOVER SLIP", pageWidth / 2, y, { align: "center" });
+    y += 3.5;
+
+    d.setFontSize(7);
+    d.setFont("helvetica", "normal");
+    const statusText = (shift.status || "SETTLED").toUpperCase();
+    d.text(`Status: ${statusText}`, pageWidth / 2, y, { align: "center" });
+    y += 3.5;
+
+    drawDashedLine(d, y);
+    y += 4;
+
+    // Staff & Timing
+    d.setFont("helvetica", "bold");
+    d.setFontSize(7.5);
+    d.text("Cashier / Staff", margin, y);
+    d.text(shift.staff_name || "Team Member", pageWidth - margin, y, { align: "right" });
+    y += 3.5;
+
+    if (shift.staff_role) {
+      d.setFont("helvetica", "normal");
+      d.text("Role", margin, y);
+      d.text(shift.staff_role.replace(/_/g, " "), pageWidth - margin, y, { align: "right" });
+      y += 3.5;
+    }
+
+    const formatDt = (iso?: string | null) => {
+      if (!iso) return "N/A";
+      try {
+        const dt = new Date(iso.endsWith("Z") ? iso : `${iso}Z`);
+        return dt.toLocaleString("en-IN", {
+          day: "2-digit",
+          month: "short",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+        });
+      } catch {
+        return iso;
+      }
+    };
+
+    d.setFont("helvetica", "normal");
+    d.text("Shift Punch-In", margin, y);
+    d.text(formatDt(shift.punch_in_at), pageWidth - margin, y, { align: "right" });
+    y += 3.5;
+
+    d.text("Shift Punch-Out", margin, y);
+    d.text(shift.punch_out_at ? formatDt(shift.punch_out_at) : "Active (Live)", pageWidth - margin, y, { align: "right" });
+    y += 3.5;
+
+    if (shift.duration_formatted) {
+      d.text("Shift Duration", margin, y);
+      d.text(shift.duration_formatted, pageWidth - margin, y, { align: "right" });
+      y += 3.5;
+    }
+
+    drawDashedLine(d, y);
+    y += 4;
+
+    // Sales Breakdown
+    d.setFont("helvetica", "bold");
+    d.setFontSize(8);
+    d.text("SHIFT SALES SUMMARY", margin, y);
+    y += 4;
+
+    d.setFont("helvetica", "normal");
+    d.setFontSize(7.5);
+    d.text("Invoices / Bills Cut", margin, y);
+    d.text(`${shift.total_bills_count || 0} bills`, pageWidth - margin, y, { align: "right" });
+    y += 3.5;
+
+    d.setFont("helvetica", "bold");
+    d.text("Total Gross Sales", margin, y);
+    d.text(`INR ${(Number(shift.total_sales_amount) || 0).toFixed(2)}`, pageWidth - margin, y, { align: "right" });
+    y += 3.8;
+
+    d.setFont("helvetica", "normal");
+    d.text("UPI / Online Sales", margin, y);
+    d.text(`INR ${(Number(shift.upi_collected) || 0).toFixed(2)}`, pageWidth - margin, y, { align: "right" });
+    y += 3.5;
+
+    if (Number(shift.card_collected) > 0) {
+      d.text("Card / Other Sales", margin, y);
+      d.text(`INR ${(Number(shift.card_collected) || 0).toFixed(2)}`, pageWidth - margin, y, { align: "right" });
+      y += 3.5;
+    }
+
+    drawDashedLine(d, y);
+    y += 4;
+
+    // Cash Drawer Reconciliation
+    d.setFont("helvetica", "bold");
+    d.setFontSize(8);
+    d.text("CASH DRAWER RECONCILIATION", margin, y);
+    y += 4;
+
+    d.setFont("helvetica", "normal");
+    d.setFontSize(7.5);
+    d.text("Starting Cash in Drawer", margin, y);
+    d.text(`+INR ${(Number(shift.opening_cash) || 0).toFixed(2)}`, pageWidth - margin, y, { align: "right" });
+    y += 3.5;
+
+    d.text("(+) Cash Collected from Sales", margin, y);
+    d.text(`+INR ${(Number(shift.cash_collected) || 0).toFixed(2)}`, pageWidth - margin, y, { align: "right" });
+    y += 3.5;
+
+    if (Number(shift.returns_refund_cash) > 0) {
+      d.text("(-) Cash Returns / Refunds", margin, y);
+      d.text(`-INR ${(Number(shift.returns_refund_cash) || 0).toFixed(2)}`, pageWidth - margin, y, { align: "right" });
+      y += 3.5;
+    }
+
+    drawSolidLine(d, y);
+    y += 4.5;
+
+    d.setFont("helvetica", "bold");
+    d.setFontSize(8.5);
+    d.text("EXPECTED DRAWER CASH", margin, y);
+    d.text(`INR ${(Number(shift.expected_cash_in_drawer) || 0).toFixed(2)}`, pageWidth - margin, y, { align: "right" });
+    y += 4.5;
+
+    d.text("ACTUAL CASH HANDED OVER", margin, y);
+    d.text(`INR ${(Number(shift.actual_cash_handed_over) || 0).toFixed(2)}`, pageWidth - margin, y, { align: "right" });
+    y += 4.5;
+
+    const diff = Number(shift.cash_difference) || 0;
+    d.setFontSize(8);
+    d.text("CASH TALLY / DIFFERENCE", margin, y);
+    const diffSign = diff > 0 ? "+" : "";
+    const diffLabel = diff === 0 ? "INR 0.00 (EXACT MATCH)" : `INR ${diffSign}${diff.toFixed(2)} (${diff > 0 ? "EXCESS" : "SHORTAGE"})`;
+    d.text(diffLabel, pageWidth - margin, y, { align: "right" });
+    y += 5;
+
+    if (shift.notes) {
+      drawDashedLine(d, y);
+      y += 3.5;
+      d.setFont("helvetica", "normal");
+      d.setFontSize(7);
+      d.text(`Notes: ${shift.notes}`, margin, y, { maxWidth: contentWidth });
+      y += 5;
+    }
+
+    drawSolidLine(d, y);
+    y += 9;
+
+    // Signatures
+    d.setFont("helvetica", "normal");
+    d.setFontSize(7);
+    d.text("_______________________", margin, y);
+    d.text("_______________________", pageWidth - margin, y, { align: "right" });
+    y += 3.5;
+    d.text("Cashier Signature", margin, y);
+    d.text("Owner/Receiver Signature", pageWidth - margin, y, { align: "right" });
+    y += 5;
+
+    drawDashedLine(d, y);
+    y += 3.5;
+    d.setFont("helvetica", "normal");
+    d.setFontSize(6.5);
+    d.setTextColor(100, 100, 100);
+    d.text(`Generated on ${new Date().toLocaleString("en-IN")}`, pageWidth / 2, y, { align: "center" });
+    y += 4;
+
+    return y;
+  };
+
+  // Continuous thermal roll height calculation
+  const measureDoc = new (jsPDF as any)({
+    orientation: "portrait",
+    unit: "mm",
+    format: [72, 3000],
+  });
+  const measuredEndY = renderReceipt(measureDoc);
+  const exactPageHeight = Math.max(90, Math.ceil(measuredEndY + 3));
+
+  const doc = new (jsPDF as any)({
+    orientation: "portrait",
+    unit: "mm",
+    format: [72, exactPageHeight],
+  });
+  renderReceipt(doc);
+
+  const cleanStaffName = (shift.staff_name || "Cashier").replace(/[^a-zA-Z0-9]/g, "_");
+  const filename = `Shift_Handover_${cleanStaffName}_${new Date().toISOString().slice(0, 10)}.pdf`;
+
+  if (action === "print") {
+    doc.autoPrint();
+    const blobUrl = doc.output("bloburl");
+    const printWindow = window.open(blobUrl, "_blank");
+    if (printWindow) {
+      printWindow.focus();
+    }
+  } else if (action === "view") {
+    const blobUrl = doc.output("bloburl");
+    window.open(blobUrl, "_blank");
+  } else {
+    doc.save(filename);
+  }
+}
+

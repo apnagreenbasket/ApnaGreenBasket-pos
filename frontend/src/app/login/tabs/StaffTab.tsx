@@ -8,23 +8,31 @@
 
 "use client";
 
-import { FormEvent, useState, useEffect } from "react";
+import { FormEvent, useState, useEffect, useCallback } from "react";
 import { ConfirmModal } from "../modals/ConfirmModal";
 import {
   Activity,
+  AlertCircle,
+  Calendar,
   CheckCircle2,
+  Clock,
+  DollarSign,
   KeyRound,
   Pencil,
+  Printer,
+  Receipt,
   RefreshCw,
   Trash2,
   UserCheck,
   UserPlus,
   Users,
   UserX,
+  Wallet,
 } from "lucide-react";
-import { formatRupees, parseUTCDate } from "../adminUtils";
+import { formatRupees, formatDateTime, parseUTCDate } from "../adminUtils";
 import type { StaffAuditEntry, StaffMember, StaffRole } from "@/types";
-import type { RestaurantProfile } from "../adminTypes";
+import type { RestaurantProfile, StaffPunchSessionItem } from "../adminTypes";
+import { generateShiftHandoverReceiptPDF } from "@/lib/pdfGenerator";
 
 type StaffFormState = {
   outlet_id: string;
@@ -57,6 +65,9 @@ type StaffTabProps = {
   currentUserRole?: string | null;
   currentUserId?: string | null;
 
+  // Shift & API
+  apiRequest?: <T>(endpoint: string, options?: RequestInit) => Promise<T>;
+
   // Actions
   loadStaffMembers: () => Promise<void>;
   loadStaffAuditLogs: () => Promise<void>;
@@ -87,6 +98,7 @@ export function StaffTab({
   auditTotalPages,
   currentUserRole,
   currentUserId,
+  apiRequest,
   loadStaffMembers,
   loadStaffAuditLogs,
   onDeactivateStaffMember,
@@ -101,6 +113,68 @@ export function StaffTab({
   const [staffToActivate, setStaffToActivate] = useState<{ id: string; name: string } | null>(null);
   const [staffToDelete, setStaffToDelete] = useState<{ id: string; name: string } | null>(null);
   const [statusFilter, setStatusFilter] = useState<"active" | "inactive" | "all">("active");
+
+  // Shift Handover Sessions State
+  const [shiftSessions, setShiftSessions] = useState<StaffPunchSessionItem[]>([]);
+  const [isLoadingSessions, setIsLoadingSessions] = useState(false);
+  const [sessionStaffFilter, setSessionStaffFilter] = useState<string>("");
+  const [sessionDatePreset, setSessionDatePreset] = useState<string>("today");
+
+  const loadShiftSessions = useCallback(async () => {
+    if (!apiRequest) return;
+    setIsLoadingSessions(true);
+    try {
+      const params = new URLSearchParams();
+      if (sessionStaffFilter) params.append("staff_id", sessionStaffFilter);
+
+      const now = new Date();
+      const formatDateStr = (d: Date) => {
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
+      };
+
+      if (sessionDatePreset === "today") {
+        const todayStr = formatDateStr(now);
+        params.append("start_date", todayStr);
+        params.append("end_date", todayStr);
+      } else if (sessionDatePreset === "yesterday") {
+        const yesterday = new Date(now);
+        yesterday.setDate(now.getDate() - 1);
+        const yStr = formatDateStr(yesterday);
+        params.append("start_date", yStr);
+        params.append("end_date", yStr);
+      } else if (sessionDatePreset === "7days") {
+        const past7 = new Date(now);
+        past7.setDate(now.getDate() - 7);
+        params.append("start_date", formatDateStr(past7));
+        params.append("end_date", formatDateStr(now));
+      } else if (sessionDatePreset === "30days") {
+        const past30 = new Date(now);
+        past30.setDate(now.getDate() - 30);
+        params.append("start_date", formatDateStr(past30));
+        params.append("end_date", formatDateStr(now));
+      }
+      params.append("limit", "50");
+
+      const data = await apiRequest<StaffPunchSessionItem[]>(`/api/staff/punch/sessions?${params.toString()}`);
+      setShiftSessions(data || []);
+    } catch (err) {
+      console.warn("Failed to load shift sessions:", err);
+    } finally {
+      setIsLoadingSessions(false);
+    }
+  }, [apiRequest, sessionStaffFilter, sessionDatePreset]);
+
+  useEffect(() => {
+    void loadShiftSessions();
+  }, [loadShiftSessions]);
+
+  const totalSalesRecorded = shiftSessions.reduce((acc, s) => acc + (s.total_sales_amount || 0), 0);
+  const totalCashCollected = shiftSessions.reduce((acc, s) => acc + (s.cash_collected || 0), 0);
+  const totalHandedOver = shiftSessions.reduce((acc, s) => acc + (s.actual_cash_handed_over || 0), 0);
+  const totalDifference = shiftSessions.reduce((acc, s) => acc + (s.cash_difference || 0), 0);
 
   const isManager = currentUserRole === "MANAGER";
 
@@ -432,6 +506,320 @@ export function StaffTab({
                     </td>
                   </tr>
                 ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </article>
+
+      {/* Shift Handover & Cash Collection History — Directly below Outlet Team Roster */}
+      <article className="rounded-3xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] overflow-hidden shadow-xs space-y-4">
+        <div className="p-4 border-b border-[var(--border-subtle)] flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+              <Receipt className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="font-display text-lg font-bold text-[var(--text-primary)]">
+                Shift Handover &amp; Cash Collection History
+              </h2>
+              <p className="text-xs text-[var(--text-muted)]">
+                Cashier shift reconciliation records, drawer cash tallies, and handover receipts
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Staff Filter */}
+            <select
+              value={sessionStaffFilter}
+              onChange={(e) => setSessionStaffFilter(e.target.value)}
+              className="text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] px-3 py-2 font-medium text-[var(--text-primary)]"
+            >
+              <option value="">All Cashiers &amp; Staff</option>
+              {staffList.map((member) => (
+                <option key={member.id} value={member.id}>
+                  {member.name} ({member.role})
+                </option>
+              ))}
+            </select>
+
+            {/* Date Preset Filter */}
+            <div className="flex items-center gap-1 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-1 text-xs">
+              <button
+                type="button"
+                onClick={() => setSessionDatePreset("today")}
+                className={`rounded-lg px-2.5 py-1 font-semibold transition ${
+                  sessionDatePreset === "today"
+                    ? "bg-[var(--accent-brand)] text-white shadow-xs"
+                    : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                Today
+              </button>
+              <button
+                type="button"
+                onClick={() => setSessionDatePreset("yesterday")}
+                className={`rounded-lg px-2.5 py-1 font-semibold transition ${
+                  sessionDatePreset === "yesterday"
+                    ? "bg-[var(--accent-brand)] text-white shadow-xs"
+                    : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                Yesterday
+              </button>
+              <button
+                type="button"
+                onClick={() => setSessionDatePreset("7days")}
+                className={`rounded-lg px-2.5 py-1 font-semibold transition ${
+                  sessionDatePreset === "7days"
+                    ? "bg-[var(--accent-brand)] text-white shadow-xs"
+                    : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                Last 7 Days
+              </button>
+              <button
+                type="button"
+                onClick={() => setSessionDatePreset("30days")}
+                className={`rounded-lg px-2.5 py-1 font-semibold transition ${
+                  sessionDatePreset === "30days"
+                    ? "bg-[var(--accent-brand)] text-white shadow-xs"
+                    : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                Last 30 Days
+              </button>
+              <button
+                type="button"
+                onClick={() => setSessionDatePreset("all")}
+                className={`rounded-lg px-2.5 py-1 font-semibold transition ${
+                  sessionDatePreset === "all"
+                    ? "bg-[var(--accent-brand)] text-white shadow-xs"
+                    : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                All
+              </button>
+            </div>
+
+            {/* Refresh */}
+            <button
+              type="button"
+              onClick={() => void loadShiftSessions()}
+              disabled={isLoadingSessions}
+              className="p-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition disabled:opacity-50"
+              title="Refresh Shift Records"
+            >
+              <RefreshCw className={`h-4 w-4 ${isLoadingSessions ? "animate-spin" : ""}`} />
+            </button>
+          </div>
+        </div>
+
+        {/* Stats Summary Bar */}
+        {shiftSessions.length > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-4">
+            <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-3">
+              <span className="text-[11px] font-medium text-[var(--text-muted)] block">Total Sales</span>
+              <span className="font-mono text-base font-bold text-[var(--text-primary)]">
+                {formatRupees(totalSalesRecorded)}
+              </span>
+            </div>
+            <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-3">
+              <span className="text-[11px] font-medium text-[var(--text-muted)] block">Cash Sales Collected</span>
+              <span className="font-mono text-base font-bold text-emerald-600 dark:text-emerald-400">
+                {formatRupees(totalCashCollected)}
+              </span>
+            </div>
+            <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-3">
+              <span className="text-[11px] font-medium text-[var(--text-muted)] block">Physical Handed Over</span>
+              <span className="font-mono text-base font-bold text-[var(--text-primary)]">
+                {formatRupees(totalHandedOver)}
+              </span>
+            </div>
+            <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-3">
+              <span className="text-[11px] font-medium text-[var(--text-muted)] block">Net Tally Variance</span>
+              <span
+                className={`font-mono text-base font-bold ${
+                  Math.abs(totalDifference) < 0.01
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : totalDifference < 0
+                    ? "text-rose-500"
+                    : "text-amber-500"
+                }`}
+              >
+                {Math.abs(totalDifference) < 0.01
+                  ? "₹0.00 (Balanced)"
+                  : totalDifference < 0
+                  ? `-₹${Math.abs(totalDifference).toFixed(2)} (Shortage)`
+                  : `+₹${totalDifference.toFixed(2)} (Excess)`}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Table of Shift Sessions */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse min-w-[900px]">
+            <thead>
+              <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
+                <th className="py-3 px-4">Cashier / Staff</th>
+                <th className="py-3 px-4">Shift Timing</th>
+                <th className="py-3 px-4 text-right">Opening Float</th>
+                <th className="py-3 px-4 text-right">Bills &amp; Sales</th>
+                <th className="py-3 px-4 text-right">Collections</th>
+                <th className="py-3 px-4 text-right">Expected Drawer</th>
+                <th className="py-3 px-4 text-right">Handed Over</th>
+                <th className="py-3 px-4 text-center">Tally Status</th>
+                <th className="py-3 px-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[var(--border-subtle)] text-xs">
+              {isLoadingSessions ? (
+                <tr>
+                  <td colSpan={9} className="py-12 text-center text-[var(--text-muted)]">
+                    <div className="inline-flex items-center gap-2">
+                      <div className="h-4 w-4 rounded-full border-2 border-[var(--accent-brand)]/30 border-t-[var(--accent-brand)] animate-spin" />
+                      <span>Loading shift handover sessions...</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : shiftSessions.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="py-12 text-center text-[var(--text-muted)]">
+                    <Receipt className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                    <p className="font-medium">No shift handover records found</p>
+                    <p className="text-[11px] opacity-75">
+                      Shift collection summaries appear here whenever cashiers settle and punch out.
+                    </p>
+                  </td>
+                </tr>
+              ) : (
+                shiftSessions.map((session) => {
+                  const isSettled = session.status === "SETTLED";
+                  const isDiffZero = Math.abs(session.cash_difference) < 0.01;
+                  const isDiffNegative = session.cash_difference < -0.01;
+
+                  return (
+                    <tr key={session.id} className="hover:bg-[var(--bg-surface-elevated)]/50 transition">
+                      {/* Cashier & Role */}
+                      <td className="py-3.5 px-4">
+                        <div className="flex flex-col">
+                          <span className="font-bold text-[var(--text-primary)]">
+                            {session.staff_name}
+                          </span>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="rounded-md bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
+                              {session.staff_role}
+                            </span>
+                            {session.auto_punched_out && (
+                              <span className="text-[9px] text-amber-500 font-semibold" title="Auto punched out by night reset">
+                                (Auto Reset)
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Timing */}
+                      <td className="py-3.5 px-4">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-[11px] text-[var(--text-primary)] font-medium">
+                            In: {formatDateTime(session.punch_in_at)}
+                          </span>
+                          <span className="text-[10px] text-[var(--text-muted)]">
+                            Out: {session.punch_out_at ? formatDateTime(session.punch_out_at) : "Active"}
+                          </span>
+                          <span className="text-[10px] font-mono text-amber-600 dark:text-amber-400">
+                            ⏱ {session.duration_formatted || "In Progress"}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Opening Cash Float */}
+                      <td className="py-3.5 px-4 text-right font-mono font-medium text-[var(--text-primary)]">
+                        {formatRupees(session.opening_cash)}
+                      </td>
+
+                      {/* Bills & Gross Sales */}
+                      <td className="py-3.5 px-4 text-right">
+                        <div className="flex flex-col items-end">
+                          <span className="font-mono font-bold text-[var(--text-primary)]">
+                            {formatRupees(session.total_sales_amount)}
+                          </span>
+                          <span className="text-[10px] text-[var(--text-muted)] font-medium">
+                            {session.total_bills_count} {session.total_bills_count === 1 ? "bill" : "bills"}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Collections Breakdown */}
+                      <td className="py-3.5 px-4 text-right">
+                        <div className="flex flex-col items-end text-[11px]">
+                          <span className="font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
+                            Cash: +{formatRupees(session.cash_collected)}
+                          </span>
+                          <span className="font-mono text-sky-600 dark:text-sky-400 text-[10px]">
+                            UPI: {formatRupees(session.upi_collected)}
+                          </span>
+                          {session.returns_refund_cash > 0 && (
+                            <span className="font-mono text-rose-500 text-[10px]">
+                              Refunds: -{formatRupees(session.returns_refund_cash)}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Expected Drawer Cash */}
+                      <td className="py-3.5 px-4 text-right font-mono font-bold text-amber-600 dark:text-amber-400">
+                        {formatRupees(session.expected_cash_in_drawer)}
+                      </td>
+
+                      {/* Handed Over */}
+                      <td className="py-3.5 px-4 text-right font-mono font-black text-[var(--text-primary)]">
+                        {isSettled ? formatRupees(session.actual_cash_handed_over) : "—"}
+                      </td>
+
+                      {/* Tally Status */}
+                      <td className="py-3.5 px-4 text-center">
+                        {!isSettled ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 text-[10px] font-semibold text-emerald-500">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            Active Shift
+                          </span>
+                        ) : isDiffZero ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2.5 py-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                            <CheckCircle2 className="h-3 w-3" />
+                            Balanced
+                          </span>
+                        ) : isDiffNegative ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 px-2.5 py-1 text-[10px] font-semibold text-rose-500">
+                            <AlertCircle className="h-3 w-3" />
+                            Short: -{formatRupees(Math.abs(session.cash_difference))}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                            <AlertCircle className="h-3 w-3" />
+                            Excess: +{formatRupees(session.cash_difference)}
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Actions */}
+                      <td className="py-3.5 px-4 text-right">
+                        <button
+                          type="button"
+                          onClick={() => generateShiftHandoverReceiptPDF(session, restaurant, "print")}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] px-2.5 py-1.5 text-[11px] font-bold text-[var(--text-primary)] hover:bg-[var(--accent-brand)] hover:text-white transition shadow-2xs"
+                          title="Print Thermal Shift Handover Slip"
+                        >
+                          <Printer className="h-3.5 w-3.5" />
+                          <span>Slip</span>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
