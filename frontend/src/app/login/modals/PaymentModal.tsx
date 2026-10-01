@@ -362,13 +362,6 @@ export function PaymentModal({
     setCashTendered(totalTapped > 0 ? totalTapped.toString() : "");
   };
 
-  // Automatically select exact notes for Additional Amount Due when editing bill
-  useEffect(() => {
-    if (isOpen && paymentEditMode === "ADJUST" && editingCompletedBill && effectiveGrandTotalForCollection > 0) {
-      handleAutoTapExact(effectiveGrandTotalForCollection);
-    }
-  }, [isOpen, paymentEditMode, editingCompletedBill, effectiveGrandTotalForCollection]);
-
 
   const changeRequired = useMemo(() => {
     const totalTendered = targetCash + effectiveUpiAmount;

@@ -901,20 +901,6 @@ export function CustomerReturnsModal({
     setInwardCashDenoms(newCounts);
   };
 
-  // Automatically select exact notes for Outward Refund or Change Given Back
-  useEffect(() => {
-    if (refundMethod === "CASH") {
-      if (isNetRefund && targetRefundAmt > 0 && refundDenomTotal === 0) {
-        handleAutoTapOutwardExact(targetRefundAmt, false);
-      } else if (!isNetRefund && targetCollectionAmt > 0 && inwardDenomTotal > targetCollectionAmt) {
-        const changeDue = inwardDenomTotal - targetCollectionAmt;
-        if (changeDue > 0 && refundDenomTotal !== changeDue) {
-          handleAutoTapOutwardExact(changeDue, false);
-        }
-      }
-    }
-  }, [isNetRefund, targetRefundAmt, targetCollectionAmt, inwardDenomTotal, refundMethod, refundDenomTotal]);
-
   const handleResetOutwardNotes = () => {
     setError(null);
     setRefundCashDenoms({ 500: 0, 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0, 1: 0 });
