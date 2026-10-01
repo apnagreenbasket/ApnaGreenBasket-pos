@@ -834,14 +834,29 @@ async def update_inventory_item(
         item.alternate_units = data.alternate_units
 
     if any(getattr(data, k, None) is not None for k in ("retail_price", "mrp", "wholesale_price")):
-        await sync_oldest_batch_prices_from_item(
-            db,
-            item.id,
-            outlet_id,
-            retail_price=item.retail_price,
-            mrp=item.mrp,
-            wholesale_price=item.wholesale_price,
-        )
+        # Check outlet's latest_batch_price_override setting
+        from app.models.outlet import Outlet
+        outlet = await db.get(Outlet, outlet_id)
+        if outlet and outlet.latest_batch_price_override:
+            # Override is ON: propagate prices to ALL active batches
+            await propagate_item_prices_to_all_batches(
+                db,
+                item.id,
+                outlet_id,
+                retail_price=item.retail_price,
+                mrp=item.mrp,
+                wholesale_price=item.wholesale_price,
+            )
+        else:
+            # Override is OFF: only update the oldest active batch (FIFO behavior)
+            await sync_oldest_batch_prices_from_item(
+                db,
+                item.id,
+                outlet_id,
+                retail_price=item.retail_price,
+                mrp=item.mrp,
+                wholesale_price=item.wholesale_price,
+            )
 
     # Sync to linked MenuItem(s)
     from app.models.menu_item import MenuItem
@@ -1084,6 +1099,77 @@ async def propagate_latest_batch_prices_to_all_batches(
         try:
             from app.services.websocket_service import broadcast_catalog_updated
             await broadcast_catalog_updated(outlet_id, reason="LATEST_BATCH_PRICE_OVERRIDE", item_id=str(item.id))
+        except Exception:
+            pass
+
+    return price_changed
+
+
+async def propagate_item_prices_to_all_batches(
+    db: AsyncSession,
+    item_id: uuid.UUID,
+    outlet_id: uuid.UUID,
+    retail_price: Decimal | None = None,
+    mrp: Decimal | None = None,
+    wholesale_price: Decimal | None = None,
+    cost_per_unit: Decimal | None = None,
+) -> bool:
+    """
+    When latest_batch_price_override is ON for the outlet, propagate
+    the InventoryItem's prices to ALL active batches (remaining_quantity > 0),
+    plus update linked MenuItem(s).
+
+    This is used when prices are changed WITHOUT creating a new batch —
+    e.g. editing an inventory item from the dashboard, or uploading an
+    Excel file that changes prices but has no initial quantity / no new batch.
+    """
+    item = await db.get(InventoryItem, item_id)
+    if not item or item.outlet_id != outlet_id:
+        return False
+
+    price_changed = False
+
+    # Update ALL active batches to match the item's prices
+    batches_res = await db.execute(
+        select(StockIntake).where(
+            StockIntake.item_id == item_id,
+            StockIntake.outlet_id == outlet_id,
+            StockIntake.remaining_quantity > Decimal("0.000"),
+        )
+    )
+    for batch in batches_res.scalars().all():
+        if retail_price is not None and batch.retail_price != retail_price:
+            batch.retail_price = retail_price
+            price_changed = True
+        if mrp is not None and batch.mrp != mrp:
+            batch.mrp = mrp
+            price_changed = True
+        if wholesale_price is not None and batch.wholesale_price != wholesale_price:
+            batch.wholesale_price = wholesale_price
+            price_changed = True
+
+    # Also update linked MenuItem(s)
+    from app.models.menu_item import MenuItem
+    menu_res = await db.execute(
+        select(MenuItem).where(MenuItem.inventory_item_id == item.id)
+    )
+    for mi in menu_res.scalars().all():
+        if retail_price is not None and mi.price != retail_price:
+            mi.price = retail_price
+            price_changed = True
+        if mrp is not None and mi.mrp != mrp:
+            mi.mrp = mrp
+            price_changed = True
+        if wholesale_price is not None and mi.wholesale_price != wholesale_price:
+            mi.wholesale_price = wholesale_price
+            price_changed = True
+
+    if price_changed:
+        from app.services.menu_service import invalidate_outlet_menu
+        await invalidate_outlet_menu(db, outlet_id)
+        try:
+            from app.services.websocket_service import broadcast_catalog_updated
+            await broadcast_catalog_updated(outlet_id, reason="ITEM_PRICE_OVERRIDE_TO_ALL_BATCHES", item_id=str(item.id))
         except Exception:
             pass
 

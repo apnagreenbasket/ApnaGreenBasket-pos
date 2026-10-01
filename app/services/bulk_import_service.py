@@ -558,15 +558,30 @@ async def import_inventory(db: AsyncSession, outlet_id: uuid.UUID, file_bytes: b
                     
                 await db.flush()
                 if inv_item and (selling_price is not None or mrp is not None or wholesale_price is not None):
-                    from app.services.inventory_service import sync_oldest_batch_prices_from_item
-                    await sync_oldest_batch_prices_from_item(
-                        db,
-                        inv_item.id,
-                        outlet_id,
-                        retail_price=selling_price,
-                        mrp=mrp,
-                        wholesale_price=wholesale_price,
-                    )
+                    from app.models.outlet import Outlet as OutletModel
+                    outlet_check = await db.get(OutletModel, outlet_id)
+                    if outlet_check and outlet_check.latest_batch_price_override:
+                        # Override is ON: propagate prices to ALL active batches
+                        from app.services.inventory_service import propagate_item_prices_to_all_batches
+                        await propagate_item_prices_to_all_batches(
+                            db,
+                            inv_item.id,
+                            outlet_id,
+                            retail_price=selling_price,
+                            mrp=mrp,
+                            wholesale_price=wholesale_price,
+                        )
+                    else:
+                        # Override is OFF: only update the oldest active batch (FIFO behavior)
+                        from app.services.inventory_service import sync_oldest_batch_prices_from_item
+                        await sync_oldest_batch_prices_from_item(
+                            db,
+                            inv_item.id,
+                            outlet_id,
+                            retail_price=selling_price,
+                            mrp=mrp,
+                            wholesale_price=wholesale_price,
+                        )
         except Exception as e:
             skipped_count += 1
             errors.append({"row": row_num, "field": "N/A", "message": str(e)})    # Commit successful rows
