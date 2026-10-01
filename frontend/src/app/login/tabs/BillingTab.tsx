@@ -1035,10 +1035,8 @@ export function BillingTab({
                           
                           if (!hasModifiers) return null;
                           
-                          const baseAmount = (b as any).net_amount !== undefined 
-                            ? Number((b as any).net_amount) 
-                            : (b.total_amount - Number((b as any).total_refunded_amount || 0));
-                          const netPaid = baseAmount 
+                          const billTotal = Number(b.total_amount || 0);
+                          const netPaid = billTotal 
                                         - Number((b as any).loyalty_discount_inr || 0)
                                         - Number((b as any).credit_applied || 0) 
                                         - Number((b as any).debit_applied || 0) 

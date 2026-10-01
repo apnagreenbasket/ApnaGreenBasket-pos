@@ -113,12 +113,10 @@ export function useBillingManagement({
         s === "REFUNDED";
 
       if (isSettledOrRefunded) {
+        const billTotal = Number(b.total_amount || 0);
         const refundedAmt = Number((b as any).total_refunded_amount || 0);
-        const baseAmount = (b as any).net_amount !== undefined
-          ? Math.max(0, Number((b as any).net_amount))
-          : Math.max(0, (b.total_amount || 0) - refundedAmt);
 
-        grandTotal += baseAmount;
+        grandTotal += billTotal;
         returnsTotal += refundedAmt;
 
         const cApp = Number((b as any).credit_applied || 0);
@@ -135,7 +133,7 @@ export function useBillingManagement({
         creditCashedOut += cCash;
         loyaltyRedeemed += lRed;
 
-        const net = baseAmount
+        const net = billTotal
                   - lRed
                   - cApp
                   - dApp
