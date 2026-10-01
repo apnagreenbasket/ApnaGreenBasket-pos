@@ -177,33 +177,27 @@ export function useInventoryManagement(
     setIsAddSupplierModalOpen(true);
   }, []);
 
-  // Load batches with FEFO status (optionally filter by itemId)
+  // Load ALL batches with FEFO status (no server-side pagination cutoff, loads complete batch dataset)
   const fetchBatches = useCallback(
-    async (itemId?: string, page: number = batchesPage, pageSize: number = 50): Promise<BatchDetail[]> => {
+    async (itemId?: string): Promise<BatchDetail[]> => {
       try {
-        let url = `/api/admin/inventory/batches?page=${page}&page_size=${pageSize}`;
+        let url = `/api/admin/inventory/batches`;
         if (itemId) {
-          url += `&item_id=${encodeURIComponent(itemId)}`;
+          url += `?item_id=${encodeURIComponent(itemId)}`;
         }
         const data = await apiRequest<any>(url);
         
-        let batchItems = [];
-        if (data.items !== undefined) {
-            batchItems = data.items;
-            if (!itemId) {
-                setBatchesTotalPages(data.total_pages);
-                setBatchesTotal(data.total);
-            }
-        } else {
-            batchItems = data;
-            if (!itemId) {
-                setBatchesTotalPages(1);
-                setBatchesTotal(data.length);
-            }
+        let batchItems: BatchDetail[] = [];
+        if (Array.isArray(data)) {
+          batchItems = data;
+        } else if (data && data.items !== undefined) {
+          batchItems = data.items;
         }
 
         if (!itemId) {
           setBatches(batchItems);
+          setBatchesTotalPages(Math.ceil(batchItems.length / 50) || 1);
+          setBatchesTotal(batchItems.length);
         }
         return batchItems;
       } catch (err: any) {
@@ -212,7 +206,7 @@ export function useInventoryManagement(
         return [];
       }
     },
-    [apiRequest, batchesPage]
+    [apiRequest]
   );
 
   // Load expiry alerts

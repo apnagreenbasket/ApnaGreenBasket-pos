@@ -94,6 +94,7 @@ async def create_test_outlet(
     payment_mode: PaymentModeEnum = PaymentModeEnum.RAZORPAY_GATEWAY,
     razorpay_account_id: str | None = "acc_test123",
     direct_upi_id: str | None = "test@upi",
+    latest_batch_price_override: bool = True,
 ) -> Outlet:
     outlet = Outlet(
         id=uuid.uuid4(),
@@ -102,6 +103,7 @@ async def create_test_outlet(
         payment_mode=payment_mode,
         razorpay_account_id=razorpay_account_id,
         direct_upi_id=direct_upi_id,
+        latest_batch_price_override=latest_batch_price_override,
     )
     db.add(outlet)
     await db.flush()

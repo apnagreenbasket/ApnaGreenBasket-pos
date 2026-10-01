@@ -117,6 +117,7 @@ export function useSuperadminData() {
     bill_qr_url: "",
     place_of_supply: "",
     invoice_terms_conditions: "",
+    latest_batch_price_override: true,
   });
   const [isCreatingRestaurant, setIsCreatingRestaurant] = useState(false);
 
@@ -140,6 +141,7 @@ export function useSuperadminData() {
     bill_qr_url: "",
     place_of_supply: "",
     invoice_terms_conditions: "1. Goods once sold will not be taken back.\n2. Subject to local jurisdiction.",
+    latest_batch_price_override: true,
   });
   const [isSavingSettings, setIsSavingSettings] = useState(false);
 
@@ -426,6 +428,7 @@ export function useSuperadminData() {
         bill_qr_url: "",
         place_of_supply: "",
         invoice_terms_conditions: "1. Goods once sold will not be taken back.\n2. Subject to local jurisdiction.",
+        latest_batch_price_override: true,
       });
       setNotice(`Outlet "${created.name}" created successfully! Now assign a user.`);
       setStep("create_admin");
@@ -461,6 +464,7 @@ export function useSuperadminData() {
       bill_qr_url: outlet.bill_qr_url || "",
       place_of_supply: outlet.place_of_supply || "",
       invoice_terms_conditions: outlet.invoice_terms_conditions || "1. Goods once sold will not be taken back.\n2. Subject to local jurisdiction.",
+      latest_batch_price_override: outlet.latest_batch_price_override !== false,
     });
   };
 
@@ -489,6 +493,7 @@ export function useSuperadminData() {
         bill_qr_url: settingsForm.bill_qr_url.trim() || null,
         place_of_supply: settingsForm.place_of_supply.trim() || null,
         invoice_terms_conditions: settingsForm.invoice_terms_conditions.trim() || null,
+        latest_batch_price_override: settingsForm.latest_batch_price_override,
       };
 
       await apiRequest(`/api/admin/outlets/${settingsOutlet.id}`, {

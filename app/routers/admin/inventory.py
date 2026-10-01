@@ -542,11 +542,12 @@ async def list_all_batches_route(
     current_user: RequireAdmin,
     db: DBSession,
     item_id: uuid.UUID | None = Query(None),
+    search: str | None = Query(None),
     page: int | None = Query(None, ge=1),
     page_size: int | None = Query(None, ge=1, le=500),
 ):
-    """List all stock arrival batches for this outlet with FEFO / remaining status, optionally filtered by item_id."""
-    return await get_all_batches(db, current_user.outlet_id, item_id=item_id, page=page, page_size=page_size)
+    """List all stock arrival batches for this outlet with FEFO / remaining status, optionally filtered by item_id or search."""
+    return await get_all_batches(db, current_user.outlet_id, item_id=item_id, search=search, page=page, page_size=page_size)
 
 
 @router.get("/suppliers", response_model=list[SupplierResponse])

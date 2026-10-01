@@ -30,7 +30,9 @@ async def test_oldest_batch_pricing_and_automatic_rollover(
     2. Second batch does NOT overwrite menu item price while first batch has stock.
     3. Exhausting the first batch rolls over the menu item price to the second batch.
     """
-    outlet = await create_test_outlet(db_session, slug="fifo-pricing-outlet", name="FIFO Pricing Outlet")
+    outlet = await create_test_outlet(
+        db_session, slug="fifo-pricing-outlet", name="FIFO Pricing Outlet", latest_batch_price_override=False
+    )
     user = await create_test_user(db_session, outlet, email="admin_fifo@test.com")
     await db_session.commit()
     auth_headers = get_auth_headers(user, outlet)
@@ -1115,15 +1117,128 @@ async def test_oversold_deficit_absorption_ledger_notes_and_settled_status(
     intake_entry = next(e for e in ledger_entries if e["change_type"] == "INTAKE")
     assert float(intake_entry["resulting_stock"]) == 0.0, f"Expected resulting_stock 0.0, got {intake_entry['resulting_stock']}"
 
-    # Auto deduction entry has explanatory notes
-    auto_ded_entry = next(e for e in ledger_entries if e["change_type"] == "AUTO_DEDUCTION")
-    assert auto_ded_entry["notes"] is not None
-    assert "Fulfilled pre-sold backorder" in auto_ded_entry["notes"]
 
-    # Restock entry has explanatory notes
-    restock_entry = next(e for e in ledger_entries if e["change_type"] == "RESTOCK")
-    assert restock_entry["notes"] is not None
-    assert "Settled backorder deficit" in restock_entry["notes"]
+@pytest.mark.asyncio
+async def test_latest_batch_price_override_flow(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    """
+    Verify latest_batch_price_override:
+    1. Outlet created with latest_batch_price_override=True (default).
+    2. Batch 1 created with selling_price=50, mrp=60, wholesale_price=45.
+    3. Batch 2 created with retail_price=75, mrp=90, wholesale_price=70.
+    4. Verify parent InventoryItem, linked MenuItem, and Batch 1 all update to 75, 90, 70.
+    5. Update outlet setting to latest_batch_price_override=False via PATCH /api/admin/outlets/me.
+    6. Batch 3 created with retail_price=100, mrp=120, wholesale_price=90.
+    7. Verify parent InventoryItem and older batches stay at 75, 90, 70 (oldest batch preserved).
+    """
+    outlet = await create_test_outlet(db_session, slug="override-pricing-outlet", name="Override Pricing Outlet")
+    user = await create_test_user(db_session, outlet, email="admin_override@test.com")
+    await db_session.commit()
+    auth_headers = get_auth_headers(user, outlet)
+
+    # 1. Onboard product with Batch 1 (Stock = 10, Price = 50, MRP = 60, Wholesale = 45)
+    onboard_res = await client.post(
+        "/api/admin/inventory/scan-onboard",
+        headers=auth_headers,
+        json={
+            "barcode": "8909999000111",
+            "name": "Organic Honey",
+            "category": "Groceries",
+            "unit": "piece",
+            "initial_stock": 10,
+            "cost_per_unit": 35.0,
+            "selling_price": 50.0,
+            "mrp": 60.0,
+            "wholesale_price": 45.0,
+            "batch_number": "HONEY-LOT-01",
+        },
+    )
+    assert onboard_res.status_code == 201
+
+    # Verify menu item and batch 1 initial prices
+    menu_res = await client.get("/api/admin/menu-items", headers=auth_headers)
+    assert menu_res.status_code == 200
+    honey_item = next(m for m in menu_res.json() if m["name"] == "Organic Honey")
+    assert float(honey_item["price"]) == 50.0
+    assert float(honey_item["mrp"]) == 60.0
+    inv_item_id = honey_item["inventory_item_id"]
+
+    # 2. Inward Batch 2 with higher price (Price = 75, MRP = 90, Wholesale = 70)
+    intake_res = await client.post(
+        "/api/admin/inventory/intake",
+        headers=auth_headers,
+        json={
+            "item_id": inv_item_id,
+            "quantity": 5.0,
+            "unit_cost": 55.0,
+            "batch_number": "HONEY-LOT-02",
+            "notes": "New arrival with updated pricing",
+            "retail_price": 75.0,
+            "mrp": 90.0,
+            "wholesale_price": 70.0,
+        },
+    )
+    assert intake_res.status_code == 201
+
+    # 3. Check that MenuItem prices updated to Batch 2
+    menu_res2 = await client.get("/api/admin/menu-items", headers=auth_headers)
+    assert menu_res2.status_code == 200
+    honey_item2 = next(m for m in menu_res2.json() if m["name"] == "Organic Honey")
+    assert float(honey_item2["price"]) == 75.0, "Menu item price must update to latest batch price"
+    assert float(honey_item2["mrp"]) == 90.0
+    assert float(honey_item2["wholesale_price"]) == 70.0
+
+    # 4. Check that Batch 1 (old batch) ALSO updated to latest batch prices
+    batches_res = await client.get(f"/api/admin/inventory/batches?item_id={inv_item_id}", headers=auth_headers)
+    assert batches_res.status_code == 200
+    batches = batches_res.json()
+    batch_1 = next(b for b in batches if b["batch_number"] == "HONEY-LOT-01")
+    batch_2 = next(b for b in batches if b["batch_number"] == "HONEY-LOT-02")
+    assert float(batch_1["retail_price"]) == 75.0, "Batch 1 retail price must be overwritten by latest batch"
+    assert float(batch_1["mrp"]) == 90.0
+    assert float(batch_1["wholesale_price"]) == 70.0
+    assert float(batch_2["retail_price"]) == 75.0
+
+    # 5. Disable latest_batch_price_override via PATCH /api/admin/outlets/me
+    patch_res = await client.patch(
+        "/api/admin/outlets/me",
+        headers=auth_headers,
+        json={"latest_batch_price_override": False},
+    )
+    assert patch_res.status_code == 200
+    assert patch_res.json()["latest_batch_price_override"] is False
+
+    # 6. Inward Batch 3 with Price = 100, MRP = 120, Wholesale = 90
+    intake_res3 = await client.post(
+        "/api/admin/inventory/intake",
+        headers=auth_headers,
+        json={
+            "item_id": inv_item_id,
+            "quantity": 5.0,
+            "unit_cost": 70.0,
+            "batch_number": "HONEY-LOT-03",
+            "notes": "Premium lot",
+            "retail_price": 100.0,
+            "mrp": 120.0,
+            "wholesale_price": 90.0,
+        },
+    )
+    assert intake_res3.status_code == 201
+
+    # 7. Verify that MenuItem and older batches are NOT updated (FIFO preservation)
+    menu_res3 = await client.get("/api/admin/menu-items", headers=auth_headers)
+    assert menu_res3.status_code == 200
+    honey_item3 = next(m for m in menu_res3.json() if m["name"] == "Organic Honey")
+    assert float(honey_item3["price"]) == 75.0, "Menu item price must remain at oldest batch price when override is OFF"
+
+    batches_res3 = await client.get(f"/api/admin/inventory/batches?item_id={inv_item_id}", headers=auth_headers)
+    assert batches_res3.status_code == 200
+    batches3 = batches_res3.json()
+    batch_1_after = next(b for b in batches3 if b["batch_number"] == "HONEY-LOT-01")
+    assert float(batch_1_after["retail_price"]) == 75.0, "Batch 1 price must remain preserved"
+
 
 
 

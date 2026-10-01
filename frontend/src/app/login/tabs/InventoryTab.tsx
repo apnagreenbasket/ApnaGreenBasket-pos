@@ -678,6 +678,22 @@ export function InventoryTab({
     return result;
   }, [batches, items, batchStatusFilter, batchSearchQuery, batchSortOption, getBatchFreshnessMeta]);
 
+  // Batch pagination over full filtered/sorted dataset (regardless of pagination, search runs on all entries)
+  const BATCHES_PAGE_SIZE = 50;
+  const [batchesCurrentPage, setBatchesCurrentPage] = useState(1);
+
+  // Automatically reset to page 1 whenever search query, status filter, or sorting changes
+  useEffect(() => {
+    setBatchesCurrentPage(1);
+  }, [batchSearchQuery, batchStatusFilter, batchSortOption]);
+
+  const totalBatchesPageCount = Math.ceil(filteredAndSortedBatches.length / BATCHES_PAGE_SIZE) || 1;
+
+  const paginatedBatches = useMemo(() => {
+    const startIndex = (batchesCurrentPage - 1) * BATCHES_PAGE_SIZE;
+    return filteredAndSortedBatches.slice(startIndex, startIndex + BATCHES_PAGE_SIZE);
+  }, [filteredAndSortedBatches, batchesCurrentPage]);
+
   const lowStockCount = items.filter(
     (i) => parseFloat(i.current_stock) <= parseFloat(i.reorder_threshold)
   ).length;
@@ -1606,7 +1622,7 @@ export function InventoryTab({
                       </td>
                     </tr>
                   ) : (
-                    filteredAndSortedBatches.map((b) => {
+                    paginatedBatches.map((b) => {
                       const matchedItem = items.find((it) => it.id === b.item_id);
                       const shelfLifeHours = b.shelf_life_alert_hrs ?? matchedItem?.shelf_life_alert_hrs;
                       return (
@@ -1822,30 +1838,34 @@ export function InventoryTab({
             </div>
           </div>
 
-          {batchesTotalPages && batchesTotalPages > 1 && (
+          {totalBatchesPageCount > 1 && (
             <div className="flex items-center justify-between border-t border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 py-3 sm:px-6 rounded-b-2xl shadow-sm">
               <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
                 <div>
                   <p className="text-xs text-[var(--text-secondary)]">
-                    Showing <span className="font-semibold text-[var(--text-primary)]">{filteredAndSortedBatches.length}</span> batches on page{" "}
-                    <span className="font-semibold text-[var(--text-primary)]">{batchesPage}</span> of{" "}
-                    <span className="font-semibold text-[var(--text-primary)]">{batchesTotalPages}</span>
+                    Showing <span className="font-semibold text-[var(--text-primary)]">{(batchesCurrentPage - 1) * BATCHES_PAGE_SIZE + 1}</span> to{" "}
+                    <span className="font-semibold text-[var(--text-primary)]">{Math.min(batchesCurrentPage * BATCHES_PAGE_SIZE, filteredAndSortedBatches.length)}</span> of{" "}
+                    <span className="font-semibold text-[var(--text-primary)]">{filteredAndSortedBatches.length}</span> batch lots (Page{" "}
+                    <span className="font-semibold text-[var(--text-primary)]">{batchesCurrentPage}</span> of{" "}
+                    <span className="font-semibold text-[var(--text-primary)]">{totalBatchesPageCount}</span>)
                   </p>
                 </div>
                 <div>
                   <nav className="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
                     <button
-                      onClick={() => setBatchesPage?.((p: number) => Math.max(1, p - 1))}
-                      disabled={batchesPage === 1}
-                      className="relative inline-flex items-center rounded-l-md px-2 py-1 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                      type="button"
+                      onClick={() => setBatchesCurrentPage((p) => Math.max(1, p - 1))}
+                      disabled={batchesCurrentPage === 1}
+                      className="relative inline-flex items-center rounded-l-md px-2 py-1 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                     >
                       <span className="sr-only">Previous</span>
                       <ArrowDown className="h-4 w-4 rotate-90" aria-hidden="true" />
                     </button>
                     <button
-                      onClick={() => setBatchesPage?.((p: number) => Math.min(batchesTotalPages || 1, p + 1))}
-                      disabled={batchesPage === batchesTotalPages}
-                      className="relative inline-flex items-center rounded-r-md px-2 py-1 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                      type="button"
+                      onClick={() => setBatchesCurrentPage((p) => Math.min(totalBatchesPageCount, p + 1))}
+                      disabled={batchesCurrentPage === totalBatchesPageCount}
+                      className="relative inline-flex items-center rounded-r-md px-2 py-1 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                     >
                       <span className="sr-only">Next</span>
                       <ArrowDown className="h-4 w-4 -rotate-90" aria-hidden="true" />
@@ -2018,7 +2038,10 @@ export function InventoryTab({
               <div className="flex items-center gap-2">
                 <select
                   value={ledgerFilterType}
-                  onChange={(e) => setLedgerFilterType(e.target.value as any)}
+                  onChange={(e) => {
+                    setLedgerFilterType(e.target.value as any);
+                    setLedgerPage(1);
+                  }}
                   className="rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3 py-1.5 text-xs text-[var(--text-primary)]"
                 >
                   <option value="">All Change Types</option>
@@ -2137,6 +2160,45 @@ export function InventoryTab({
                 </tbody>
               </table>
             </div>
+
+            {/* Movement Ledger Pagination Bar */}
+            {ledgerTotal > 0 && (
+              <div className="flex items-center justify-between border-t border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 py-3 sm:px-6 rounded-b-2xl shadow-xs">
+                <div className="flex flex-1 items-center justify-between">
+                  <div>
+                    <p className="text-xs text-[var(--text-secondary)]">
+                      Showing <span className="font-semibold text-[var(--text-primary)]">{ledgerTotal === 0 ? 0 : (ledgerPage - 1) * (ledgerPageSize || 20) + 1}</span> to{" "}
+                      <span className="font-semibold text-[var(--text-primary)]">{Math.min(ledgerPage * (ledgerPageSize || 20), ledgerTotal)}</span> of{" "}
+                      <span className="font-semibold text-[var(--text-primary)]">{ledgerTotal}</span> entries (Page{" "}
+                      <span className="font-semibold text-[var(--text-primary)]">{ledgerPage}</span> of{" "}
+                      <span className="font-semibold text-[var(--text-primary)]">{Math.ceil(ledgerTotal / (ledgerPageSize || 20)) || 1}</span>)
+                    </p>
+                  </div>
+                  <div>
+                    <nav className="isolate inline-flex -space-x-px rounded-md shadow-xs" aria-label="Pagination">
+                      <button
+                        type="button"
+                        onClick={() => setLedgerPage(Math.max(1, ledgerPage - 1))}
+                        disabled={ledgerPage <= 1}
+                        className="relative inline-flex items-center gap-1 rounded-l-md px-3 py-1.5 text-xs font-semibold text-[var(--text-secondary)] border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)] transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                      >
+                        <ArrowDown className="h-3.5 w-3.5 rotate-90" aria-hidden="true" />
+                        <span>Previous</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLedgerPage(Math.min(Math.ceil(ledgerTotal / (ledgerPageSize || 20)) || 1, ledgerPage + 1))}
+                        disabled={ledgerPage >= (Math.ceil(ledgerTotal / (ledgerPageSize || 20)) || 1)}
+                        className="relative inline-flex items-center gap-1 rounded-r-md px-3 py-1.5 text-xs font-semibold text-[var(--text-secondary)] border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)] transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                      >
+                        <span>Next</span>
+                        <ArrowDown className="h-3.5 w-3.5 -rotate-90" aria-hidden="true" />
+                      </button>
+                    </nav>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

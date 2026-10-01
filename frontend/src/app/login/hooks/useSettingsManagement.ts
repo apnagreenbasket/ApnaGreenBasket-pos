@@ -63,6 +63,7 @@ export function useSettingsManagement({
     weighing_scale_barcode_format: "21_5I_5W_GRAMS",
     interstate_mode: "OFF",
     b2b_enabled: false,
+    latest_batch_price_override: true,
   });
   const [isSavingRestaurant, setIsSavingRestaurant] = useState(false);
 
@@ -103,6 +104,7 @@ export function useSettingsManagement({
         weighing_scale_barcode_format: restaurant.weighing_scale_barcode_format || "21_5I_5W_GRAMS",
         interstate_mode: (restaurant as any).interstate_mode || "OFF",
         b2b_enabled: Boolean(restaurant.b2b_enabled),
+        latest_batch_price_override: restaurant.latest_batch_price_override !== false,
       });
     }
   }, [restaurant]);
@@ -144,6 +146,7 @@ export function useSettingsManagement({
         weighing_scale_barcode_format: restaurantForm.weighing_scale_barcode_format || null,
         interstate_mode: restaurantForm.interstate_mode || "OFF",
         b2b_enabled: Boolean(restaurantForm.b2b_enabled),
+        latest_batch_price_override: restaurantForm.latest_batch_price_override,
       };
 
       const updated = await apiRequest<RestaurantProfile>(

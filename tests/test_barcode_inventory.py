@@ -580,3 +580,75 @@ async def test_scan_onboard_associate_existing_item_with_new_barcode(client: Asy
     assert lookup_res.status_code == 200
     assert lookup_res.json()["found"] is True
     assert lookup_res.json()["item"]["id"] == item_id
+
+
+@pytest.mark.asyncio
+async def test_list_batches_search_query(client: AsyncClient, db_session: AsyncSession):
+    """Verify that /api/admin/inventory/batches?search=... searches all batches by batch number, item name, or barcode."""
+    outlet = await create_test_outlet(db_session, slug="test-batch-search", name="Batch Search Outlet")
+    admin = await create_test_user(db_session, outlet, email="admin_search@batchmart.com", role=RoleEnum.OUTLET_ADMIN)
+    headers = get_auth_headers(admin, outlet)
+
+    # 1. Onboard Spinach
+    res1 = await client.post(
+        "/api/admin/inventory/scan-onboard",
+        json={
+            "barcode": "8901234567801",
+            "name": "Fresh Organic Spinach",
+            "category": "Vegetables",
+            "unit": "kg",
+            "initial_stock": 10.0,
+            "cost_per_unit": 20.0,
+            "selling_price": 30.0,
+            "batch_number": "BAT-SPINACH-01",
+        },
+        headers=headers,
+    )
+    assert res1.status_code == 201
+
+    # 2. Onboard Apples
+    res2 = await client.post(
+        "/api/admin/inventory/scan-onboard",
+        json={
+            "barcode": "8901234567802",
+            "name": "Fresh Red Apples",
+            "category": "Fruits",
+            "unit": "kg",
+            "initial_stock": 15.0,
+            "cost_per_unit": 80.0,
+            "selling_price": 120.0,
+            "batch_number": "BAT-APPLE-01",
+        },
+        headers=headers,
+    )
+    assert res2.status_code == 201
+
+    # 3. Get all batches (no search)
+    all_res = await client.get("/api/admin/inventory/batches", headers=headers)
+    assert all_res.status_code == 200
+    assert len(all_res.json()) == 2
+
+    # 4. Search by item name "Spinach"
+    spinach_res = await client.get("/api/admin/inventory/batches?search=Spinach", headers=headers)
+    assert spinach_res.status_code == 200
+    spinach_batches = spinach_res.json()
+    assert len(spinach_batches) == 1
+    assert spinach_batches[0]["batch_number"] == "BAT-SPINACH-01"
+
+    # 5. Search by batch number "BAT-APPLE"
+    apple_res = await client.get("/api/admin/inventory/batches?search=BAT-APPLE", headers=headers)
+    assert apple_res.status_code == 200
+    apple_batches = apple_res.json()
+    assert len(apple_batches) == 1
+    assert apple_batches[0]["batch_number"] == "BAT-APPLE-01"
+
+    # 6. Search by barcode "8901234567801"
+    barcode_res = await client.get("/api/admin/inventory/batches?search=8901234567801", headers=headers)
+    assert barcode_res.status_code == 200
+    assert len(barcode_res.json()) == 1
+    assert barcode_res.json()[0]["item_name"] == "Fresh Organic Spinach"
+
+    # 7. Search nonexistent
+    empty_res = await client.get("/api/admin/inventory/batches?search=XYZNOTFOUND", headers=headers)
+    assert empty_res.status_code == 200
+    assert len(empty_res.json()) == 0

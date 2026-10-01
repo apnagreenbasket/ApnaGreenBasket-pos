@@ -45,6 +45,7 @@ export type RestaurantWithUsers = {
   bill_qr_url?: string | null;
   place_of_supply?: string | null;
   invoice_terms_conditions?: string | null;
+  latest_batch_price_override?: boolean;
   created_at: string;
   updated_at: string;
   users: RestaurantUser[];
@@ -68,6 +69,7 @@ export type RestaurantCreateForm = {
   bill_qr_url: string;
   place_of_supply: string;
   invoice_terms_conditions: string;
+  latest_batch_price_override: boolean;
 };
 
 export type AdminUserForm = {

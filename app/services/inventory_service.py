@@ -12,7 +12,7 @@ from typing import Sequence
 logger = logging.getLogger(__name__)
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -1011,6 +1011,85 @@ async def sync_item_prices_from_oldest_batch(
     return price_changed
 
 
+async def propagate_latest_batch_prices_to_all_batches(
+    db: AsyncSession,
+    item_id: uuid.UUID,
+    outlet_id: uuid.UUID,
+    new_batch: StockIntake,
+) -> bool:
+    """
+    When latest_batch_price_override is ON for the outlet, propagate the
+    new batch's MRP, selling price, and wholesale price to ALL other active
+    batches (remaining_quantity > 0) of the same item, plus update the
+    parent InventoryItem and linked MenuItem(s).
+    """
+    item = await db.get(InventoryItem, item_id)
+    if not item or item.outlet_id != outlet_id:
+        return False
+
+    price_changed = False
+
+    # Update all OTHER active batches to match the new batch's prices
+    other_batches_res = await db.execute(
+        select(StockIntake).where(
+            StockIntake.item_id == item_id,
+            StockIntake.outlet_id == outlet_id,
+            StockIntake.remaining_quantity > Decimal("0.000"),
+            StockIntake.id != new_batch.id,
+        )
+    )
+    for batch in other_batches_res.scalars().all():
+        if new_batch.retail_price is not None and batch.retail_price != new_batch.retail_price:
+            batch.retail_price = new_batch.retail_price
+            price_changed = True
+        if new_batch.mrp is not None and batch.mrp != new_batch.mrp:
+            batch.mrp = new_batch.mrp
+            price_changed = True
+        if new_batch.wholesale_price is not None and batch.wholesale_price != new_batch.wholesale_price:
+            batch.wholesale_price = new_batch.wholesale_price
+            price_changed = True
+
+    # Also sync the parent InventoryItem
+    if new_batch.retail_price is not None and item.retail_price != new_batch.retail_price:
+        item.retail_price = new_batch.retail_price
+        price_changed = True
+    if new_batch.mrp is not None and item.mrp != new_batch.mrp:
+        item.mrp = new_batch.mrp
+        price_changed = True
+    if new_batch.wholesale_price is not None and item.wholesale_price != new_batch.wholesale_price:
+        item.wholesale_price = new_batch.wholesale_price
+        price_changed = True
+    if new_batch.unit_cost is not None:
+        item.cost_per_unit = new_batch.unit_cost
+
+    # Also update linked MenuItem(s)
+    from app.models.menu_item import MenuItem
+    menu_res = await db.execute(
+        select(MenuItem).where(MenuItem.inventory_item_id == item.id)
+    )
+    for mi in menu_res.scalars().all():
+        if new_batch.retail_price is not None and mi.price != new_batch.retail_price:
+            mi.price = new_batch.retail_price
+            price_changed = True
+        if new_batch.mrp is not None and mi.mrp != new_batch.mrp:
+            mi.mrp = new_batch.mrp
+            price_changed = True
+        if new_batch.wholesale_price is not None and mi.wholesale_price != new_batch.wholesale_price:
+            mi.wholesale_price = new_batch.wholesale_price
+            price_changed = True
+
+    if price_changed:
+        from app.services.menu_service import invalidate_outlet_menu
+        await invalidate_outlet_menu(db, outlet_id)
+        try:
+            from app.services.websocket_service import broadcast_catalog_updated
+            await broadcast_catalog_updated(outlet_id, reason="LATEST_BATCH_PRICE_OVERRIDE", item_id=str(item.id))
+        except Exception:
+            pass
+
+    return price_changed
+
+
 async def sync_oldest_batch_prices_from_item(
     db: AsyncSession,
     item_id: uuid.UUID,
@@ -1278,8 +1357,14 @@ async def log_stock_intake(
 
     await db.flush()
 
-    # Sync price from oldest positive batch (this batch if it's the only positive one, else keeps older batch)
-    await sync_item_prices_from_oldest_batch(db, item.id, outlet_id)
+    # Check outlet's latest_batch_price_override setting
+    from app.models.outlet import Outlet
+    outlet = await db.get(Outlet, outlet_id)
+    if outlet and outlet.latest_batch_price_override:
+        await propagate_latest_batch_prices_to_all_batches(db, item.id, outlet_id, intake)
+    else:
+        # Sync price from oldest positive batch (legacy behavior)
+        await sync_item_prices_from_oldest_batch(db, item.id, outlet_id)
 
     await db.flush()
     await db.refresh(intake)
@@ -1350,7 +1435,13 @@ async def quick_scan_increment(
 
     item.current_stock = item.current_stock + quantity
     await db.flush()
-    await sync_item_prices_from_oldest_batch(db, item.id, outlet_id)
+    # Check outlet's latest_batch_price_override setting
+    from app.models.outlet import Outlet
+    outlet = await db.get(Outlet, outlet_id)
+    if outlet and outlet.latest_batch_price_override:
+        await propagate_latest_batch_prices_to_all_batches(db, item.id, outlet_id, intake)
+    else:
+        await sync_item_prices_from_oldest_batch(db, item.id, outlet_id)
 
     ledger = StockLedger(
         id=uuid.uuid4(),
@@ -1712,12 +1803,13 @@ async def get_all_batches(
     db: AsyncSession,
     outlet_id: uuid.UUID,
     item_id: uuid.UUID | None = None,
+    search: str | None = None,
     page: int | None = None,
     page_size: int | None = None,
 ) -> dict[str, Any] | list[dict[str, Any]]:
     """
     Get list of all intake batches for an outlet with FEFO / expiry status.
-    Optionally filter by item_id.
+    Optionally filter by item_id or search query.
     """
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     stmt = (
@@ -1731,6 +1823,15 @@ async def get_all_batches(
     if item_id:
         await reconcile_item_stock_from_batches(db, item_id)
         stmt = stmt.where(StockIntake.item_id == item_id)
+    if search and search.strip():
+        s = f"%{search.strip()}%"
+        stmt = stmt.outerjoin(InventoryItem, StockIntake.item_id == InventoryItem.id).where(
+            or_(
+                StockIntake.batch_number.ilike(s),
+                InventoryItem.name.ilike(s),
+                InventoryItem.barcode.ilike(s),
+            )
+        )
     stmt = stmt.order_by(StockIntake.intake_date.desc())
 
     total = 0

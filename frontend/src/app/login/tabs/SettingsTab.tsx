@@ -331,6 +331,39 @@ export function SettingsTab({
           {/* --- INVENTORY & HARDWARE TAB --- */}
           {activeTab === "hardware" && (
             <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              {/* Batch Pricing Consistency Setting */}
+              <div className="space-y-3 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">
+                        Latest Batch Price Override
+                      </h3>
+                      <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                        Default ON
+                      </span>
+                    </div>
+                    <p className="text-xs text-[var(--text-secondary)] leading-relaxed max-w-xl">
+                      When enabled, adding a new batch (via dashboard intake or Excel bulk import) automatically applies the new batch&apos;s MRP, Selling Price, and Wholesale Price to all existing active batches of that item — ensuring price consistency across your store.
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={restaurantForm.latest_batch_price_override}
+                      onChange={(e) =>
+                        setRestaurantForm((current) => ({
+                          ...current,
+                          latest_batch_price_override: e.target.checked,
+                        }))
+                      }
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-[var(--bg-surface-elevated)] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500 border border-[var(--border-strong)]"></div>
+                  </label>
+                </div>
+              </div>
+
               <div className="space-y-2 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-4">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Hardware Integrations</h3>
                 <label className="block space-y-1">

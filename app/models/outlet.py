@@ -122,6 +122,9 @@ class Outlet(Base, TimestampMixin):
     b2b_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false", default=False
     )
+    latest_batch_price_override: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true", default=True
+    )
     invoice_terms_conditions: Mapped[str | None] = mapped_column(
         String(2000), nullable=True, default="1. Goods once sold will not be taken back.\n2. Subject to local jurisdiction."
     )

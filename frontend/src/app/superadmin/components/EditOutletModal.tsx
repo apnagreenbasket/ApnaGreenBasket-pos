@@ -225,6 +225,25 @@ export function EditOutletModal({
             </label>
           </div>
 
+          {/* Inventory Settings */}
+          <div className="border-t border-[var(--border-subtle)] pt-4 mt-2">
+            <h4 className="text-xs uppercase tracking-wide text-[var(--text-muted)] font-semibold mb-3">Inventory Settings</h4>
+            <label className="flex items-start gap-3 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={settingsForm.latest_batch_price_override}
+                onChange={(e) => setSettingsForm((prev) => ({ ...prev, latest_batch_price_override: e.target.checked }))}
+                className="mt-0.5 h-4 w-4 rounded border-[var(--border-strong)] accent-[var(--accent-brand)]"
+              />
+              <div>
+                <span className="text-sm font-semibold text-[var(--text-primary)]">Latest Batch Price Override</span>
+                <p className="text-xs text-[var(--text-secondary)] mt-0.5 leading-relaxed">
+                  When enabled, adding a new batch (via dashboard or Excel import) will update all existing batches of that item to match the new batch&apos;s MRP, selling price, and wholesale price — ensuring price consistency across inventory.
+                </p>
+              </div>
+            </label>
+          </div>
+
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-[var(--border-subtle)]">
             <button
               type="button"

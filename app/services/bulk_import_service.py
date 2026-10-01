@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.inventory_service import (
     absorb_deficit_into_new_batch,
     generate_batch_number,
+    propagate_latest_batch_prices_to_all_batches,
     reconcile_item_stock_from_batches,
 )
 
@@ -480,6 +481,12 @@ async def import_inventory(db: AsyncSession, outlet_id: uuid.UUID, file_bytes: b
                     db.add(ledger)
                     
                     await db.flush()
+
+                    # Propagate latest batch prices if outlet setting is ON
+                    from app.models.outlet import Outlet
+                    outlet_obj = await db.get(Outlet, outlet_id)
+                    if outlet_obj and outlet_obj.latest_batch_price_override:
+                        await propagate_latest_batch_prices_to_all_batches(db, inv_item.id, outlet_id, batch)
                 
                 # 2. Resolve Category
                 category = await _resolve_category(db, outlet_id, category_name)

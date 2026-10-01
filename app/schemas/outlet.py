@@ -56,6 +56,7 @@ class OutletCreate(StrictSchema):
     invoice_terms_conditions: str | None = None
     interstate_mode: str = "OFF"
     b2b_enabled: bool = False
+    latest_batch_price_override: bool = True
 
 
 class OutletUpdate(StrictSchema):
@@ -93,6 +94,7 @@ class OutletUpdate(StrictSchema):
     invoice_terms_conditions: str | None = None
     interstate_mode: str | None = None
     b2b_enabled: bool | None = None
+    latest_batch_price_override: bool | None = None
 
 
 class OutletResponse(BaseResponse):
@@ -131,6 +133,7 @@ class OutletResponse(BaseResponse):
     invoice_terms_conditions: str | None = None
     interstate_mode: str = "OFF"
     b2b_enabled: bool = False
+    latest_batch_price_override: bool = True
     created_at: datetime
     updated_at: datetime
 
