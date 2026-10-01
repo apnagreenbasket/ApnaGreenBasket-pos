@@ -1968,12 +1968,17 @@ function drawHeader(doc: any, restaurant: any, title: string, dateRangeLabel: st
   doc.setFont("helvetica", "bold");
   doc.text(resName, 14, 14);
 
-  doc.setFontSize(12);
-  doc.setFont("helvetica", "normal");
-  doc.text(title, 14, 21);
-
-  doc.setFontSize(9);
-  doc.text(`Period: ${dateRangeLabel} | Generated: ${new Date().toLocaleDateString("en-IN")}`, 14, 28);
+  if (title) {
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "normal");
+    doc.text(title, 14, 21);
+    doc.setFontSize(9);
+    doc.text(`Period: ${dateRangeLabel} | Generated: ${new Date().toLocaleDateString("en-IN")}`, 14, 28);
+  } else {
+    doc.setFontSize(9.5);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Period: ${dateRangeLabel} | Generated: ${new Date().toLocaleDateString("en-IN")}`, 14, 23);
+  }
 
   // Right Column (Right-Aligned)
   if (restaurant) {
@@ -5546,7 +5551,7 @@ export function generateStaffExecutiveDayReportPDF(
   // ------------------------------------------
   // SECTION 1: STORE SETTLEMENT & RETURNS RECONCILIATION
   // ------------------------------------------
-  let y = drawHeader(doc, restaurant, "EXECUTIVE STORE RECONCILIATION & CLOSING REPORT", dateRangeLabel);
+  let y = drawHeader(doc, restaurant, "", dateRangeLabel);
 
   const rec = data.reconciliation || {};
   const shifts = data.shifts || [];
@@ -5704,7 +5709,13 @@ export function generateStaffExecutiveDayReportPDF(
   // Excludes items with zero movement/activity!
   // ------------------------------------------
   doc.addPage();
-  let y3 = drawHeader(doc, restaurant, "3. INVENTORY STOCK MOVEMENT REPORT", dateRangeLabel);
+  let y3 = drawHeader(doc, restaurant, "", dateRangeLabel);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10.5);
+  doc.setTextColor(15, 23, 42);
+  doc.text("3. INVENTORY STOCK MOVEMENT", 14, y3);
+  y3 += 3.5;
 
   const rawMovementItems = data.stockMovement?.items || [];
   const activeMovementItems = rawMovementItems.filter((i: any) => {
@@ -5771,7 +5782,13 @@ export function generateStaffExecutiveDayReportPDF(
   // Always starts on a fresh new page!
   // ------------------------------------------
   doc.addPage();
-  let y4 = drawHeader(doc, restaurant, "4. OPERATIONAL WASTAGE & LOSS AUDIT REPORT", dateRangeLabel);
+  let y4 = drawHeader(doc, restaurant, "", dateRangeLabel);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10.5);
+  doc.setTextColor(15, 23, 42);
+  doc.text("4. OPERATIONAL WASTAGE & LOSS", 14, y4);
+  y4 += 3.5;
 
   const wastage = data.wastage || {};
   const wastageItems = wastage.items || [];
