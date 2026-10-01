@@ -629,6 +629,7 @@ export default function AdminDashboardPage() {
             staffPermissions={staffState.staffPermissions}
             isLoadingBilling={billingState.isLoadingBilling}
             loadBillingData={billingState.loadBillingData}
+            isCreateBillOpen={billingState.createBillModalOpen}
             pendingApprovals={billingState.pendingApprovals}
             handleResolveApproval={billingState.handleResolveApproval}
             billsList={billingState.billsList}

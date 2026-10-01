@@ -154,15 +154,48 @@ async def get_menu_item_by_barcode(
     db: DBSession,
 ):
     """Look up a menu item / product by its barcode for POS billing."""
+    clean_barcode = barcode.strip()
+    clean_unpadded = clean_barcode.lstrip("0") or clean_barcode
+
+    # 1. Direct match on MenuItem.barcode (case-insensitive & whitespace-trimmed)
     res = await db.execute(
         select(MenuItem)
         .options(selectinload(MenuItem.variants))
         .where(
             MenuItem.outlet_id == current_user.outlet_id,
-            MenuItem.barcode == barcode.strip(),
+            func.lower(func.trim(MenuItem.barcode)) == clean_barcode.lower(),
         )
     )
     item = res.scalar_one_or_none()
+
+    # 2. Leading-zero unpadded match on MenuItem.barcode (e.g. 12-digit UPC vs 13-digit EAN)
+    if not item and clean_unpadded:
+        res = await db.execute(
+            select(MenuItem)
+            .options(selectinload(MenuItem.variants))
+            .where(
+                MenuItem.outlet_id == current_user.outlet_id,
+                MenuItem.barcode.isnot(None),
+                func.lstrip(func.trim(MenuItem.barcode), "0") == clean_unpadded,
+            )
+        )
+        item = res.scalar_one_or_none()
+
+    # 3. Match via linked InventoryItem barcode (if barcode was registered in Inventory master)
+    if not item:
+        res = await db.execute(
+            select(MenuItem)
+            .join(InventoryItem, MenuItem.inventory_item_id == InventoryItem.id)
+            .options(selectinload(MenuItem.variants))
+            .where(
+                MenuItem.outlet_id == current_user.outlet_id,
+                InventoryItem.barcode.isnot(None),
+                (func.lower(func.trim(InventoryItem.barcode)) == clean_barcode.lower()) |
+                (func.lstrip(func.trim(InventoryItem.barcode), "0") == clean_unpadded),
+            )
+        )
+        item = res.scalar_one_or_none()
+
     if not item:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

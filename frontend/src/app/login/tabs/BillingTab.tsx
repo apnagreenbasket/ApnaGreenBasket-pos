@@ -79,6 +79,7 @@ type BillingTabProps = {
   isAdminRole?: boolean;
   isPunchedIn?: boolean;
   onRequirePunchIn?: () => void;
+  isCreateBillOpen?: boolean;
 };
 
 export function BillingTab({
@@ -114,6 +115,7 @@ export function BillingTab({
   isAdminRole = true,
   isPunchedIn = true,
   onRequirePunchIn,
+  isCreateBillOpen = false,
 }: BillingTabProps) {
   const [returnsModalOpen, setReturnsModalOpen] = useState(false);
   const [returnsInitialTab, setReturnsInitialTab] = useState<"USER_HISTORY" | "INVOICE_NO" | "RETURN_HISTORY">("USER_HISTORY");
@@ -383,7 +385,7 @@ export function BillingTab({
 
   // Hardware barcode scanner support on POS Billing Tab
   useBarcodeScanner({
-    enabled: !returnsModalOpen && !billToDelete && !showReturnSuccessModal && !drawerTxModalOpen,
+    enabled: !isCreateBillOpen && !returnsModalOpen && !billToDelete && !showReturnSuccessModal && !drawerTxModalOpen,
     onScan: (barcode: string) => {
       const clean = barcode.replace(/^#/, "").trim();
       if (!clean) return;

@@ -233,7 +233,7 @@ type CreateBillDrawerProps = {
   eveningPriceActive?: boolean;
   restaurant?: import("../adminTypes").RestaurantProfile | null;
   onQuickEditOffer?: (itemId: string, updates: Partial<AdminMenuItem>) => Promise<void>;
-  inventoryItems?: { id: string; current_stock?: number | string | null }[];
+  inventoryItems?: { id: string; current_stock?: number | string | null; barcode?: string | null }[];
   menuPage?: number;
   setMenuPage?: (page: number | ((p: number) => number)) => void;
   menuTotalPages?: number;
@@ -440,6 +440,9 @@ export function CreateBillDrawer({
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
   const phoneInputRef = useRef<HTMLInputElement>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  const phoneSearchTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const scannedItemsCacheRef = useRef<Map<string, AdminMenuItem>>(new Map());
   const [pricingMode, setPricingMode] = useState<"RETAIL" | "WHOLESALE">("RETAIL");
   const [showPhoneRequiredModal, setShowPhoneRequiredModal] = useState<boolean>(false);
   const [phoneHasError, setPhoneHasError] = useState<boolean>(false);
@@ -916,7 +919,7 @@ export function CreateBillDrawer({
   };
 
   // Search existing customers & auto-fetch analytics when phone reaches 10 digits
-  const handlePhoneChange = async (val: string) => {
+  const handlePhoneChange = (val: string) => {
     setCustomerPhone(val);
     const clean = val.replace(/\D/g, "");
     setHighlightedSuggestionIndex(-1); // Reset highlight when typing
@@ -932,176 +935,28 @@ export function CreateBillDrawer({
       void fetchCustomerAnalytics(clean);
     }
 
+    if (phoneSearchTimerRef.current) {
+      clearTimeout(phoneSearchTimerRef.current);
+    }
+
     if (val.trim().length >= 2) {
-      try {
-        const data = await apiRequest<any>(`/api/admin/customers?search=${encodeURIComponent(val.trim())}&page=1&page_size=50`);
-        const items = data.items || data || [];
-        setCustomerSuggestions(items);
-        setShowSuggestions(items.length > 0);
-        setHighlightedSuggestionIndex(items.length > 0 ? 0 : -1);
-      } catch {
-        /* ignore */
-      }
+      phoneSearchTimerRef.current = setTimeout(async () => {
+        try {
+          const data = await apiRequest<any>(`/api/admin/customers?search=${encodeURIComponent(val.trim())}&page=1&page_size=50`);
+          const items = data.items || data || [];
+          setCustomerSuggestions(items);
+          setShowSuggestions(items.length > 0);
+          setHighlightedSuggestionIndex(-1);
+        } catch {
+          /* ignore */
+        }
+      }, 250);
     } else {
+      setCustomerSuggestions([]);
       setShowSuggestions(false);
       setHighlightedSuggestionIndex(-1);
     }
   };
-
-  const processBarcodeScan = (barcode: string) => {
-    const bcode = barcode.trim().toLowerCase();
-    
-    // 1. Direct Exact Match (Current Logic)
-    let match = menuItems.find(
-      (m) => m.barcode && m.barcode.trim().toLowerCase() === bcode
-    );
-    
-    let scannedQuantity = 1;
-
-    // 2. Embedded Weight Scale Logic
-    const format = restaurant?.weighing_scale_barcode_format || "21_5I_5W_GRAMS";
-    
-    if (!match && format.startsWith("CUSTOM:")) {
-      const maskStr = format.replace("CUSTOM:", "").replace(/\s/g, "").toUpperCase();
-      if (bcode.length === maskStr.length) {
-        let pluStr = "";
-        let weightStr = "";
-        let priceStr = "";
-
-        for (let i = 0; i < maskStr.length; i++) {
-          if (maskStr[i] === 'I') pluStr += bcode[i];
-          else if (maskStr[i] === 'W') weightStr += bcode[i];
-          else if (maskStr[i] === 'P') priceStr += bcode[i];
-        }
-
-        if (pluStr) {
-          const pluStrParsed = parseInt(pluStr, 10).toString();
-          match = menuItems.find((m) => m.barcode === pluStr || m.barcode === pluStrParsed);
-          if (match) {
-            if (weightStr) {
-              const weightGrams = parseInt(weightStr, 10);
-              if (!isNaN(weightGrams)) {
-                scannedQuantity = weightGrams / 1000;
-              }
-            } else if (priceStr) {
-              const totalPrice = parseInt(priceStr, 10);
-              if (!isNaN(totalPrice)) {
-                const unitPrice = parseFloat(match.price) || 1;
-                scannedQuantity = totalPrice / unitPrice;
-              }
-            }
-          }
-        }
-      }
-    } else if (!match && bcode.length === 13) {
-      if (format === "21_5I_5W_GRAMS" && bcode.startsWith("21")) {
-        const plu = bcode.substring(2, 7);
-        const pluStr = parseInt(plu, 10).toString();
-        const weightGrams = parseInt(bcode.substring(7, 12), 10);
-        match = menuItems.find((m) => m.barcode === plu || m.barcode === pluStr);
-        if (match && !isNaN(weightGrams)) {
-          scannedQuantity = weightGrams / 1000;
-        }
-      } else if (format === "21_5I_5P_INR" && bcode.startsWith("21")) {
-        const plu = bcode.substring(2, 7);
-        const pluStr = parseInt(plu, 10).toString();
-        const totalPrice = parseInt(bcode.substring(7, 12), 10);
-        match = menuItems.find((m) => m.barcode === plu || m.barcode === pluStr);
-        if (match && !isNaN(totalPrice)) {
-          const unitPrice = parseFloat(match.price) || 1;
-          scannedQuantity = totalPrice / unitPrice;
-        }
-      } else if (format === "20_6I_4W_GRAMS" && bcode.startsWith("20")) {
-        const plu = bcode.substring(2, 8);
-        const pluStr = parseInt(plu, 10).toString();
-        const weightGrams = parseInt(bcode.substring(8, 12), 10);
-        match = menuItems.find((m) => m.barcode === plu || m.barcode === pluStr);
-        if (match && !isNaN(weightGrams)) {
-          scannedQuantity = weightGrams / 1000;
-        }
-      }
-    } else if (!match && bcode.length === 10) {
-      if (format === "03_3I_5W_GRAMS" && bcode.startsWith("03")) {
-        const plu = bcode.substring(2, 5);
-        const pluStr = parseInt(plu, 10).toString();
-        const weightGrams = parseInt(bcode.substring(5, 10), 10);
-        match = menuItems.find((m) => m.barcode === plu || m.barcode === pluStr);
-        if (match && !isNaN(weightGrams)) {
-          scannedQuantity = weightGrams / 1000;
-        }
-      }
-    }
-    
-    return { match, scannedQuantity };
-  };
-
-  // Hardware barcode scan listener inside POS bill drawer
-  useBarcodeScanner({
-    onScan: async (barcode) => {
-      let { match, scannedQuantity } = processBarcodeScan(barcode);
-
-      if (!match) {
-        try {
-          const fetchedItem = await apiRequest<AdminMenuItem>(`/api/admin/menu-items/barcode/${barcode.trim()}`);
-          if (fetchedItem) match = fetchedItem;
-        } catch (e) {
-          /* ignore or show notice */
-        }
-      }
-
-      if (match) {
-        const oldestBatch = match.active_batches?.[0];
-        const resolved = resolveEffectiveItemPrice(match, {
-          pricingMode,
-          eveningPriceActive,
-          batch: oldestBatch,
-          selectedUnit: match.unit_label || "piece",
-        });
-        const taxRateNum = match.tax_rate ? parseFloat(String(match.tax_rate)) : 0;
-
-        const isOos = match.is_out_of_stock || (match.inventory_item_id && match.current_stock !== undefined && Number(match.current_stock) <= 0);
-        if (match.inventory_item_id && isOos && match.allow_oversell === false) {
-          setInlineNotice(`'${match.name}' is Out of Stock. Overselling is disabled for this product.`);
-          return;
-        }
-
-        const isBackorder = Boolean(match.inventory_item_id && isOos && match.allow_oversell !== false);
-        const finalDishName = isBackorder ? `${match.name} [Oversold Backorder]` : match.name;
-
-        setDraftCartItems((prev) => {
-          const existingIdx = prev.findIndex(
-            (ci) => ci.menu_item_id === match!.id && !ci.variant_id && ci.allow_oversell === isBackorder
-          );
-          if (existingIdx >= 0) {
-            return prev.map((ci, i) =>
-              i === existingIdx ? { ...ci, quantity: ci.quantity + scannedQuantity } : ci
-            );
-          }
-          return [
-            ...prev,
-            {
-              menu_item_id: match!.id,
-              selected_batch_id: isBackorder ? null : (oldestBatch?.id || null),
-              selected_batch_number: isBackorder ? null : (oldestBatch?.batch_number || null),
-              allow_oversell: isBackorder,
-              item_name: finalDishName,
-              unit_price: resolved.unitPrice,
-              mrp: resolved.mrp,
-              tax_rate: taxRateNum,
-              hsn_code: (match as any)?.hsn_code || null,
-              quantity: scannedQuantity,
-              pricing_type: pricingMode,
-              is_complimentary: false,
-              selected_unit: match!.unit_label || "piece",
-              base_unit_price: resolved.baseUnitPrice,
-              base_mrp: resolved.baseMrp,
-            },
-          ];
-        });
-      }
-    },
-    enabled: isOpen,
-  });
 
   const [serverSearchItems, setServerSearchItems] = useState<AdminMenuItem[]>([]);
   useEffect(() => {
@@ -1196,6 +1051,167 @@ export function CreateBillDrawer({
       setInlineNotice(`'${item.name}' is out of stock. Added as [Oversold Backorder].`);
     }
   }, [eveningPriceActive, pricingMode, setDraftCartItems, inventoryStockMap]);
+
+  const processBarcodeScan = useCallback((barcode: string) => {
+    const bcode = barcode.trim().toLowerCase();
+    const bcodeUnpadded = bcode.replace(/^0+/, "");
+    
+    // 1. Direct exact or unpadded match on menuItems
+    let match = menuItems.find(
+      (m) => m.barcode && (
+        m.barcode.trim().toLowerCase() === bcode ||
+        (bcodeUnpadded && m.barcode.trim().toLowerCase().replace(/^0+/, "") === bcodeUnpadded)
+      )
+    );
+
+    // 2. Check linked inventoryItems (if barcode was registered on inventory item)
+    if (!match && inventoryItems) {
+      const invMatch = inventoryItems.find(
+        (inv) => inv.barcode && (
+          inv.barcode.trim().toLowerCase() === bcode ||
+          (bcodeUnpadded && inv.barcode.trim().toLowerCase().replace(/^0+/, "") === bcodeUnpadded)
+        )
+      );
+      if (invMatch) {
+        match = menuItems.find((m) => m.inventory_item_id === invMatch.id);
+      }
+    }
+
+    // 3. Check memory cache of previously scanned/fetched items
+    if (!match) {
+      match = scannedItemsCacheRef.current.get(bcode) || (bcodeUnpadded ? scannedItemsCacheRef.current.get(bcodeUnpadded) : undefined);
+    }
+
+    // 4. Check serverSearchItems
+    if (!match && serverSearchItems.length > 0) {
+      match = serverSearchItems.find(
+        (m) => m.barcode && (
+          m.barcode.trim().toLowerCase() === bcode ||
+          (bcodeUnpadded && m.barcode.trim().toLowerCase().replace(/^0+/, "") === bcodeUnpadded)
+        )
+      );
+    }
+
+    let scannedQuantity = 1;
+
+    // 5. Embedded Weight Scale Logic
+    const format = restaurant?.weighing_scale_barcode_format || "21_5I_5W_GRAMS";
+    
+    if (!match && format.startsWith("CUSTOM:")) {
+      const maskStr = format.replace("CUSTOM:", "").replace(/\s/g, "").toUpperCase();
+      if (bcode.length === maskStr.length) {
+        let pluStr = "";
+        let weightStr = "";
+        let priceStr = "";
+
+        for (let i = 0; i < maskStr.length; i++) {
+          if (maskStr[i] === 'I') pluStr += bcode[i];
+          else if (maskStr[i] === 'W') weightStr += bcode[i];
+          else if (maskStr[i] === 'P') priceStr += bcode[i];
+        }
+
+        if (pluStr) {
+          const pluStrParsed = parseInt(pluStr, 10).toString();
+          match = menuItems.find((m) => m.barcode === pluStr || m.barcode === pluStrParsed || m.barcode?.replace(/^0+/, "") === pluStrParsed);
+          if (match) {
+            if (weightStr) {
+              const weightGrams = parseInt(weightStr, 10);
+              if (!isNaN(weightGrams)) {
+                scannedQuantity = weightGrams / 1000;
+              }
+            } else if (priceStr) {
+              const totalPrice = parseInt(priceStr, 10);
+              if (!isNaN(totalPrice)) {
+                const unitPrice = parseFloat(match.price) || 1;
+                scannedQuantity = totalPrice / unitPrice;
+              }
+            }
+          }
+        }
+      }
+    } else if (!match && bcode.length === 13) {
+      if (format === "21_5I_5W_GRAMS" && bcode.startsWith("21")) {
+        const plu = bcode.substring(2, 7);
+        const pluStr = parseInt(plu, 10).toString();
+        const weightGrams = parseInt(bcode.substring(7, 12), 10);
+        match = menuItems.find((m) => m.barcode === plu || m.barcode === pluStr || m.barcode?.replace(/^0+/, "") === pluStr);
+        if (match && !isNaN(weightGrams)) {
+          scannedQuantity = weightGrams / 1000;
+        }
+      } else if (format === "21_5I_5P_INR" && bcode.startsWith("21")) {
+        const plu = bcode.substring(2, 7);
+        const pluStr = parseInt(plu, 10).toString();
+        const totalPrice = parseInt(bcode.substring(7, 12), 10);
+        match = menuItems.find((m) => m.barcode === plu || m.barcode === pluStr || m.barcode?.replace(/^0+/, "") === pluStr);
+        if (match && !isNaN(totalPrice)) {
+          const unitPrice = parseFloat(match.price) || 1;
+          scannedQuantity = totalPrice / unitPrice;
+        }
+      } else if (format === "20_6I_4W_GRAMS" && bcode.startsWith("20")) {
+        const plu = bcode.substring(2, 8);
+        const pluStr = parseInt(plu, 10).toString();
+        const weightGrams = parseInt(bcode.substring(8, 12), 10);
+        match = menuItems.find((m) => m.barcode === plu || m.barcode === pluStr || m.barcode?.replace(/^0+/, "") === pluStr);
+        if (match && !isNaN(weightGrams)) {
+          scannedQuantity = weightGrams / 1000;
+        }
+      }
+    } else if (!match && bcode.length === 10) {
+      if (format === "03_3I_5W_GRAMS" && bcode.startsWith("03")) {
+        const plu = bcode.substring(2, 5);
+        const pluStr = parseInt(plu, 10).toString();
+        const weightGrams = parseInt(bcode.substring(5, 10), 10);
+        match = menuItems.find((m) => m.barcode === plu || m.barcode === pluStr || m.barcode?.replace(/^0+/, "") === pluStr);
+        if (match && !isNaN(weightGrams)) {
+          scannedQuantity = weightGrams / 1000;
+        }
+      }
+    }
+    
+    return { match, scannedQuantity };
+  }, [menuItems, inventoryItems, restaurant?.weighing_scale_barcode_format, serverSearchItems]);
+
+  const handleBarcodeScan = useCallback(async (barcode: string) => {
+    const cleanBarcode = barcode.trim();
+    if (!cleanBarcode) return;
+
+    let { match, scannedQuantity } = processBarcodeScan(cleanBarcode);
+
+    if (!match) {
+      try {
+        const fetchedItem = await apiRequest<AdminMenuItem>(`/api/admin/menu-items/barcode/${encodeURIComponent(cleanBarcode)}`);
+        if (fetchedItem) {
+          match = fetchedItem;
+          // Cache in memory for immediate subsequent scans
+          scannedItemsCacheRef.current.set(cleanBarcode.toLowerCase(), fetchedItem);
+          const unpadded = cleanBarcode.replace(/^0+/, "").toLowerCase();
+          if (unpadded) scannedItemsCacheRef.current.set(unpadded, fetchedItem);
+          setServerSearchItems((prev) => (prev.some((m) => m.id === fetchedItem.id) ? prev : [...prev, fetchedItem]));
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+
+    if (match) {
+      const itemVariants = variantsByItem[match.id] || [];
+      if (itemVariants.length === 0) {
+        addItemToCart(match, undefined, scannedQuantity);
+      } else if (itemVariants.length === 1) {
+        addItemToCart(match, itemVariants[0], scannedQuantity);
+      } else {
+        addItemToCart(match, itemVariants[0], scannedQuantity);
+      }
+    } else {
+      setInlineNotice(`No product found for scanned barcode: '${cleanBarcode}'`);
+    }
+  }, [processBarcodeScan, variantsByItem, addItemToCart]);
+
+  // Hardware barcode scan listener inside POS bill drawer
+  useBarcodeScanner({
+    onScan: handleBarcodeScan,
+    enabled: isOpen,
+  });
 
   // Sync draft cart prices if menu items are updated (e.g. quick edit offer)
   useEffect(() => {
@@ -1351,39 +1367,20 @@ export function CreateBillDrawer({
                   onKeyDown={async (e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
-                      const query = searchQuery.trim().toLowerCase();
+                      const query = searchQuery.trim();
                       if (!query) return;
                       
-                      let { match, scannedQuantity } = processBarcodeScan(query);
-                      
-                      if (!match && filteredMenuItems.length === 1) {
-                        match = filteredMenuItems[0];
-                        scannedQuantity = 1;
+                      if (filteredMenuItems.length === 1) {
+                        const itemVariants = variantsByItem[filteredMenuItems[0].id] || [];
+                        addItemToCart(filteredMenuItems[0], itemVariants.length === 1 ? itemVariants[0] : undefined, 1);
+                        setSearchQuery("");
+                        setTimeout(() => searchInputRef.current?.focus(), 0);
+                        return;
                       }
 
-                      if (!match) {
-                        try {
-                          const fetchedItem = await apiRequest<AdminMenuItem>(`/api/admin/menu-items/barcode/${query}`);
-                          if (fetchedItem) match = fetchedItem;
-                        } catch (err) {
-                          /* ignore */
-                        }
-                      }
-                      
-                      if (match) {
-                        const itemVariants = variantsByItem[match.id] || [];
-                        if (itemVariants.length === 0) {
-                          addItemToCart(match, undefined, scannedQuantity);
-                          setSearchQuery("");
-                          setTimeout(() => searchInputRef.current?.focus(), 0);
-                        } else if (itemVariants.length === 1) {
-                          addItemToCart(match, itemVariants[0], scannedQuantity);
-                          setSearchQuery("");
-                          setTimeout(() => searchInputRef.current?.focus(), 0);
-                        } else {
-                          // Let user click variant manually
-                        }
-                      }
+                      await handleBarcodeScan(query);
+                      setSearchQuery("");
+                      setTimeout(() => searchInputRef.current?.focus(), 0);
                     }
                   }}
                   className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] py-1.5 pl-8 pr-2.5 text-xs text-[var(--text-primary)]"
@@ -1676,36 +1673,70 @@ export function CreateBillDrawer({
                     onFocus={() => {
                       if (customerPhone.trim().length >= 2 && customerSuggestions.length > 0) {
                         setShowSuggestions(true);
-                        setHighlightedSuggestionIndex(0);
+                        setHighlightedSuggestionIndex(-1);
                       }
                     }}
                     onKeyDown={(e) => {
-                      if (!showSuggestions || customerSuggestions.length === 0) return;
-                      
                       if (e.key === "ArrowDown") {
-                        e.preventDefault();
-                        setHighlightedSuggestionIndex(prev => (prev < customerSuggestions.length - 1 ? prev + 1 : 0));
+                        if (showSuggestions && customerSuggestions.length > 0) {
+                          e.preventDefault();
+                          setHighlightedSuggestionIndex((prev) => (prev < customerSuggestions.length - 1 ? prev + 1 : 0));
+                        }
                       } else if (e.key === "ArrowUp") {
-                        e.preventDefault();
-                        setHighlightedSuggestionIndex(prev => (prev > 0 ? prev - 1 : customerSuggestions.length - 1));
+                        if (showSuggestions && customerSuggestions.length > 0) {
+                          e.preventDefault();
+                          setHighlightedSuggestionIndex((prev) => (prev > 0 ? prev - 1 : customerSuggestions.length - 1));
+                        }
                       } else if (e.key === "Enter") {
                         e.preventDefault();
-                        const targetIdx = highlightedSuggestionIndex >= 0 && highlightedSuggestionIndex < customerSuggestions.length
-                          ? highlightedSuggestionIndex
-                          : 0;
-                        const s = customerSuggestions[targetIdx];
-                        if (s) {
-                          setCustomerPhone(s.phone);
-                          setCustomerName(s.name);
-                          if (s.gstin && setCustomerGstin) setCustomerGstin(s.gstin);
-                          if (s.legal_name && setCustomerLegalName) setCustomerLegalName(s.legal_name);
-                          if (s.state_code && setPlaceOfSupply) setPlaceOfSupply(s.state_code);
-                          setShowSuggestions(false);
-                          setHighlightedSuggestionIndex(-1);
-                          setPhoneHasError(false);
-                          if (isWalkIn) setIsWalkIn?.(false);
-                          void fetchCustomerAnalytics(s.phone);
+                        const clean = customerPhone.replace(/\D/g, "");
+
+                        // 1. If user explicitly highlighted a suggestion using arrow keys
+                        if (showSuggestions && highlightedSuggestionIndex >= 0 && highlightedSuggestionIndex < customerSuggestions.length) {
+                          const s = customerSuggestions[highlightedSuggestionIndex];
+                          if (s) {
+                            setCustomerPhone(s.phone);
+                            setCustomerName(s.name);
+                            if (s.gstin && setCustomerGstin) setCustomerGstin(s.gstin);
+                            if (s.legal_name && setCustomerLegalName) setCustomerLegalName(s.legal_name);
+                            if (s.state_code && setPlaceOfSupply) setPlaceOfSupply(s.state_code);
+                            setShowSuggestions(false);
+                            setHighlightedSuggestionIndex(-1);
+                            setPhoneHasError(false);
+                            if (isWalkIn) setIsWalkIn?.(false);
+                            void fetchCustomerAnalytics(s.phone);
+                            nameInputRef.current?.focus();
+                            return;
+                          }
                         }
+
+                        // 2. If user typed 10 digits and an exact phone match exists in suggestions
+                        if (showSuggestions && clean.length >= 10) {
+                          const exact = customerSuggestions.find((s) => s.phone.replace(/\D/g, "") === clean);
+                          if (exact) {
+                            setCustomerPhone(exact.phone);
+                            setCustomerName(exact.name);
+                            if (exact.gstin && setCustomerGstin) setCustomerGstin(exact.gstin);
+                            if (exact.legal_name && setCustomerLegalName) setCustomerLegalName(exact.legal_name);
+                            if (exact.state_code && setPlaceOfSupply) setPlaceOfSupply(exact.state_code);
+                            setShowSuggestions(false);
+                            setHighlightedSuggestionIndex(-1);
+                            setPhoneHasError(false);
+                            if (isWalkIn) setIsWalkIn?.(false);
+                            void fetchCustomerAnalytics(exact.phone);
+                            nameInputRef.current?.focus();
+                            return;
+                          }
+                        }
+
+                        // 3. Otherwise: keep entered phone, close suggestions, and advance to Name input
+                        setShowSuggestions(false);
+                        setHighlightedSuggestionIndex(-1);
+                        if (clean.length >= 10) {
+                          setPhoneHasError(false);
+                          void fetchCustomerAnalytics(clean);
+                        }
+                        nameInputRef.current?.focus();
                       } else if (e.key === "Escape") {
                         setShowSuggestions(false);
                         setHighlightedSuggestionIndex(-1);
@@ -1734,7 +1765,7 @@ export function CreateBillDrawer({
                   {showSuggestions && customerSuggestions.length > 0 && (
                     <div className="absolute left-0 right-0 top-full mt-1 z-50 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] p-1 shadow-xl max-h-52 overflow-y-auto space-y-1">
                       {customerSuggestions.map((s, i) => {
-                        const isHighlighted = highlightedSuggestionIndex === i || (highlightedSuggestionIndex === -1 && i === 0);
+                        const isHighlighted = highlightedSuggestionIndex === i;
                         return (
                           <button
                             key={i}
@@ -1750,6 +1781,7 @@ export function CreateBillDrawer({
                               setPhoneHasError(false);
                               if (isWalkIn) setIsWalkIn?.(false);
                               void fetchCustomerAnalytics(s.phone);
+                              nameInputRef.current?.focus();
                             }}
                             onMouseEnter={() => setHighlightedSuggestionIndex(i)}
                             className={`w-full text-left rounded-lg p-2.5 text-base transition cursor-pointer flex items-center justify-between border ${
@@ -1779,6 +1811,7 @@ export function CreateBillDrawer({
                     Customer Name
                   </label>
                   <input
+                    ref={nameInputRef}
                     type="text"
                     placeholder="e.g. Rahul Sharma"
                     value={customerName}
