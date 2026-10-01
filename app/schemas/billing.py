@@ -228,3 +228,41 @@ class DiscountApprovalResponse(BaseResponse):
     order_basket_number: str
     order_total_amount: float
 
+
+class ConsolidatedReconciliationResponse(BaseResponse):
+    start_date: str | None = None
+    end_date: str | None = None
+
+    # POS Counter Billing
+    counter_gross_sales: float
+    counter_cash_tender: float
+    counter_upi_tender: float
+    counter_credit_applied: float
+    counter_debit_applied: float
+    counter_debt_settled: float
+    counter_credit_awarded: float
+    counter_credit_cashed_out: float
+    counter_credit_debit_net: float
+    counter_loyalty_redeemed: float
+    counter_net_paid: float
+    counter_bills_count: int
+
+    # Customer Returns & Exchanges
+    returns_gross_amount: float
+    returns_exchange_value: float
+    returns_net_refund: float
+    returns_cash_refund: float
+    returns_upi_refund: float
+    returns_credit_debit_net: float
+    returns_count: int
+
+    # Consolidated Store Totals
+    consolidated_net_sales: float
+    cash_tender_total: float
+    upi_tender_total: float
+    total_tender: float
+    consolidated_credit_debit_net: float
+    consolidated_loyalty_redeemed: float
+    consolidated_net_settlement: float
+
+

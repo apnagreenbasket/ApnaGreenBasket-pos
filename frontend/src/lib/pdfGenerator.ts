@@ -5514,3 +5514,325 @@ export function generateShiftHandoverReceiptPDF(
   }
 }
 
+// ==========================================
+// 20. CONSOLIDATED STAFF EXECUTIVE CLOSING REPORT (A4 Multi-Section)
+// Section 1: Store Settlement & Returns Reconciliation
+// Section 2: Shift Handover & Cash Collection History
+// Section 3: Inventory Stock Movement (Active Movements Only - New Page)
+// Section 4: Operational Wastage & Loss (New Page)
+// ==========================================
+
+export interface StaffExecutiveDayReportData {
+  reconciliation?: any;
+  shifts?: any[];
+  stockMovement?: any;
+  wastage?: any;
+}
+
+export function generateStaffExecutiveDayReportPDF(
+  restaurant: any,
+  dateRangeLabel: string,
+  data: StaffExecutiveDayReportData
+) {
+  const doc = new (jsPDF as any)({ orientation: "portrait", unit: "mm", format: "a4" });
+  const pageHeight = doc.internal.pageSize.getHeight();
+
+  const fmt = (v: any) => `INR ${(Number(v) || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
+  const formatQty = (v: any) => {
+    const num = Number(v) || 0;
+    return num % 1 === 0 ? num.toString() : num.toFixed(2);
+  };
+
+  // ------------------------------------------
+  // SECTION 1: STORE SETTLEMENT & RETURNS RECONCILIATION
+  // ------------------------------------------
+  let y = drawHeader(doc, restaurant, "EXECUTIVE STORE RECONCILIATION & CLOSING REPORT", dateRangeLabel);
+
+  const rec = data.reconciliation || {};
+  const shifts = data.shifts || [];
+
+  const netSettlement = Number(rec.consolidated_net_settlement) || 0;
+  const cashTender = Number(rec.cash_tender_total) || 0;
+  const upiTender = Number(rec.upi_tender_total) || 0;
+  const netReturns = Number(rec.returns_net_refund) || 0;
+  const billsCount = rec.counter_bills_count || 0;
+  const returnsCount = rec.returns_count || 0;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10.5);
+  doc.setTextColor(15, 23, 42);
+  doc.text("1. STORE SETTLEMENT & RETURNS RECONCILIATION", 14, y);
+  y += 3.5;
+
+  (autoTable as any)(doc, {
+    startY: y,
+    head: [["Consolidated Net Settlement", "Cash Tender (Total)", "UPI Tender (Total)", "Returns & Refunds", "Invoices / Returns"]],
+    body: [[
+      `INR ${netSettlement.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`,
+      `INR ${cashTender.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`,
+      `INR ${upiTender.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`,
+      `INR ${netReturns.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`,
+      `${billsCount} Bills / ${returnsCount} Returns`
+    ]],
+    theme: "grid",
+    headStyles: { fillColor: [15, 23, 42], fontStyle: "bold", fontSize: 8, halign: "center" },
+    styles: { fontSize: 8, fontStyle: "bold", halign: "center" }
+  });
+  y = (doc as any).lastAutoTable.finalY + 5;
+
+  const recRows = [
+    [
+      "Gross Sales / Revenue",
+      fmt(rec.counter_gross_sales),
+      fmt(rec.returns_gross_amount),
+      fmt(rec.consolidated_net_sales)
+    ],
+    [
+      "Cash Tender",
+      fmt(rec.counter_cash_tender),
+      fmt(rec.returns_cash_refund),
+      fmt(rec.cash_tender_total)
+    ],
+    [
+      "UPI Tender",
+      fmt(rec.counter_upi_tender),
+      fmt(rec.returns_upi_refund),
+      fmt(rec.upi_tender_total)
+    ],
+    [
+      "Credit / Debit (Udhaar) Net",
+      fmt(rec.counter_credit_debit_net),
+      fmt(rec.returns_credit_debit_net),
+      fmt(rec.consolidated_credit_debit_net)
+    ],
+    [
+      "Customer Loyalty Redeemed",
+      fmt(rec.counter_loyalty_redeemed),
+      "—",
+      fmt(rec.consolidated_loyalty_redeemed)
+    ],
+    [
+      "NET STORE SETTLEMENT",
+      fmt(rec.counter_net_paid),
+      fmt(rec.returns_net_refund),
+      fmt(rec.consolidated_net_settlement)
+    ]
+  ];
+
+  (autoTable as any)(doc, {
+    startY: y,
+    head: [["Reconciliation Line Item", "POS Counter Billing (Gross)", "Returns Desk Deductions", "Consolidated Net Store Total"]],
+    body: recRows,
+    theme: "grid",
+    headStyles: { fillColor: [51, 65, 85], fontStyle: "bold", fontSize: 7.5 },
+    styles: { fontSize: 7.5 },
+    columnStyles: {
+      0: { fontStyle: "bold", cellWidth: 55 },
+      1: { halign: "right" },
+      2: { halign: "right", textColor: [185, 28, 28] },
+      3: { halign: "right", fontStyle: "bold", textColor: [16, 185, 129] }
+    },
+    didParseCell: (hookData: any) => {
+      if (hookData.section === "body" && hookData.row.index === recRows.length - 1) {
+        hookData.cell.styles.fontStyle = "bold";
+        hookData.cell.styles.fillColor = [241, 245, 249];
+      }
+    }
+  });
+  y = (doc as any).lastAutoTable.finalY + 8;
+
+  // ------------------------------------------
+  // SECTION 2: SHIFT HANDOVER & CASH COLLECTION HISTORY
+  // Continuous layout: Starts on page 1 if room allows; continues onto page 2 if needed
+  // ------------------------------------------
+  if (y > pageHeight - 35) {
+    doc.addPage();
+    y = 20;
+  }
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10.5);
+  doc.setTextColor(15, 23, 42);
+  doc.text("2. SHIFT HANDOVER & CASH COLLECTION HISTORY", 14, y);
+  y += 3.5;
+
+  const shiftRows = shifts.length === 0
+    ? [["No cashier shift records logged for this period.", "—", "—", "—", "—", "—", "—", "—"]]
+    : shifts.map((s: any) => {
+        const diff = Number(s.cash_difference) || 0;
+        const diffStatus = Math.abs(diff) < 0.01
+          ? "BALANCED"
+          : diff > 0
+          ? `+INR ${diff.toFixed(2)} (Excess)`
+          : `-INR ${Math.abs(diff).toFixed(2)} (Shortage)`;
+
+        const punchIn = s.punch_in_at ? new Date(s.punch_in_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "—";
+        const punchOut = s.punch_out_at ? new Date(s.punch_out_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "Active";
+
+        return [
+          s.staff_name || "Cashier",
+          s.staff_role || "Staff",
+          `${punchIn} - ${punchOut}`,
+          fmt(s.opening_cash),
+          `${fmt(s.total_sales_amount)} (${s.total_bills_count || 0}b)`,
+          fmt(s.expected_cash_in_drawer),
+          fmt(s.actual_cash_handed_over),
+          diffStatus
+        ];
+      });
+
+  (autoTable as any)(doc, {
+    startY: y,
+    head: [["Cashier / Staff", "Role", "Shift Timing", "Opening Float", "Bills & Sales", "Expected Cash", "Handed Over", "Tally Status"]],
+    body: shiftRows,
+    theme: "grid",
+    headStyles: { fillColor: [5, 150, 105], fontStyle: "bold", fontSize: 7 },
+    styles: { fontSize: 7 },
+    columnStyles: {
+      0: { fontStyle: "bold" },
+      3: { halign: "right" },
+      4: { halign: "right" },
+      5: { halign: "right" },
+      6: { halign: "right", fontStyle: "bold" },
+      7: { halign: "center", fontStyle: "bold" }
+    }
+  });
+
+  // ------------------------------------------
+  // SECTION 3: INVENTORY STOCK MOVEMENT
+  // Always starts on a fresh new page!
+  // Excludes items with zero movement/activity!
+  // ------------------------------------------
+  doc.addPage();
+  let y3 = drawHeader(doc, restaurant, "3. INVENTORY STOCK MOVEMENT REPORT", dateRangeLabel);
+
+  const rawMovementItems = data.stockMovement?.items || [];
+  const activeMovementItems = rawMovementItems.filter((i: any) => {
+    const totalIn = (Number(i.intake_qty) || 0) + (Number(i.restock_qty) || 0);
+    const totalOut = (Number(i.sales_deduction_qty) || 0) + (Number(i.purchase_return_qty) || 0) + (Number(i.void_batch_qty) || 0);
+    const adj = Math.abs(Number(i.manual_adjustment_qty) || 0);
+    const opening = Number(i.opening_stock) || 0;
+    const closing = Number(i.closing_stock) || 0;
+    return totalIn > 0 || totalOut > 0 || adj > 0 || Math.abs(opening - closing) > 0.001;
+  });
+
+  (autoTable as any)(doc, {
+    startY: y3,
+    head: [["Active Items Moved", "Total Catalog Items", "Activity Filter", "Report Period"]],
+    body: [[
+      `${activeMovementItems.length} items moved`,
+      `${rawMovementItems.length} items`,
+      "Non-zero activity only (In, Out, Adjustments)",
+      dateRangeLabel
+    ]],
+    theme: "grid",
+    headStyles: { fillColor: [79, 70, 229], fontStyle: "bold", fontSize: 7.5, halign: "center" },
+    styles: { fontSize: 7.5, fontStyle: "bold", halign: "center" }
+  });
+  y3 = (doc as any).lastAutoTable.finalY + 5;
+
+  const movementRows = activeMovementItems.length === 0
+    ? [["No inventory items had active movement or adjustments during this period.", "—", "—", "—", "—", "—", "—"]]
+    : activeMovementItems.map((i: any) => {
+        const totalIn = (Number(i.intake_qty) || 0) + (Number(i.restock_qty) || 0);
+        const totalOut = (Number(i.sales_deduction_qty) || 0) + (Number(i.purchase_return_qty) || 0) + (Number(i.void_batch_qty) || 0);
+        const adj = Number(i.manual_adjustment_qty) || 0;
+
+        return [
+          i.item_name,
+          i.unit || "unit",
+          formatQty(i.opening_stock),
+          totalIn > 0 ? `+${formatQty(totalIn)}` : "0",
+          totalOut > 0 ? `-${formatQty(totalOut)}` : "0",
+          adj !== 0 ? (adj > 0 ? `+${formatQty(adj)}` : formatQty(adj)) : "0",
+          formatQty(i.closing_stock)
+        ];
+      });
+
+  (autoTable as any)(doc, {
+    startY: y3,
+    head: [["Item Name", "Unit", "Opening", "Total In (+)", "Total Out (-)", "Adjustments", "Closing Stock"]],
+    body: movementRows,
+    theme: "grid",
+    headStyles: { fillColor: [67, 56, 202], fontStyle: "bold", fontSize: 7 },
+    styles: { fontSize: 7 },
+    columnStyles: {
+      0: { fontStyle: "bold", cellWidth: 55 },
+      2: { halign: "right" },
+      3: { halign: "right", textColor: [16, 185, 129] },
+      4: { halign: "right", textColor: [239, 68, 68] },
+      5: { halign: "right" },
+      6: { halign: "right", fontStyle: "bold" }
+    }
+  });
+
+  // ------------------------------------------
+  // SECTION 4: OPERATIONAL WASTAGE & LOSS
+  // Always starts on a fresh new page!
+  // ------------------------------------------
+  doc.addPage();
+  let y4 = drawHeader(doc, restaurant, "4. OPERATIONAL WASTAGE & LOSS AUDIT REPORT", dateRangeLabel);
+
+  const wastage = data.wastage || {};
+  const wastageItems = wastage.items || [];
+  const totalLoss = Number(wastage.total_wastage_cost) || wastageItems.reduce((acc: number, w: any) => acc + (Number(w.wastage_cost || w.loss_value) || 0), 0);
+  const totalWastedQty = Number(wastage.total_quantity_wasted) || wastageItems.reduce((acc: number, w: any) => acc + (Number(w.quantity_wasted || w.quantity) || 0), 0);
+
+  (autoTable as any)(doc, {
+    startY: y4,
+    head: [["Wastage Incidents", "Total Quantity Lost", "Total Valuation Loss (INR)", "Date Period"]],
+    body: [[
+      `${wastageItems.length} logs`,
+      `${formatQty(totalWastedQty)} units`,
+      `INR ${totalLoss.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`,
+      dateRangeLabel
+    ]],
+    theme: "grid",
+    headStyles: { fillColor: [185, 28, 28], fontStyle: "bold", fontSize: 7.5, halign: "center" },
+    styles: { fontSize: 7.5, fontStyle: "bold", halign: "center" }
+  });
+  y4 = (doc as any).lastAutoTable.finalY + 5;
+
+  const wastageRows = wastageItems.length === 0
+    ? [["No operational wastage or loss logged for this period.", "—", "—", "—", "—", "—"]]
+    : wastageItems.map((w: any) => {
+        const dateStr = w.created_at || w.date;
+        const parsedDate = dateStr ? new Date(dateStr).toLocaleString("en-IN") : "—";
+        const qty = w.quantity_wasted !== undefined ? w.quantity_wasted : w.quantity;
+        const lossVal = Number(w.wastage_cost || w.loss_value) || 0;
+
+        return [
+          parsedDate,
+          w.item_name,
+          formatQty(qty),
+          fmt(lossVal),
+          w.reason || w.notes || "Damaged / Spoiled",
+          w.created_by_name || "Staff"
+        ];
+      });
+
+  (autoTable as any)(doc, {
+    startY: y4,
+    head: [["Timestamp", "Item Name", "Quantity", "Loss Value (INR)", "Reason / Cause", "Logged By"]],
+    body: wastageRows,
+    theme: "grid",
+    headStyles: { fillColor: [153, 27, 27], fontStyle: "bold", fontSize: 7 },
+    styles: { fontSize: 7 },
+    columnStyles: {
+      0: { cellWidth: 35 },
+      1: { fontStyle: "bold" },
+      2: { halign: "right" },
+      3: { halign: "right", fontStyle: "bold", textColor: [185, 28, 28] },
+      4: { cellWidth: 40 }
+    }
+  });
+
+  // Global Page Footer on all pages
+  addPdfFooter(doc, restaurant);
+
+  const cleanStoreName = (restaurant?.name || "Store").replace(/[^a-zA-Z0-9]/g, "_");
+  const filename = `Executive_Day_Report_${cleanStoreName}_${new Date().toISOString().slice(0, 10)}.pdf`;
+  doc.save(filename);
+}
+
+

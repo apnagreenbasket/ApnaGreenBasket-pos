@@ -58,15 +58,32 @@ def format_duration(seconds: int) -> str:
 
 async def get_live_drawer_balance(db: AsyncSession, outlet_id: uuid.UUID) -> Decimal:
     """Calculate exact real-time live cash balance present in the outlet cash drawer."""
-    stmt = select(CashDrawerLedger).where(CashDrawerLedger.outlet_id == outlet_id)
+    stmt = (
+        select(CashDrawerLedger)
+        .outerjoin(Order, CashDrawerLedger.reference_order_id == Order.id)
+        .where(
+            CashDrawerLedger.outlet_id == outlet_id,
+            or_(Order.id.is_(None), Order.is_void == False),
+        )
+    )
     res = await db.execute(stmt)
     entries = res.scalars().all()
     denoms: dict[str, int] = {}
     for entry in entries:
-        mult = 1 if entry.transaction_type in ("MANUAL_DEPOSIT", "CUSTOMER_PAYMENT") else -1
+        ttype = entry.transaction_type
         for d, count in (entry.denominations or {}).items():
-            if count > 0:
-                denoms[d] = denoms.get(d, 0) + (count * mult)
+            cnt = int(count)
+            if cnt == 0:
+                continue
+            if ttype in ("MANUAL_DEPOSIT", "CUSTOMER_PAYMENT"):
+                denoms[str(d)] = denoms.get(str(d), 0) + abs(cnt)
+            elif ttype in ("MANUAL_WITHDRAWAL", "CUSTOMER_CHANGE"):
+                denoms[str(d)] = denoms.get(str(d), 0) - abs(cnt)
+            elif ttype == "CUSTOMER_RETURN":
+                # Net signed: positive means inward cash received, negative means refund cash paid out
+                denoms[str(d)] = denoms.get(str(d), 0) + cnt
+            else:
+                denoms[str(d)] = denoms.get(str(d), 0) + cnt
     total = sum(Decimal(str(d)) * count for d, count in denoms.items())
     return max(Decimal("0.00"), total)
 

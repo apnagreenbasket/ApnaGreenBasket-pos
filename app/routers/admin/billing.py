@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from sqlalchemy.orm import selectinload
 
 from app.dependencies import (
@@ -30,6 +30,7 @@ from app.schemas.billing import (
     ApplyDiscountRequest,
     ApproveDiscountRequest,
     BillResponse,
+    ConsolidatedReconciliationResponse,
     CreateManualBillRequest,
     CustomerReturnRequest,
     DiscountApprovalResponse,
@@ -607,6 +608,52 @@ async def get_item_level_return_ledger_endpoint(
     return result
 
 
+@router.get("/reconciliation-summary", response_model=ConsolidatedReconciliationResponse)
+async def get_reconciliation_summary_endpoint(
+    db: DBSession,
+    current_user: CurrentUser = Depends(require_permission("can_manage_billing")),
+    start_date: str | None = Query(None),
+    end_date: str | None = Query(None),
+    export: str | None = Query(None),
+):
+    """
+    Get consolidated day settlement and returns reconciliation summary.
+    Restricted to Manager and Upper Roles.
+    Supports CSV export.
+    """
+    if not current_user.outlet_id:
+        raise HTTPException(status_code=400, detail="outlet_id required")
+
+    # Manager and Upper Roles access control
+    if not is_role_exempt(getattr(current_user, "role", None)):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Consolidated reconciliation report is restricted to Managers and Administrators.",
+        )
+
+    from app.services.billing_service import (
+        get_consolidated_reconciliation_summary,
+        generate_reconciliation_csv,
+    )
+
+    summary = await get_consolidated_reconciliation_summary(
+        db, current_user.outlet_id, start_date=start_date, end_date=end_date
+    )
+
+    if export == "csv":
+        outlet_name = "Outlet"
+        if getattr(current_user, "outlet", None) and getattr(current_user.outlet, "name", None):
+            outlet_name = current_user.outlet.name
+        csv_data = generate_reconciliation_csv(summary, outlet_name=outlet_name)
+        d_str = (start_date or datetime.now().strftime("%Y%m%d")).replace("-", "")
+        return Response(
+            content=csv_data,
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=reconciliation_summary_{d_str}.csv"},
+        )
+
+    return summary
+
 
 @router.get("/bills/{bill_id}", response_model=BillResponse)
 async def get_bill_endpoint(
@@ -663,16 +710,33 @@ async def get_live_drawer_state(
     if not current_user.outlet_id:
         raise HTTPException(status_code=400, detail="outlet_id required")
     
-    stmt = select(CashDrawerLedger).where(CashDrawerLedger.outlet_id == current_user.outlet_id)
+    stmt = (
+        select(CashDrawerLedger)
+        .outerjoin(Order, CashDrawerLedger.reference_order_id == Order.id)
+        .where(
+            CashDrawerLedger.outlet_id == current_user.outlet_id,
+            or_(Order.id.is_(None), Order.is_void == False),
+        )
+    )
     res = await db.execute(stmt)
     ledger_entries = res.scalars().all()
     
-    denoms = {}
+    denoms: dict[str, int] = {}
     for entry in ledger_entries:
-        mult = 1 if entry.transaction_type in ("MANUAL_DEPOSIT", "CUSTOMER_PAYMENT") else -1
-        for d, count in entry.denominations.items():
-            if count > 0:
-                denoms[d] = denoms.get(d, 0) + (count * mult)
+        ttype = entry.transaction_type
+        for d, count in (entry.denominations or {}).items():
+            cnt = int(count)
+            if cnt == 0:
+                continue
+            if ttype in ("MANUAL_DEPOSIT", "CUSTOMER_PAYMENT"):
+                denoms[str(d)] = denoms.get(str(d), 0) + abs(cnt)
+            elif ttype in ("MANUAL_WITHDRAWAL", "CUSTOMER_CHANGE"):
+                denoms[str(d)] = denoms.get(str(d), 0) - abs(cnt)
+            elif ttype == "CUSTOMER_RETURN":
+                # Net signed: positive means inward cash received, negative means refund cash paid out
+                denoms[str(d)] = denoms.get(str(d), 0) + cnt
+            else:
+                denoms[str(d)] = denoms.get(str(d), 0) + cnt
     
     total = sum(float(d) * count for d, count in denoms.items())
     return DrawerStateResponse(denominations=denoms, total_balance=total)

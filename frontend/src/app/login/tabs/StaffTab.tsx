@@ -13,15 +13,23 @@ import { ConfirmModal } from "../modals/ConfirmModal";
 import {
   Activity,
   AlertCircle,
+  Banknote,
   Calendar,
   CheckCircle2,
   Clock,
   DollarSign,
+  Download,
+  FileText,
   KeyRound,
+  Loader2,
+  Package,
   Pencil,
   Printer,
   Receipt,
   RefreshCw,
+  Scale,
+  Smartphone,
+  Sparkles,
   Trash2,
   UserCheck,
   UserPlus,
@@ -30,9 +38,42 @@ import {
   Wallet,
 } from "lucide-react";
 import { formatRupees, formatDateTime, parseUTCDate } from "../adminUtils";
-import type { StaffAuditEntry, StaffMember, StaffRole } from "@/types";
+import type { StaffAuditEntry, StaffMember, StaffRole, StockMovementResponse, WastageReportResponse } from "@/types";
 import type { RestaurantProfile, StaffPunchSessionItem } from "../adminTypes";
-import { generateShiftHandoverReceiptPDF } from "@/lib/pdfGenerator";
+import { generateShiftHandoverReceiptPDF, generateStaffExecutiveDayReportPDF } from "@/lib/pdfGenerator";
+import { StockMovementReport } from "./analytics/StockMovementReport";
+import { WastageReport } from "./analytics/WastageReport";
+
+export type ReconciliationSummary = {
+  start_date: string | null;
+  end_date: string | null;
+  counter_gross_sales: number;
+  counter_cash_tender: number;
+  counter_upi_tender: number;
+  counter_credit_applied: number;
+  counter_debit_applied: number;
+  counter_debt_settled: number;
+  counter_credit_awarded: number;
+  counter_credit_cashed_out: number;
+  counter_credit_debit_net: number;
+  counter_loyalty_redeemed: number;
+  counter_net_paid: number;
+  counter_bills_count: number;
+  returns_gross_amount: number;
+  returns_exchange_value: number;
+  returns_net_refund: number;
+  returns_cash_refund: number;
+  returns_upi_refund: number;
+  returns_credit_debit_net: number;
+  returns_count: number;
+  consolidated_net_sales: number;
+  cash_tender_total: number;
+  upi_tender_total: number;
+  total_tender: number;
+  consolidated_credit_debit_net: number;
+  consolidated_loyalty_redeemed: number;
+  consolidated_net_settlement: number;
+};
 
 type StaffFormState = {
   outlet_id: string;
@@ -177,6 +218,200 @@ export function StaffTab({
   const totalDifference = shiftSessions.reduce((acc, s) => acc + (Number(s.cash_difference) || 0), 0);
 
   const isManager = currentUserRole === "MANAGER";
+  const isManagerOrAdmin = ["SUPERADMIN", "OUTLET_ADMIN", "MANAGER"].includes((currentUserRole || "").toUpperCase());
+
+  // Consolidated Store Reconciliation State (Manager & Upper Roles)
+  const [recData, setRecData] = useState<ReconciliationSummary | null>(null);
+  const [isLoadingRec, setIsLoadingRec] = useState(false);
+  const [recDatePreset, setRecDatePreset] = useState<"today" | "yesterday" | "7days" | "30days" | "custom">("today");
+  const [recCustomStart, setRecCustomStart] = useState<string>("");
+  const [recCustomEnd, setRecCustomEnd] = useState<string>("");
+  const [isExportingRecCsv, setIsExportingRecCsv] = useState(false);
+
+  const loadReconciliationSummary = useCallback(async () => {
+    if (!apiRequest || !isManagerOrAdmin) return;
+    setIsLoadingRec(true);
+    try {
+      const params = new URLSearchParams();
+      const now = new Date();
+      const formatDateStr = (d: Date) => {
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
+      };
+
+      if (recDatePreset === "today") {
+        const todayStr = formatDateStr(now);
+        params.append("start_date", todayStr);
+        params.append("end_date", todayStr);
+      } else if (recDatePreset === "yesterday") {
+        const yesterday = new Date(now);
+        yesterday.setDate(now.getDate() - 1);
+        const yStr = formatDateStr(yesterday);
+        params.append("start_date", yStr);
+        params.append("end_date", yStr);
+      } else if (recDatePreset === "7days") {
+        const past7 = new Date(now);
+        past7.setDate(now.getDate() - 7);
+        params.append("start_date", formatDateStr(past7));
+        params.append("end_date", formatDateStr(now));
+      } else if (recDatePreset === "30days") {
+        const past30 = new Date(now);
+        past30.setDate(now.getDate() - 30);
+        params.append("start_date", formatDateStr(past30));
+        params.append("end_date", formatDateStr(now));
+      } else if (recDatePreset === "custom" && recCustomStart && recCustomEnd) {
+        params.append("start_date", recCustomStart);
+        params.append("end_date", recCustomEnd);
+      }
+
+      const data = await apiRequest<ReconciliationSummary>(`/api/billing/reconciliation-summary?${params.toString()}`);
+      setRecData(data || null);
+    } catch (err) {
+      console.warn("Failed to load reconciliation summary:", err);
+    } finally {
+      setIsLoadingRec(false);
+    }
+  }, [apiRequest, isManagerOrAdmin, recDatePreset, recCustomStart, recCustomEnd]);
+
+  useEffect(() => {
+    if (isManagerOrAdmin) {
+      void loadReconciliationSummary();
+    }
+  }, [loadReconciliationSummary, isManagerOrAdmin]);
+
+  const handleDownloadRecCsv = async () => {
+    if (isExportingRecCsv) return;
+    setIsExportingRecCsv(true);
+    try {
+      const params = new URLSearchParams();
+      const now = new Date();
+      const formatDateStr = (d: Date) => {
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
+      };
+
+      if (recDatePreset === "today") {
+        const todayStr = formatDateStr(now);
+        params.append("start_date", todayStr);
+        params.append("end_date", todayStr);
+      } else if (recDatePreset === "yesterday") {
+        const yesterday = new Date(now);
+        yesterday.setDate(now.getDate() - 1);
+        const yStr = formatDateStr(yesterday);
+        params.append("start_date", yStr);
+        params.append("end_date", yStr);
+      } else if (recDatePreset === "7days") {
+        const past7 = new Date(now);
+        past7.setDate(now.getDate() - 7);
+        params.append("start_date", formatDateStr(past7));
+        params.append("end_date", formatDateStr(now));
+      } else if (recDatePreset === "30days") {
+        const past30 = new Date(now);
+        past30.setDate(now.getDate() - 30);
+        params.append("start_date", formatDateStr(past30));
+        params.append("end_date", formatDateStr(now));
+      } else if (recDatePreset === "custom" && recCustomStart && recCustomEnd) {
+        params.append("start_date", recCustomStart);
+        params.append("end_date", recCustomEnd);
+      }
+      params.append("export", "csv");
+
+      const token = typeof window !== "undefined"
+        ? window.localStorage.getItem("agb_access_token") ||
+          window.localStorage.getItem("admin_access_token") ||
+          window.localStorage.getItem("access_token") ||
+          window.localStorage.getItem("token")
+        : null;
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const res = await fetch(`/api/billing/reconciliation-summary?${params.toString()}`, { headers });
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.setAttribute("download", `store_reconciliation_${new Date().toISOString().slice(0, 10)}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
+    } catch (err) {
+      console.error("Failed to download reconciliation CSV:", err);
+    } finally {
+      setIsExportingRecCsv(false);
+    }
+  };
+
+  // Inventory Stock Movement & Wastage State (Manager & Upper Roles)
+  const [invSubTab, setInvSubTab] = useState<"stock_movement" | "wastage">("stock_movement");
+  const [stockMovementData, setStockMovementData] = useState<StockMovementResponse | null>(null);
+  const [wastageData, setWastageData] = useState<WastageReportResponse | null>(null);
+  const [isLoadingInv, setIsLoadingInv] = useState(false);
+  const [invDatePreset, setInvDatePreset] = useState<"today" | "yesterday" | "7days" | "30days" | "custom">("today");
+  const [invCustomStart, setInvCustomStart] = useState<string>("");
+  const [invCustomEnd, setInvCustomEnd] = useState<string>("");
+
+  const loadInventoryStockData = useCallback(async () => {
+    if (!apiRequest || !isManagerOrAdmin) return;
+    setIsLoadingInv(true);
+    try {
+      const now = new Date();
+      let fromStr = "";
+      let toStr = "";
+
+      if (invDatePreset === "today") {
+        const from = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+        fromStr = from.toISOString();
+        toStr = now.toISOString();
+      } else if (invDatePreset === "yesterday") {
+        const from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0);
+        const to = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59, 999);
+        fromStr = from.toISOString();
+        toStr = to.toISOString();
+      } else if (invDatePreset === "7days") {
+        const from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        fromStr = from.toISOString();
+        toStr = now.toISOString();
+      } else if (invDatePreset === "30days") {
+        const from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        fromStr = from.toISOString();
+        toStr = now.toISOString();
+      } else if (invDatePreset === "custom" && invCustomStart && invCustomEnd) {
+        const [fYear, fMonth, fDay] = invCustomStart.split("-").map(Number);
+        fromStr = new Date(fYear, fMonth - 1, fDay, 0, 0, 0).toISOString();
+        const [tYear, tMonth, tDay] = invCustomEnd.split("-").map(Number);
+        toStr = new Date(tYear, tMonth - 1, tDay, 23, 59, 59, 999).toISOString();
+      }
+
+      const params = new URLSearchParams();
+      if (fromStr) params.append("from_date", fromStr);
+      if (toStr) params.append("to_date", toStr);
+
+      if (invSubTab === "stock_movement") {
+        const mov = await apiRequest<StockMovementResponse>(`/api/analytics/stock-movement?${params.toString()}`);
+        setStockMovementData(mov || null);
+      } else {
+        const was = await apiRequest<WastageReportResponse>(`/api/analytics/wastage?${params.toString()}`);
+        setWastageData(was || null);
+      }
+    } catch (err) {
+      console.warn("Failed to load inventory stock analytics in StaffTab:", err);
+    } finally {
+      setIsLoadingInv(false);
+    }
+  }, [apiRequest, isManagerOrAdmin, invSubTab, invDatePreset, invCustomStart, invCustomEnd]);
+
+  useEffect(() => {
+    if (isManagerOrAdmin) {
+      void loadInventoryStockData();
+    }
+  }, [loadInventoryStockData, isManagerOrAdmin]);
 
   const activeStaffCount = staffList.filter((s) => s.status === "active").length;
   const inactiveStaffCount = staffList.filter((s) => s.status !== "active").length;
@@ -186,6 +421,75 @@ export function StaffTab({
     if (statusFilter === "inactive") return member.status !== "active";
     return true;
   });
+
+  // Executive Day Report Download State (Reconciliation + Shifts + Stock Movement + Wastage)
+  const [reportDatePreset, setReportDatePreset] = useState<"today" | "yesterday" | "7days" | "30days" | "this_month">("today");
+  const [isDownloadingMasterReport, setIsDownloadingMasterReport] = useState(false);
+
+  const handleDownloadMasterReport = async () => {
+    if (!apiRequest) return;
+    setIsDownloadingMasterReport(true);
+    try {
+      const now = new Date();
+      const pad = (n: number) => String(n).padStart(2, "0");
+      const toStr = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+      let startDate = toStr(now);
+      let endDate = toStr(now);
+      let label = "Today";
+
+      if (reportDatePreset === "yesterday") {
+        const y = new Date(now);
+        y.setDate(now.getDate() - 1);
+        startDate = toStr(y);
+        endDate = toStr(y);
+        label = "Yesterday";
+      } else if (reportDatePreset === "7days") {
+        const p = new Date(now);
+        p.setDate(now.getDate() - 7);
+        startDate = toStr(p);
+        endDate = toStr(now);
+        label = "Last 7 Days";
+      } else if (reportDatePreset === "30days") {
+        const p = new Date(now);
+        p.setDate(now.getDate() - 30);
+        startDate = toStr(p);
+        endDate = toStr(now);
+        label = "Last 30 Days";
+      } else if (reportDatePreset === "this_month") {
+        const f = new Date(now.getFullYear(), now.getMonth(), 1);
+        startDate = toStr(f);
+        endDate = toStr(now);
+        label = "This Month";
+      }
+
+      // Parallel non-blocking on-demand fetches — lightweight JSON, zero persistent load on DB
+      const [recRes, shiftsRes, stockMovRes, wastageRes] = await Promise.allSettled([
+        apiRequest<ReconciliationSummary>(`/api/billing/reconciliation-summary?start_date=${startDate}&end_date=${endDate}`),
+        apiRequest<StaffPunchSessionItem[]>(`/api/staff/punch/sessions?start_date=${startDate}&end_date=${endDate}&limit=100`),
+        apiRequest<StockMovementResponse>(`/api/analytics/stock-movement?from_date=${startDate}&to_date=${endDate}`),
+        apiRequest<WastageReportResponse>(`/api/analytics/wastage?from_date=${startDate}&to_date=${endDate}`),
+      ]);
+
+      const recDataVal = recRes.status === "fulfilled" ? recRes.value : null;
+      const shiftsDataVal = shiftsRes.status === "fulfilled" ? (shiftsRes.value || []) : [];
+      const stockMovDataVal = stockMovRes.status === "fulfilled" ? stockMovRes.value : null;
+      const wastageDataVal = wastageRes.status === "fulfilled" ? wastageRes.value : null;
+
+      const dateRangeLabel = `${label} (${startDate === endDate ? startDate : `${startDate} to ${endDate}`})`;
+
+      generateStaffExecutiveDayReportPDF(restaurant, dateRangeLabel, {
+        reconciliation: recDataVal,
+        shifts: shiftsDataVal,
+        stockMovement: stockMovDataVal,
+        wastage: wastageDataVal,
+      });
+    } catch (err) {
+      console.error("Failed to generate master executive report:", err);
+    } finally {
+      setIsDownloadingMasterReport(false);
+    }
+  };
 
   // Global Keyboard Shortcuts for Staff & Team (Press '+' or Numpad '+' to open Add Staff Member)
   useEffect(() => {
@@ -226,6 +530,36 @@ export function StaffTab({
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Executive Date Dropdown & Report Download Button */}
+          <div className="flex items-center gap-1.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-1 shadow-2xs">
+            <select
+              value={reportDatePreset}
+              onChange={(e) => setReportDatePreset(e.target.value as any)}
+              className="rounded-lg bg-transparent px-2.5 py-1.5 text-xs font-semibold text-[var(--text-primary)] focus:outline-hidden cursor-pointer"
+              title="Select period for executive report (Defaults to Today)"
+            >
+              <option value="today" className="bg-[var(--bg-surface-elevated)] text-[var(--text-primary)]">Today</option>
+              <option value="yesterday" className="bg-[var(--bg-surface-elevated)] text-[var(--text-primary)]">Yesterday</option>
+              <option value="7days" className="bg-[var(--bg-surface-elevated)] text-[var(--text-primary)]">Last 7 Days</option>
+              <option value="30days" className="bg-[var(--bg-surface-elevated)] text-[var(--text-primary)]">Last 30 Days</option>
+              <option value="this_month" className="bg-[var(--bg-surface-elevated)] text-[var(--text-primary)]">This Month</option>
+            </select>
+            <button
+              type="button"
+              onClick={handleDownloadMasterReport}
+              disabled={isDownloadingMasterReport}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 text-xs font-bold transition shadow-xs cursor-pointer disabled:opacity-50"
+              title="Download Executive Closing Report (Store Settlement, Shifts, Stock Movement & Wastage)"
+            >
+              {isDownloadingMasterReport ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <FileText className="h-3.5 w-3.5" />
+              )}
+              <span>{isDownloadingMasterReport ? "Generating..." : "Report"}</span>
+            </button>
+          </div>
+
           <button
             type="button"
             onClick={onOpenPinSwitch}
@@ -511,6 +845,421 @@ export function StaffTab({
           </table>
         </div>
       </article>
+
+      {/* Consolidated Store Settlement & Returns Reconciliation — Dedicated for Manager & Upper Roles */}
+      {isManagerOrAdmin && (
+        <article className="rounded-3xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] overflow-hidden shadow-xs space-y-4">
+          <div className="p-4 border-b border-[var(--border-subtle)] flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--accent-brand)]/15 text-[var(--accent-brand)]">
+                <Scale className="h-5 w-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="font-display text-lg font-bold text-[var(--text-primary)]">
+                    Consolidated Store Settlement &amp; Returns Reconciliation
+                  </h2>
+                  <span className="inline-flex items-center rounded-md bg-purple-500/10 px-2 py-0.5 text-[10px] font-bold text-purple-400 border border-purple-500/20 uppercase tracking-wider">
+                    Manager &amp; Upper Roles
+                  </span>
+                </div>
+                <p className="text-xs text-[var(--text-muted)]">
+                  Executive store closing reconciliation: Net sales, Cash Tender (Total), UPI Tender (Total), and returns desk deductions
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2.5">
+              {/* Date Presets */}
+              <div className="flex items-center gap-1 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-1 text-xs">
+                {(["today", "yesterday", "7days", "30days", "custom"] as const).map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setRecDatePreset(preset)}
+                    className={`rounded-lg px-2.5 py-1 font-semibold transition ${
+                      recDatePreset === preset
+                        ? "bg-[var(--accent-brand)] text-white shadow-xs"
+                        : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                    }`}
+                  >
+                    {preset === "today"
+                      ? "Today"
+                      : preset === "yesterday"
+                      ? "Yesterday"
+                      : preset === "7days"
+                      ? "Last 7 Days"
+                      : preset === "30days"
+                      ? "Last 30 Days"
+                      : "Custom"}
+                  </button>
+                ))}
+              </div>
+
+              {recDatePreset === "custom" && (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={recCustomStart}
+                    onChange={(e) => setRecCustomStart(e.target.value)}
+                    className="text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] px-2.5 py-1.5 font-medium text-[var(--text-primary)]"
+                  />
+                  <span className="text-xs text-[var(--text-muted)]">to</span>
+                  <input
+                    type="date"
+                    value={recCustomEnd}
+                    onChange={(e) => setRecCustomEnd(e.target.value)}
+                    className="text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] px-2.5 py-1.5 font-medium text-[var(--text-primary)]"
+                  />
+                </div>
+              )}
+
+              {/* Refresh Button */}
+              <button
+                type="button"
+                onClick={() => void loadReconciliationSummary()}
+                disabled={isLoadingRec}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:border-[var(--accent-brand)] transition"
+                title="Refresh reconciliation report"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${isLoadingRec ? "animate-spin" : ""}`} />
+                <span>Sync</span>
+              </button>
+
+              {/* Download CSV Button */}
+              <button
+                type="button"
+                onClick={() => void handleDownloadRecCsv()}
+                disabled={isExportingRecCsv || isLoadingRec}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3.5 py-2 text-xs font-bold text-[var(--text-primary)] hover:border-[var(--accent-brand)] hover:text-[var(--accent-brand)] transition shadow-xs cursor-pointer"
+                title="Download reconciliation summary as CSV"
+              >
+                <Download className={`h-3.5 w-3.5 ${isExportingRecCsv ? "animate-bounce" : ""}`} />
+                <span>{isExportingRecCsv ? "Exporting..." : "Export CSV"}</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="p-4 space-y-4">
+            {/* KPI Badges */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+              {/* 1. Cash Tender (Total) */}
+              <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-3 flex flex-col justify-between">
+                <div className="flex items-center justify-between text-emerald-400 mb-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider">Cash Tender (Total)</span>
+                  <Banknote className="h-4 w-4 text-emerald-400" />
+                </div>
+                <div className="font-mono text-xl font-black text-emerald-500">
+                  ₹{(recData?.cash_tender_total ?? 0).toFixed(2)}
+                </div>
+                <div className="text-[10px] text-[var(--text-muted)] mt-1 font-medium">
+                  POS: +₹{(recData?.counter_cash_tender ?? 0).toFixed(2)} • Ret: -₹{(recData?.returns_cash_refund ?? 0).toFixed(2)}
+                </div>
+              </div>
+
+              {/* 2. UPI Tender (Total) */}
+              <div className="rounded-2xl border border-sky-500/30 bg-sky-500/5 p-3 flex flex-col justify-between">
+                <div className="flex items-center justify-between text-sky-400 mb-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider">UPI Tender (Total)</span>
+                  <Smartphone className="h-4 w-4 text-sky-400" />
+                </div>
+                <div className="font-mono text-xl font-black text-sky-500">
+                  ₹{(recData?.upi_tender_total ?? 0).toFixed(2)}
+                </div>
+                <div className="text-[10px] text-[var(--text-muted)] mt-1 font-medium">
+                  POS: +₹{(recData?.counter_upi_tender ?? 0).toFixed(2)} • Ret: -₹{(recData?.returns_upi_refund ?? 0).toFixed(2)}
+                </div>
+              </div>
+
+              {/* 3. Total Realized Tender */}
+              <div className="rounded-2xl border border-[var(--accent-brand)]/30 bg-[var(--accent-brand)]/5 p-3 flex flex-col justify-between">
+                <div className="flex items-center justify-between text-[var(--accent-brand)] mb-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider">Total Realized Tender</span>
+                  <Wallet className="h-4 w-4 text-[var(--accent-brand)]" />
+                </div>
+                <div className="font-mono text-xl font-black text-[var(--accent-brand)]">
+                  ₹{(recData?.total_tender ?? 0).toFixed(2)}
+                </div>
+                <div className="text-[10px] text-[var(--text-muted)] mt-1 font-medium">
+                  Cash Tender + UPI Tender
+                </div>
+              </div>
+
+              {/* 4. Net Merchandise Sales */}
+              <div className="rounded-2xl border border-indigo-500/30 bg-indigo-500/5 p-3 flex flex-col justify-between">
+                <div className="flex items-center justify-between text-indigo-400 mb-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider">Net Sales Retained</span>
+                  <Receipt className="h-4 w-4 text-indigo-400" />
+                </div>
+                <div className="font-mono text-xl font-black text-indigo-400">
+                  ₹{(recData?.consolidated_net_sales ?? 0).toFixed(2)}
+                </div>
+                <div className="text-[10px] text-[var(--text-muted)] mt-1 font-medium">
+                  Gross: ₹{(recData?.counter_gross_sales ?? 0).toFixed(2)} • Ret: -₹{((recData?.returns_gross_amount ?? 0) - (recData?.returns_exchange_value ?? 0)).toFixed(2)}
+                </div>
+              </div>
+
+              {/* 5. Customer Credit-Debit Net */}
+              <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-3 flex flex-col justify-between">
+                <div className="flex items-center justify-between text-amber-400 mb-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider">Credit-Debit Net</span>
+                  <DollarSign className="h-4 w-4 text-amber-400" />
+                </div>
+                <div className="font-mono text-xl font-black text-amber-400">
+                  {(recData?.consolidated_credit_debit_net ?? 0) >= 0 ? "+" : "-"}₹{Math.abs(recData?.consolidated_credit_debit_net ?? 0).toFixed(2)}
+                </div>
+                <div className="text-[10px] text-[var(--text-muted)] mt-1 font-medium">
+                  POS: {(recData?.counter_credit_debit_net ?? 0) >= 0 ? "+" : ""}₹{(recData?.counter_credit_debit_net ?? 0).toFixed(2)} • Ret: {(recData?.returns_credit_debit_net ?? 0) >= 0 ? "+" : ""}₹{(recData?.returns_credit_debit_net ?? 0).toFixed(2)}
+                </div>
+              </div>
+
+              {/* 6. Loyalty Points Redeemed */}
+              <div className="rounded-2xl border border-purple-500/30 bg-purple-500/5 p-3 flex flex-col justify-between">
+                <div className="flex items-center justify-between text-purple-400 mb-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider">Loyalty Redeemed</span>
+                  <Sparkles className="h-4 w-4 text-purple-400" />
+                </div>
+                <div className="font-mono text-xl font-black text-purple-400">
+                  -₹{(recData?.consolidated_loyalty_redeemed ?? 0).toFixed(2)}
+                </div>
+                <div className="text-[10px] text-[var(--text-muted)] mt-1 font-medium">
+                  Counter bill discounts
+                </div>
+              </div>
+            </div>
+
+            {/* Detailed 3-Way Reconciliation Table */}
+            <div className="overflow-x-auto rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)]">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-muted)] uppercase text-[10px] font-bold">
+                    <th className="p-3 pl-4">Reconciliation Line Item</th>
+                    <th className="p-3 text-right">POS Billing Counter (Inflows)</th>
+                    <th className="p-3 text-right">Returns &amp; Exchanges (Outflows)</th>
+                    <th className="p-3 pr-4 text-right bg-[var(--accent-brand)]/5 text-[var(--accent-brand)] font-black">Consolidated Store Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--border-subtle)] font-medium">
+                  <tr>
+                    <td className="p-3 pl-4 text-[var(--text-primary)] font-semibold">
+                      Gross Merchandise / Exchange Sales
+                    </td>
+                    <td className="p-3 text-right font-mono text-[var(--text-primary)]">
+                      ₹{(recData?.counter_gross_sales ?? 0).toFixed(2)}
+                    </td>
+                    <td className="p-3 text-right font-mono text-rose-400">
+                      -₹{((recData?.returns_gross_amount ?? 0) - (recData?.returns_exchange_value ?? 0)).toFixed(2)}
+                    </td>
+                    <td className="p-3 pr-4 text-right font-mono font-bold bg-[var(--accent-brand)]/5 text-[var(--text-primary)]">
+                      ₹{(recData?.consolidated_net_sales ?? 0).toFixed(2)}
+                    </td>
+                  </tr>
+                  <tr className="bg-emerald-500/[0.03]">
+                    <td className="p-3 pl-4 text-emerald-400 font-bold flex items-center gap-2">
+                      <Banknote className="h-3.5 w-3.5" />
+                      <span>Cash Tender</span>
+                    </td>
+                    <td className="p-3 text-right font-mono text-emerald-500 font-semibold">
+                      +₹{(recData?.counter_cash_tender ?? 0).toFixed(2)}
+                    </td>
+                    <td className="p-3 text-right font-mono text-rose-500 font-semibold">
+                      -₹{(recData?.returns_cash_refund ?? 0).toFixed(2)}
+                    </td>
+                    <td className="p-3 pr-4 text-right font-mono font-black text-emerald-500 bg-emerald-500/10 text-sm">
+                      ₹{(recData?.cash_tender_total ?? 0).toFixed(2)}
+                    </td>
+                  </tr>
+                  <tr className="bg-sky-500/[0.03]">
+                    <td className="p-3 pl-4 text-sky-400 font-bold flex items-center gap-2">
+                      <Smartphone className="h-3.5 w-3.5" />
+                      <span>UPI Tender</span>
+                    </td>
+                    <td className="p-3 text-right font-mono text-sky-500 font-semibold">
+                      +₹{(recData?.counter_upi_tender ?? 0).toFixed(2)}
+                    </td>
+                    <td className="p-3 text-right font-mono text-rose-500 font-semibold">
+                      -₹{(recData?.returns_upi_refund ?? 0).toFixed(2)}
+                    </td>
+                    <td className="p-3 pr-4 text-right font-mono font-black text-sky-500 bg-sky-500/10 text-sm">
+                      ₹{(recData?.upi_tender_total ?? 0).toFixed(2)}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="p-3 pl-4 text-[var(--text-primary)]">
+                      Customer Credit / Debit Net Adjustment
+                    </td>
+                    <td className="p-3 text-right font-mono">
+                      {(recData?.counter_credit_debit_net ?? 0) >= 0 ? "+" : ""}₹{(recData?.counter_credit_debit_net ?? 0).toFixed(2)}
+                    </td>
+                    <td className="p-3 text-right font-mono">
+                      {(recData?.returns_credit_debit_net ?? 0) >= 0 ? "+" : ""}₹{(recData?.returns_credit_debit_net ?? 0).toFixed(2)}
+                    </td>
+                    <td className="p-3 pr-4 text-right font-mono font-bold bg-[var(--accent-brand)]/5">
+                      {(recData?.consolidated_credit_debit_net ?? 0) >= 0 ? "+" : ""}₹{(recData?.consolidated_credit_debit_net ?? 0).toFixed(2)}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="p-3 pl-4 text-[var(--text-primary)]">
+                      Loyalty Discounts Redeemed
+                    </td>
+                    <td className="p-3 text-right font-mono text-purple-400">
+                      -₹{(recData?.counter_loyalty_redeemed ?? 0).toFixed(2)}
+                    </td>
+                    <td className="p-3 text-right font-mono text-[var(--text-muted)]">
+                      ₹0.00
+                    </td>
+                    <td className="p-3 pr-4 text-right font-mono font-bold text-purple-400 bg-[var(--accent-brand)]/5">
+                      -₹{(recData?.consolidated_loyalty_redeemed ?? 0).toFixed(2)}
+                    </td>
+                  </tr>
+                  <tr className="bg-[var(--accent-brand)]/10 font-bold border-t-2 border-[var(--accent-brand)]/30 text-[var(--text-primary)]">
+                    <td className="p-3.5 pl-4 flex items-center gap-2">
+                      <Scale className="h-4 w-4 text-[var(--accent-brand)]" />
+                      <span className="font-extrabold">Total Realized Settlement (Cash + UPI)</span>
+                    </td>
+                    <td className="p-3.5 text-right font-mono text-base font-black">
+                      ₹{(recData?.counter_net_paid ?? 0).toFixed(2)}
+                    </td>
+                    <td className="p-3.5 text-right font-mono text-base font-black text-rose-500">
+                      -₹{(recData?.returns_net_refund ?? 0).toFixed(2)}
+                    </td>
+                    <td className="p-3.5 pr-4 text-right font-mono text-base font-black text-[var(--accent-brand)] bg-[var(--accent-brand)]/15">
+                      ₹{(recData?.total_tender ?? 0).toFixed(2)}
+                    </td>
+                  </tr>
+                  <tr className="text-[11px] text-[var(--text-muted)]">
+                    <td className="p-2.5 pl-4">Total Records / Vouchers Count</td>
+                    <td className="p-2.5 text-right font-mono">{recData?.counter_bills_count ?? 0} bills</td>
+                    <td className="p-2.5 text-right font-mono">{recData?.returns_count ?? 0} returns</td>
+                    <td className="p-2.5 pr-4 text-right font-mono bg-[var(--accent-brand)]/5 font-bold">
+                      {(recData?.counter_bills_count ?? 0) + (recData?.returns_count ?? 0)} vouchers
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </article>
+      )}
+
+      {/* Inventory Stock Movement & Wastage Tracking — Dedicated for Manager & Upper Roles */}
+      {isManagerOrAdmin && (
+        <article className="rounded-3xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] overflow-hidden shadow-xs space-y-4">
+          <div className="p-4 border-b border-[var(--border-subtle)] flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/15 text-amber-500">
+                <Package className="h-5 w-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="font-display text-lg font-bold text-[var(--text-primary)]">
+                    Inventory Stock Movement &amp; Wastage
+                  </h2>
+                  <span className="inline-flex items-center rounded-md bg-purple-500/10 px-2 py-0.5 text-[10px] font-bold text-purple-400 border border-purple-500/20 uppercase tracking-wider">
+                    Manager &amp; Upper Roles
+                  </span>
+                </div>
+                <p className="text-xs text-[var(--text-muted)]">
+                  Audit inventory flows: Real-time stock movements, intake additions, sales deductions, and logged wastage
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2.5">
+              {/* Subtab Selector: Stock Movement vs Wastage */}
+              <div className="flex items-center gap-1 rounded-xl bg-[var(--bg-surface-elevated)] p-1 border border-[var(--border-subtle)] text-xs">
+                <button
+                  type="button"
+                  onClick={() => setInvSubTab("stock_movement")}
+                  className={`px-3 py-1 rounded-lg font-bold uppercase transition cursor-pointer ${
+                    invSubTab === "stock_movement"
+                      ? "bg-[var(--accent-brand)] text-white shadow-xs"
+                      : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                  }`}
+                >
+                  Stock Movement
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInvSubTab("wastage")}
+                  className={`px-3 py-1 rounded-lg font-bold uppercase transition cursor-pointer ${
+                    invSubTab === "wastage"
+                      ? "bg-[var(--accent-brand)] text-white shadow-xs"
+                      : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                  }`}
+                >
+                  Wastage
+                </button>
+              </div>
+
+              {/* Date Presets */}
+              <div className="flex items-center gap-1 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-1 text-xs">
+                {(["today", "yesterday", "7days", "30days", "custom"] as const).map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setInvDatePreset(preset)}
+                    className={`rounded-lg px-2.5 py-1 font-semibold transition ${
+                      invDatePreset === preset
+                        ? "bg-[var(--accent-brand)] text-white shadow-xs"
+                        : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                    }`}
+                  >
+                    {preset === "today"
+                      ? "Today"
+                      : preset === "yesterday"
+                      ? "Yesterday"
+                      : preset === "7days"
+                      ? "Last 7 Days"
+                      : preset === "30days"
+                      ? "Last 30 Days"
+                      : "Custom"}
+                  </button>
+                ))}
+              </div>
+
+              {invDatePreset === "custom" && (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={invCustomStart}
+                    onChange={(e) => setInvCustomStart(e.target.value)}
+                    className="text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] px-2.5 py-1.5 font-medium text-[var(--text-primary)]"
+                  />
+                  <span className="text-xs text-[var(--text-muted)]">to</span>
+                  <input
+                    type="date"
+                    value={invCustomEnd}
+                    onChange={(e) => setInvCustomEnd(e.target.value)}
+                    className="text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] px-2.5 py-1.5 font-medium text-[var(--text-primary)]"
+                  />
+                </div>
+              )}
+
+              {/* Refresh Button */}
+              <button
+                type="button"
+                onClick={() => void loadInventoryStockData()}
+                disabled={isLoadingInv}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:border-[var(--accent-brand)] transition"
+                title="Refresh inventory reports"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${isLoadingInv ? "animate-spin" : ""}`} />
+                <span>Sync</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="p-4">
+            {invSubTab === "stock_movement" && (
+              <StockMovementReport data={stockMovementData} isLoading={isLoadingInv} />
+            )}
+            {invSubTab === "wastage" && (
+              <WastageReport data={wastageData} isLoading={isLoadingInv} />
+            )}
+          </div>
+        </article>
+      )}
 
       {/* Shift Handover & Cash Collection History — Directly below Outlet Team Roster */}
       <article className="rounded-3xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] overflow-hidden shadow-xs space-y-4">

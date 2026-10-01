@@ -516,6 +516,7 @@ export function BillingTab({
       setReturnsModalOpen(false);
       setShowReturnSuccessModal(true);
       void loadBillingData();
+      void fetchLiveDrawer();
       onBillSettled?.();
     } catch (err: any) {
       setError(err instanceof Error ? err.message : "Failed to process return.");
@@ -629,7 +630,10 @@ export function BillingTab({
           </button>
           <button
             type="button"
-            onClick={() => void loadBillingData()}
+            onClick={() => {
+              void loadBillingData();
+              void fetchLiveDrawer();
+            }}
             disabled={isLoadingBilling}
             className="inline-flex items-center gap-2 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3.5 py-2 text-xs font-bold text-[var(--text-primary)] hover:border-[var(--accent-brand)] transition"
           >

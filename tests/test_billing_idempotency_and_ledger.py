@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.customer import Customer
 from app.models.customer_ledger import CustomerLedger
 from app.models.cash_drawer_ledger import CashDrawerLedger
+from app.models.enums import RoleEnum
 from tests.conftest import create_test_outlet, create_test_user, get_auth_headers
 
 
@@ -272,3 +273,159 @@ async def test_credit_debit_report_includes_transactions(
     assert float(tx["amount"]) == 140.0
     assert float(tx["balance_after"]) == -140.0
     assert tx["order_basket_number"] == "POS-LEDGER-01"
+
+
+@pytest.mark.asyncio
+async def test_drawer_state_syncs_with_customer_return(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    """
+    Verify that processing a customer return with cash denominations:
+    1. Properly decrements the live drawer state notes and total balance in /api/billing/drawer-state.
+    2. Correctly updates get_live_drawer_balance.
+    """
+    from decimal import Decimal
+    from app.services.staff_punch_service import get_live_drawer_balance
+
+    outlet = await create_test_outlet(db_session, slug="drawer-return-outlet", name="Drawer Return Outlet")
+    user = await create_test_user(db_session, outlet, email="admin_drawer@test.com")
+    await db_session.commit()
+    auth_headers = get_auth_headers(user, outlet)
+
+    # 1. Deposit Opening Float: 2x 500 notes = Rs 1000
+    dep_res = await client.post(
+        "/api/billing/drawer-transaction",
+        headers=auth_headers,
+        json={
+            "transaction_type": "MANUAL_DEPOSIT",
+            "denominations": {"500": 2},
+            "notes": "Opening morning float",
+        },
+    )
+    assert dep_res.status_code == 200
+
+    # 2. Verify drawer state before sales
+    drawer_res = await client.get("/api/billing/drawer-state", headers=auth_headers)
+    assert drawer_res.status_code == 200
+    d_data = drawer_res.json()
+    assert d_data["denominations"].get("500") == 2
+    assert d_data["total_balance"] == 1000.0
+
+    # 3. Onboard item and create a bill of Rs 200
+    onboard_res = await client.post(
+        "/api/admin/inventory/scan-onboard",
+        headers=auth_headers,
+        json={
+            "barcode": "8901234567890",
+            "name": "Basmati Rice 1kg",
+            "category": "Grains",
+            "unit": "pack",
+            "initial_stock": 10,
+            "cost_per_unit": 120.0,
+            "selling_price": 200.0,
+            "batch_number": "BAT-RICE-01",
+        },
+    )
+    assert onboard_res.status_code == 201
+
+    menu_res = await client.get("/api/admin/menu-items", headers=auth_headers)
+    rice_item = next(m for m in menu_res.json() if m["name"] == "Basmati Rice 1kg")
+
+    bill_res = await client.post(
+        "/api/billing/bills",
+        headers=auth_headers,
+        json={
+            "basket_number": "DRAWER-TEST-01",
+            "items": [
+                {
+                    "menu_item_id": rice_item["id"],
+                    "item_name": "Basmati Rice 1kg",
+                    "quantity": 1.0,
+                    "unit_price": 200.0,
+                }
+            ],
+        },
+    )
+    assert bill_res.status_code == 200
+    bill = bill_res.json()
+
+    # Pay bill in cash with 1x 200 note
+    pay_res = await client.post(
+        f"/api/billing/bills/{bill['id']}/mark-paid",
+        headers=auth_headers,
+        json={
+            "payment_method": "CASH",
+            "cash_denominations": {"200": 1},
+        },
+    )
+    assert pay_res.status_code == 200
+
+    # Verify drawer state after bill payment: 2x 500, 1x 200 = Rs 1200
+    drawer_res = await client.get("/api/billing/drawer-state", headers=auth_headers)
+    assert drawer_res.status_code == 200
+    d_data = drawer_res.json()
+    assert d_data["denominations"].get("500") == 2
+    assert d_data["denominations"].get("200") == 1
+    assert d_data["total_balance"] == 1200.0
+
+    # 4. Process customer return: Return the Rs 200 item with cash refund of 1x 200 note
+    return_payload = {
+        "order_id": bill["id"],
+        "customer_name": "Walk-in",
+        "return_items": [
+            {
+                "order_item_id": bill["items"][0]["id"],
+                "quantity": 1.0,
+                "unit_price": 200.0,
+                "reason": "CUSTOMER_REQUEST",
+            }
+        ],
+        "refund_payment_method": "CASH",
+        "refund_cash_denominations": {"200": 1},
+        "notes": "Refund Rs 200 rice",
+    }
+    ret_res = await client.post("/api/billing/returns", headers=auth_headers, json=return_payload)
+    assert ret_res.status_code == 200
+
+    # 5. Verify drawer state after customer return:
+    # 200 note was refunded, so 200 count = 0, 500 count = 2, total_balance = 1000.0
+    drawer_res = await client.get("/api/billing/drawer-state", headers=auth_headers)
+    assert drawer_res.status_code == 200
+    d_data = drawer_res.json()
+    assert d_data["denominations"].get("500") == 2
+    assert d_data["denominations"].get("200", 0) == 0
+    assert d_data["total_balance"] == 1000.0
+
+    # 6. Verify get_live_drawer_balance also matches exactly
+    live_bal = await get_live_drawer_balance(db_session, outlet.id)
+    assert live_bal == Decimal("1000.00")
+
+    # 7. Verify /api/billing/reconciliation-summary
+    rec_res = await client.get("/api/billing/reconciliation-summary", headers=auth_headers)
+    assert rec_res.status_code == 200
+    r_data = rec_res.json()
+    assert r_data["counter_gross_sales"] == 200.0
+    assert r_data["counter_cash_tender"] == 200.0
+    assert r_data["returns_gross_amount"] == 200.0
+    assert r_data["returns_cash_refund"] == 200.0
+    assert r_data["cash_tender_total"] == 0.0
+    assert r_data["upi_tender_total"] == 0.0
+    assert r_data["consolidated_net_sales"] == 0.0
+    assert r_data["total_tender"] == 0.0
+
+    # 8. Verify CSV export
+    csv_res = await client.get("/api/billing/reconciliation-summary?export=csv", headers=auth_headers)
+    assert csv_res.status_code == 200
+    assert "text/csv" in csv_res.headers.get("content-type", "")
+    assert "Cash Tender (Total)" in csv_res.text
+    assert "UPI Tender (Total)" in csv_res.text
+
+    # 9. Verify non-exempt cashier role is forbidden
+    cashier = await create_test_user(db_session, outlet, email="cashier_staff@test.com", role=RoleEnum.CASHIER)
+    await db_session.commit()
+    cashier_headers = get_auth_headers(cashier, outlet)
+    cashier_res = await client.get("/api/billing/reconciliation-summary", headers=cashier_headers)
+    assert cashier_res.status_code == 403
+
+
