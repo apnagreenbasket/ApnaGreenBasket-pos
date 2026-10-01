@@ -349,7 +349,7 @@ export function StaffTab({
   };
 
   // Inventory Stock Movement & Wastage State (Manager & Upper Roles)
-  const [invSubTab, setInvSubTab] = useState<"stock_movement" | "wastage">("stock_movement");
+  const [invSubTab, setInvSubTab] = useState<"stock_movement" | "wastage">("wastage");
   const [stockMovementData, setStockMovementData] = useState<StockMovementResponse | null>(null);
   const [wastageData, setWastageData] = useState<WastageReportResponse | null>(null);
   const [isLoadingInv, setIsLoadingInv] = useState(false);
