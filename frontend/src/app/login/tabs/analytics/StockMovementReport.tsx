@@ -53,27 +53,33 @@ export function StockMovementReport({ data, isLoading }: Props) {
     fetchLedger();
   }, [selectedItemId, apiRequest]);
 
-  if (isLoading) {
-    return <div className="p-4 text-[var(--text-secondary)]">Loading stock movement...</div>;
-  }
-  if (!data) return null;
+  const rawItems = data?.items || [];
 
   const enrichedItems = useMemo(() => {
-    if (!data) return [];
-    return data.items.map(item => ({
+    return rawItems.map((item) => ({
       ...item,
-      total_in: item.intake_qty + item.restock_qty,
-      total_out: item.sales_deduction_qty + item.purchase_return_qty + item.void_batch_qty
+      total_in: (item.intake_qty || 0) + (item.restock_qty || 0),
+      total_out: (item.sales_deduction_qty || 0) + (item.purchase_return_qty || 0) + (item.void_batch_qty || 0),
     }));
-  }, [data]);
+  }, [rawItems]);
 
   const {
     searchQuery,
     setSearchQuery,
     sortConfig,
     handleSort,
-    sortedAndFilteredData
+    sortedAndFilteredData,
   } = useTableSortAndSearch(enrichedItems, ["item_name"]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center p-8 text-[var(--text-secondary)]">
+        <Loader2 className="h-5 w-5 animate-spin mr-2" />
+        <span>Loading stock movement...</span>
+      </div>
+    );
+  }
+  if (!data) return null;
 
   return (
     <div className="space-y-6">

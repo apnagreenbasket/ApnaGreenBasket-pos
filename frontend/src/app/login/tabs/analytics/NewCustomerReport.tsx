@@ -11,18 +11,20 @@ type Props = {
 };
 
 export function NewCustomerReport({ data, isLoading }: Props) {
-  if (isLoading) {
-    return <div className="p-4 text-[var(--text-secondary)]">Loading new customer data...</div>;
-  }
-  if (!data) return null;
+  const recentCustomers = data?.recent_customers || [];
 
   const {
     searchQuery,
     setSearchQuery,
     sortConfig,
     handleSort,
-    sortedAndFilteredData
-  } = useTableSortAndSearch(data.recent_customers || [], ["name", "phone", "email"]);
+    sortedAndFilteredData,
+  } = useTableSortAndSearch(recentCustomers, ["name", "phone", "email"]);
+
+  if (isLoading) {
+    return <div className="p-4 text-[var(--text-secondary)]">Loading new customer data...</div>;
+  }
+  if (!data) return null;
 
   return (
     <div className="space-y-6">

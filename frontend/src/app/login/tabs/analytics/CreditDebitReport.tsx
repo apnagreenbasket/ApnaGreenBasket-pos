@@ -167,11 +167,6 @@ export function CreditDebitReport({ data, isLoading, restaurant }: CreditDebitRe
     return "Direct";
   };
 
-  if (isLoading) {
-    return <div className="p-4 text-[var(--text-secondary)]">Loading credit / debit data...</div>;
-  }
-  if (!data) return null;
-
   const handleExpandCustomer = async (customerId: string) => {
     if (expandedCustomerId === customerId) {
       setExpandedCustomerId(null);
@@ -195,9 +190,9 @@ export function CreditDebitReport({ data, isLoading, restaurant }: CreditDebitRe
     sortConfig: cbSortConfig,
     handleSort: handleCbSort,
     sortedAndFilteredData: sortedCustomers
-  } = useTableSortAndSearch(data.customers || [], ["customer_name", "customer_phone"]);
+  } = useTableSortAndSearch(data?.customers || [], ["customer_name", "customer_phone"]);
 
-  const rawTransactions = data.transactions || [];
+  const rawTransactions = data?.transactions || [];
   const typeFilteredTransactions = rawTransactions.filter((tx) => {
     if (txTypeFilter === "DEBIT_ADDED" && tx.entry_type !== "DEBIT_ADDED") return false;
     if (txTypeFilter === "DEBIT_SETTLED" && tx.entry_type !== "DEBIT_SETTLED") return false;
@@ -311,6 +306,11 @@ export function CreditDebitReport({ data, isLoading, restaurant }: CreditDebitRe
       uniqueCustomersCount: uniqueCustomers.size,
     };
   }, [sortedTransactions]);
+
+  if (isLoading) {
+    return <div className="p-4 text-[var(--text-secondary)]">Loading credit / debit data...</div>;
+  }
+  if (!data) return null;
 
   return (
     <div className="space-y-6">

@@ -101,18 +101,20 @@ export function BillProfitReport({ data, isLoading, restaurant }: Props) {
     );
   };
 
-  if (isLoading) {
-    return <div className="p-4 text-[var(--text-secondary)]">Loading bill profit data...</div>;
-  }
-  if (!data) return null;
+  const bills = data?.bills || [];
 
   const {
     searchQuery,
     setSearchQuery,
     sortConfig,
     handleSort,
-    sortedAndFilteredData
-  } = useTableSortAndSearch(data.bills, ["basket_number", "customer_name"]);
+    sortedAndFilteredData,
+  } = useTableSortAndSearch(bills, ["basket_number", "customer_name"]);
+
+  if (isLoading) {
+    return <div className="p-4 text-[var(--text-secondary)]">Loading bill profit data...</div>;
+  }
+  if (!data) return null;
 
   return (
     <div className="space-y-6">

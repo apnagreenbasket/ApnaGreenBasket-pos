@@ -14,18 +14,20 @@ export function StockIntakeReport({ data, isLoading }: Props) {
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [selectedItemName, setSelectedItemName] = useState<string | null>(null);
 
-  if (isLoading) {
-    return <div className="p-4 text-[var(--text-secondary)]">Loading stock intakes...</div>;
-  }
-  if (!data) return null;
+  const items = data?.items || [];
 
   const {
     searchQuery,
     setSearchQuery,
     sortConfig,
     handleSort,
-    sortedAndFilteredData: sortedAndFilteredItems
-  } = useTableSortAndSearch(data.items, ["item_name", "supplier_name", "batch_number"]);
+    sortedAndFilteredData: sortedAndFilteredItems,
+  } = useTableSortAndSearch(items, ["item_name", "supplier_name", "batch_number"]);
+
+  if (isLoading) {
+    return <div className="p-4 text-[var(--text-secondary)]">Loading stock intakes...</div>;
+  }
+  if (!data) return null;
 
   return (
     <div className="space-y-6">

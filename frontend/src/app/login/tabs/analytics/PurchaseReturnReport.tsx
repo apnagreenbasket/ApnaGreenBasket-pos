@@ -11,18 +11,20 @@ type Props = {
 };
 
 export function PurchaseReturnReport({ data, isLoading }: Props) {
-  if (isLoading) {
-    return <div className="p-4 text-[var(--text-secondary)]">Loading purchase returns...</div>;
-  }
-  if (!data) return null;
+  const items = data?.items || [];
 
   const {
     searchQuery,
     setSearchQuery,
     sortConfig,
     handleSort,
-    sortedAndFilteredData
-  } = useTableSortAndSearch(data.items, ["return_number", "item_name", "supplier_name", "reason"]);
+    sortedAndFilteredData,
+  } = useTableSortAndSearch(items, ["return_number", "item_name", "supplier_name", "reason"]);
+
+  if (isLoading) {
+    return <div className="p-4 text-[var(--text-secondary)]">Loading purchase returns...</div>;
+  }
+  if (!data) return null;
 
   return (
     <div className="space-y-6">

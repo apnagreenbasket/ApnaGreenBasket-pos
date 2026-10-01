@@ -1,5 +1,5 @@
 import React from "react";
-import { Trash2, PackageOpen } from "lucide-react";
+import { Trash2, PackageOpen, Loader2 } from "lucide-react";
 import { useTableSortAndSearch } from "../../hooks/useTableSortAndSearch";
 import { SortableHeader, TableSearchBar } from "./shared";
 import { WastageReportResponse } from "@/types";
@@ -11,18 +11,25 @@ type Props = {
 };
 
 export function WastageReport({ data, isLoading }: Props) {
-  if (isLoading) {
-    return <div className="p-4 text-[var(--text-secondary)]">Loading wastage data...</div>;
-  }
-  if (!data) return null;
+  const items = data?.items || [];
 
   const {
     searchQuery,
     setSearchQuery,
     sortConfig,
     handleSort,
-    sortedAndFilteredData
-  } = useTableSortAndSearch(data.items, ["item_name", "reason", "notes", "created_by_name"]);
+    sortedAndFilteredData,
+  } = useTableSortAndSearch(items, ["item_name", "reason", "notes", "created_by_name"]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center p-8 text-[var(--text-secondary)]">
+        <Loader2 className="h-5 w-5 animate-spin mr-2 text-red-500" />
+        <span>Loading wastage data...</span>
+      </div>
+    );
+  }
+  if (!data) return null;
 
   return (
     <div className="space-y-6">

@@ -20,18 +20,20 @@ export function SupplierSpendReport({ data, isLoading }: Props) {
     }));
   };
 
-  if (isLoading) {
-    return <div className="p-4 text-[var(--text-secondary)]">Loading supplier spend...</div>;
-  }
-  if (!data) return null;
+  const suppliers = data?.suppliers || [];
 
   const {
     searchQuery,
     setSearchQuery,
     sortConfig,
     handleSort,
-    sortedAndFilteredData
-  } = useTableSortAndSearch(data.suppliers, ["supplier_name"]);
+    sortedAndFilteredData,
+  } = useTableSortAndSearch(suppliers, ["supplier_name"]);
+
+  if (isLoading) {
+    return <div className="p-4 text-[var(--text-secondary)]">Loading supplier spend...</div>;
+  }
+  if (!data) return null;
 
   return (
     <div className="space-y-6">
