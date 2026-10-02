@@ -82,11 +82,10 @@ type BillingTabProps = {
   isCreateBillOpen?: boolean;
 };
 
-const MAIN_STATUS_TABS = ["ALL", "DRAFT", "VOIDED"] as const;
+const MAIN_STATUS_TABS = ["ALL", "DRAFT", "PAID / COMPLETED", "VOIDED"] as const;
 const MORE_STATUS_TABS = [
   "PENDING / PAYMENT",
   "VERIFICATION",
-  "PAID / COMPLETED",
   "PARTIALLY REFUNDED",
   "REFUNDED",
   "CANCELLED",
@@ -826,10 +825,10 @@ export function BillingTab({
                 key={st}
                 type="button"
                 onClick={() => setBillingStatusFilter(st)}
-                className={`rounded-lg px-3 py-1.5 text-xs font-bold whitespace-nowrap transition cursor-pointer ${
+                className={`rounded-lg px-3 py-1.5 text-xs font-black whitespace-nowrap transition cursor-pointer border ${
                   billingStatusFilter === st
-                    ? "bg-black text-white shadow-xs"
-                    : "text-neutral-700 dark:text-neutral-300 hover:bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)]"
+                    ? "bg-black text-white border-black shadow-xs"
+                    : "text-neutral-900 bg-white hover:bg-neutral-100 border-neutral-300 dark:border-neutral-700"
                 }`}
               >
                 {st}
@@ -844,10 +843,10 @@ export function BillingTab({
                   e.stopPropagation();
                   setIsMoreFilterOpen((prev) => !prev);
                 }}
-                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold whitespace-nowrap transition cursor-pointer border ${
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-black whitespace-nowrap transition cursor-pointer border ${
                   MORE_STATUS_TABS.includes(billingStatusFilter)
                     ? "bg-black text-white border-black shadow-xs"
-                    : "text-neutral-700 dark:text-neutral-300 hover:bg-[var(--bg-surface-elevated)] border-[var(--border-subtle)]"
+                    : "text-neutral-900 bg-white hover:bg-neutral-100 border-neutral-300 dark:border-neutral-700"
                 }`}
                 title="Filter by more statuses"
               >

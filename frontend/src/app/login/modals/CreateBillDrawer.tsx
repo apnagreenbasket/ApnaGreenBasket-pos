@@ -1578,7 +1578,7 @@ export function CreateBillDrawer({
                         </div>
 
                         <div className="flex flex-col items-end flex-shrink-0">
-                          <span className={`font-mono text-base sm:text-lg font-black ${pricingMode === "WHOLESALE" && wholesalePriceNum !== null ? "text-purple-600 dark:text-purple-400" : "text-black dark:text-white"}`}>
+                          <span className={`font-mono text-base sm:text-lg font-black ${pricingMode === "WHOLESALE" && wholesalePriceNum !== null ? "text-purple-600 dark:text-purple-400" : "text-sky-500 dark:text-sky-400"}`}>
                             ₹{activePriceNum.toFixed(2)}
                           </span>
                           {hasDiscount && (
