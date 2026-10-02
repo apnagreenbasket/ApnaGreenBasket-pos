@@ -630,53 +630,43 @@ export function MenuTab({
           })}
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <div className="relative flex-1 sm:w-64">
-            <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-[var(--text-muted)]" />
+        <div className="flex items-center gap-2 w-full sm:w-auto flex-1 justify-end">
+          <div className="relative min-w-[260px] sm:min-w-[340px] md:min-w-[420px] flex-1 max-w-lg">
+            <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-neutral-500" />
             <input
               type="text"
               placeholder="Search items or barcode..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] py-1.5 pl-8 pr-3 text-xs text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none"
+              className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] py-1.5 pl-8 pr-8 text-xs font-bold text-[var(--text-primary)] placeholder:text-neutral-500 placeholder:font-medium focus:border-black outline-none"
             />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2.5 top-2 text-neutral-400 hover:text-black p-0.5 cursor-pointer"
+                title="Clear search"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
 
           <button
             type="button"
             onClick={() => setIsCategoryModalOpen(true)}
-            className="flex items-center gap-1.5 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3.5 py-1.5 text-xs font-bold text-[var(--text-primary)] hover:border-[var(--accent-brand)] transition cursor-pointer"
+            className="flex items-center gap-1.5 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3.5 py-1.5 text-xs font-bold text-[var(--text-primary)] hover:border-black transition cursor-pointer shrink-0 shadow-xs"
           >
-            <Tag className="h-4 w-4 text-[var(--accent-brand)]" />
-            + Category
+            <Tag className="h-3.5 w-3.5 text-[var(--accent-brand)]" />
+            <span>+ Category</span>
           </button>
 
-          <button
-            type="button"
-            onClick={openCreateModal}
-            className="flex items-center gap-1.5 rounded-xl bg-[var(--accent-brand)] px-4 py-1.5 text-xs font-bold text-[var(--text-on-accent)] shadow-md hover:opacity-90 transition cursor-pointer"
-          >
-            <Plus className="h-4 w-4" />
-            Add Item
-          </button>
-
-          <BulkOperationsMenu entity="menu-items" authToken={authToken} />
-
-          <button
-            type="button"
-            onClick={() => {
-              setSettingsDrawerTab("catalogue");
-              setIsSettingsDrawerOpen(true);
-            }}
-            className="flex items-center gap-1.5 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-1.5 text-xs font-bold text-[var(--text-secondary)] hover:border-[var(--accent-brand)] hover:text-[var(--accent-brand)] transition cursor-pointer"
-            title="Catalogue Print (Shortcut: Press +)"
-          >
-            <FileText className="h-4 w-4 text-[var(--accent-brand)]" />
-            <span className="hidden sm:inline">Catalogue Print</span>
-            <kbd className="ml-1 hidden md:inline-flex items-center rounded border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-1.5 py-0.5 font-mono text-[10px] font-semibold text-[var(--text-muted)] shadow-2xs">
-              +
-            </kbd>
-          </button>
+          <BulkOperationsMenu
+            entity="menu-items"
+            authToken={authToken}
+            triggerLabel="More"
+            onAddItem={openCreateModal}
+          />
 
           <button
             type="button"
@@ -684,7 +674,7 @@ export function MenuTab({
               setSettingsDrawerTab("bulk-price");
               setIsSettingsDrawerOpen(true);
             }}
-            className="p-2 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:border-[var(--accent-brand)] hover:text-[var(--accent-brand)] transition cursor-pointer"
+            className="p-2 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:border-black hover:text-black transition cursor-pointer shrink-0 shadow-xs"
             title="Catalog Settings"
           >
             <Settings2 className="h-4 w-4" />

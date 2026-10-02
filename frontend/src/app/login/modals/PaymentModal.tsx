@@ -931,7 +931,7 @@ export function PaymentModal({
                        }
                        return <div className="flex-1 flex items-center justify-center text-[10px] text-[var(--text-muted)] text-center opacity-70">No points avail</div>;
                     }
-                    return <div className="flex-1 flex items-center justify-center text-[10px] text-[var(--text-muted)] text-center opacity-70">Link customer</div>;
+                    return <div className="flex-1 flex items-center justify-center text-xs font-black text-black text-center">Link customer</div>;
                   })()}
                 </div>
               </div>
@@ -1124,39 +1124,39 @@ export function PaymentModal({
             {/* Bottom Actions: Delivery, Handling, Wallet */}
             <div className="flex-shrink-0 grid grid-cols-2 gap-3 mt-3">
               {/* Box 1: Delivery & Handling (Horizontally Split) */}
-              <div className="flex flex-col p-2.5 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] shadow-sm">
-                <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-wider text-neutral-900 dark:text-neutral-100 mb-2">
+              <div className="flex flex-col p-2.5 rounded-xl border border-neutral-400 bg-white shadow-sm">
+                <div className="flex justify-between items-center text-[11px] font-black uppercase tracking-wider text-black mb-2">
                   <span>Additional Charges</span>
                 </div>
                 <div className="flex gap-2 h-full">
                   <div className="flex-1 flex flex-col justify-end">
-                    <label className="block text-[9px] font-black uppercase tracking-wider text-neutral-900 dark:text-neutral-100 mb-1">Delivery</label>
+                    <label className="block text-[10px] font-black uppercase tracking-wider text-black mb-1">Delivery</label>
                     <input
                       type="number"
                       min="0"
                       value={deliveryCharge || ""}
                       onChange={(e) => setDeliveryCharge(parseFloat(e.target.value) || 0)}
                       placeholder="₹0.00"
-                      className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2 py-1.5 text-xs font-mono font-bold focus:border-sky-500 outline-none"
+                      className="w-full rounded-lg border border-neutral-400 bg-white px-2 py-1.5 text-xs font-mono font-black text-black placeholder:text-black placeholder:font-black focus:border-black outline-none"
                     />
                   </div>
                   <div className="flex-1 flex flex-col justify-end">
-                    <label className="block text-[9px] font-black uppercase tracking-wider text-neutral-900 dark:text-neutral-100 mb-1">Handling</label>
+                    <label className="block text-[10px] font-black uppercase tracking-wider text-black mb-1">Handling</label>
                     <input
                       type="number"
                       min="0"
                       value={handlingCharge || ""}
                       onChange={(e) => setHandlingCharge(parseFloat(e.target.value) || 0)}
                       placeholder="₹0.00"
-                      className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2 py-1.5 text-xs font-mono font-bold focus:border-sky-500 outline-none"
+                      className="w-full rounded-lg border border-neutral-400 bg-white px-2 py-1.5 text-xs font-mono font-black text-black placeholder:text-black placeholder:font-black focus:border-black outline-none"
                     />
                   </div>
                 </div>
               </div>
 
               {/* Box 2: Customer Wallet */}
-              <div className="flex flex-col space-y-1.5 p-2.5 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] shadow-sm">
-                <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-wider text-neutral-900 dark:text-neutral-100">
+              <div className="flex flex-col space-y-1.5 p-2.5 rounded-xl border border-neutral-400 bg-white shadow-sm">
+                <div className="flex justify-between items-center text-[11px] font-black uppercase tracking-wider text-black">
                   <span>Customer Wallet</span>
                   {customerAnalytics && customerAnalytics.credit_balance !== undefined && (
                     (() => {
@@ -1257,7 +1257,7 @@ export function PaymentModal({
                     )}
                   </div>
                 ) : (
-                  <div className="flex-1 flex items-center justify-center text-[10px] text-[var(--text-muted)] text-center opacity-70">
+                  <div className="flex-1 flex items-center justify-center text-xs font-black text-black text-center">
                     Link customer
                   </div>
                 )}
@@ -1356,7 +1356,7 @@ export function PaymentModal({
 
                   {/* Quick Auto-Tap Shortcuts Bar */}
                   <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
-                    <span className="text-[10px] uppercase font-black text-neutral-900 dark:text-neutral-100 whitespace-nowrap">
+                    <span className="text-xs uppercase font-black text-black whitespace-nowrap">
                       Quick Auto-Tap:
                     </span>
                     <button

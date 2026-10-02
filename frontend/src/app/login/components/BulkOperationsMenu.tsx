@@ -1,15 +1,23 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Download, Upload, FileText, FileSpreadsheet, ChevronDown, CheckCircle2, AlertTriangle, X } from "lucide-react";
+import { Download, Upload, FileText, FileSpreadsheet, ChevronDown, CheckCircle2, AlertTriangle, X, Plus } from "lucide-react";
 
 interface BulkOperationsMenuProps {
   entity: "inventory" | "menu-items" | "customers";
   authToken?: string;
   onSuccess?: () => void;
+  triggerLabel?: string;
+  onAddItem?: () => void;
 }
 
-export function BulkOperationsMenu({ entity, authToken, onSuccess }: BulkOperationsMenuProps) {
+export function BulkOperationsMenu({
+  entity,
+  authToken,
+  onSuccess,
+  triggerLabel,
+  onAddItem,
+}: BulkOperationsMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -167,12 +175,10 @@ export function BulkOperationsMenu({ entity, authToken, onSuccess }: BulkOperati
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="inline-flex items-center gap-2 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3 py-1.5 text-sm font-bold text-[var(--text-primary)] hover:border-[var(--accent-brand)]"
+        className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-1.5 text-xs font-bold text-[var(--text-primary)] hover:border-black transition cursor-pointer shadow-xs whitespace-nowrap"
       >
-        <Upload className="h-4 w-4" />
-        <Download className="h-4 w-4 -ml-1" />
-        Bulk Actions
-        <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+        <span>{triggerLabel || "Bulk"}</span>
+        <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-150 ${isOpen ? "rotate-180" : ""}`} />
       </button>
 
       {isOpen && (
@@ -181,9 +187,25 @@ export function BulkOperationsMenu({ entity, authToken, onSuccess }: BulkOperati
             className="fixed inset-0 z-40" 
             onClick={() => setIsOpen(false)} 
           />
-          <div className="absolute right-0 top-full mt-2 w-56 z-50 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] py-1 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="px-3 py-2 text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
-              Import {entityDisplayNames[entity]}
+          <div className="absolute right-0 top-full mt-2 w-56 z-50 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] py-1 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            {onAddItem && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsOpen(false);
+                    onAddItem();
+                  }}
+                  className="w-full px-3.5 py-2 text-left text-xs font-bold text-black dark:text-white hover:bg-[var(--bg-surface-hover)] flex items-center gap-2 cursor-pointer"
+                >
+                  <Plus className="h-4 w-4 text-[var(--accent-brand)]" />
+                  <span>+ Add Item</span>
+                </button>
+                <div className="my-1 border-t border-[var(--border-subtle)]" />
+              </>
+            )}
+            <div className="px-3.5 py-1.5 text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">
+              Bulk Import / Export
             </div>
             <button
               onClick={handleDownloadTemplate}

@@ -82,6 +82,16 @@ type BillingTabProps = {
   isCreateBillOpen?: boolean;
 };
 
+const MAIN_STATUS_TABS = ["ALL", "DRAFT", "VOIDED"] as const;
+const MORE_STATUS_TABS = [
+  "PENDING / PAYMENT",
+  "VERIFICATION",
+  "PAID / COMPLETED",
+  "PARTIALLY REFUNDED",
+  "REFUNDED",
+  "CANCELLED",
+] as const;
+
 export function BillingTab({
   restaurant,
   staffPermissions,
@@ -124,11 +134,21 @@ export function BillingTab({
   const [showReturnSuccessModal, setShowReturnSuccessModal] = useState(false);
   const [showDenomWidget, setShowDenomWidget] = useState(false);
   const [activeDropdownBillId, setActiveDropdownBillId] = useState<string | null>(null);
+  const [isMoreFilterOpen, setIsMoreFilterOpen] = useState(false);
+  const moreFilterRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const handleGlobalClick = () => setActiveDropdownBillId(null);
+    const handleGlobalClick = (e: MouseEvent) => {
+      setActiveDropdownBillId(null);
+      if (moreFilterRef.current && !moreFilterRef.current.contains(e.target as Node)) {
+        setIsMoreFilterOpen(false);
+      }
+    };
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setActiveDropdownBillId(null);
+      if (e.key === "Escape") {
+        setActiveDropdownBillId(null);
+        setIsMoreFilterOpen(false);
+      }
     };
     window.addEventListener("click", handleGlobalClick);
     window.addEventListener("keydown", handleKeyDown);
@@ -797,27 +817,79 @@ export function BillingTab({
 
       {/* BILL HISTORY & MANAGEMENT TABLE */}
       <article className="rounded-3xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] overflow-hidden shadow-xs space-y-4">
-        {/* Filter Tabs */}
-        <div className="p-4 border-b border-[var(--border-subtle)] flex flex-col xl:flex-row xl:items-center justify-between gap-3">
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 xl:pb-0 max-w-full flex-1 min-w-0">
-            {(["ALL", "DRAFT", "PENDING / PAYMENT", "VERIFICATION", "PAID / COMPLETED", "PARTIALLY REFUNDED", "REFUNDED", "VOIDED", "CANCELLED"] as const).map((st) => (
+        {/* Filter Tabs & Search Bar */}
+        <div className="p-4 border-b border-[var(--border-subtle)] flex flex-col md:flex-row md:items-center justify-between gap-3">
+          {/* Main Status Buttons & More Dropdown (No scrollbar) */}
+          <div className="flex items-center gap-1.5 shrink-0 relative" ref={moreFilterRef}>
+            {MAIN_STATUS_TABS.map((st) => (
               <button
                 key={st}
                 type="button"
                 onClick={() => setBillingStatusFilter(st)}
-                className={`rounded-lg px-2.5 py-1 text-[11px] font-medium whitespace-nowrap transition shrink-0 ${billingStatusFilter === st
-                  ? "bg-[var(--accent-brand)] text-[var(--text-on-accent)] shadow-xs"
-                  : "text-[var(--text-secondary)] hover:bg-[var(--bg-surface-elevated)]"
-                  }`}
+                className={`rounded-lg px-3 py-1.5 text-xs font-bold whitespace-nowrap transition cursor-pointer ${
+                  billingStatusFilter === st
+                    ? "bg-black text-white shadow-xs"
+                    : "text-neutral-700 dark:text-neutral-300 hover:bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)]"
+                }`}
               >
-                {st.replace("_", " ")}
+                {st}
               </button>
             ))}
+
+            {/* More Statuses Dropdown Button */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsMoreFilterOpen((prev) => !prev);
+                }}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold whitespace-nowrap transition cursor-pointer border ${
+                  MORE_STATUS_TABS.includes(billingStatusFilter)
+                    ? "bg-black text-white border-black shadow-xs"
+                    : "text-neutral-700 dark:text-neutral-300 hover:bg-[var(--bg-surface-elevated)] border-[var(--border-subtle)]"
+                }`}
+                title="Filter by more statuses"
+              >
+                <span>
+                  {MORE_STATUS_TABS.includes(billingStatusFilter)
+                    ? `More: ${billingStatusFilter.replace("_", " ")}`
+                    : "More"}
+                </span>
+                <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-150 ${isMoreFilterOpen ? "rotate-180" : ""}`} />
+              </button>
+
+              {isMoreFilterOpen && (
+                <div
+                  className="absolute left-0 top-full mt-1.5 w-52 rounded-xl border border-[var(--border-strong)] bg-white dark:bg-neutral-900 py-1 shadow-2xl z-40"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {MORE_STATUS_TABS.map((st) => (
+                    <button
+                      key={st}
+                      type="button"
+                      onClick={() => {
+                        setBillingStatusFilter(st);
+                        setIsMoreFilterOpen(false);
+                      }}
+                      className={`w-full text-left px-3.5 py-2 text-xs font-bold transition flex items-center justify-between cursor-pointer ${
+                        billingStatusFilter === st
+                          ? "bg-black text-white"
+                          : "text-neutral-800 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                      }`}
+                    >
+                      <span>{st.replace("_", " ")}</span>
+                      {billingStatusFilter === st && <span className="text-[11px] font-black">✓</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0">
-            <div className="relative min-w-[200px] sm:min-w-[240px] flex-1">
-              <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-[var(--text-muted)]" />
+            <div className="relative min-w-[200px] sm:min-w-[260px] flex-1">
+              <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-neutral-500" />
               <input
                 id="billing-search-input"
                 type="text"
@@ -832,8 +904,8 @@ export function BillingTab({
                     }
                   }
                 }}
-                placeholder="Search bill or scan barcode"
-                className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] py-1.5 pl-8 pr-16 text-xs font-mono text-[var(--text-primary)] placeholder:text-neutral-900 dark:placeholder:text-neutral-100 placeholder:font-bold focus:border-sky-400 outline-none"
+                placeholder="Search or scan bill"
+                className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] py-1.5 pl-8 pr-16 text-xs font-mono font-bold text-black dark:text-white placeholder:text-neutral-500 dark:placeholder:text-neutral-400 placeholder:font-semibold focus:border-black outline-none"
               />
               <div className="absolute right-2 top-2 flex items-center gap-1.5">
                 {isSearchingServerBills && (

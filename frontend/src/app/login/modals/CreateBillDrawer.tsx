@@ -1388,8 +1388,8 @@ export function CreateBillDrawer({
               </div>
             </div>
 
-            {/* Products Grid (Scrollable list container with fixed boxy card dimensions) */}
-            <div className="grid gap-2.5 grid-cols-2 content-start flex-1 min-h-0 overflow-y-auto pr-1">
+            {/* Products Grid (1 item per row so full name is clearly visible without overflowing) */}
+            <div className="grid gap-2.5 grid-cols-1 content-start flex-1 min-h-0 overflow-y-auto pr-1">
               {filteredMenuItems.map((item) => {
                 const itemVariants = variantsByItem[item.id] || [];
                 const oldestBatch = item.active_batches?.[0];
@@ -1425,7 +1425,7 @@ export function CreateBillDrawer({
                         addItemToCart(item, itemVariants[0]);
                       }
                     }}
-                    className={`group relative rounded-md border p-4 min-h-[140px] h-auto flex flex-col justify-between transition-all duration-150 select-none ${
+                    className={`group relative rounded-lg border p-3 min-h-[90px] h-auto flex flex-col justify-between transition-all duration-150 select-none ${
                       isBlocked
                         ? "cursor-not-allowed opacity-65 border-rose-500/40 bg-rose-500/5 hover:border-rose-500/60"
                         : pricingMode === "WHOLESALE" && wholesalePriceNum !== null
@@ -1564,25 +1564,25 @@ export function CreateBillDrawer({
                         </button>
                       </div>
                     ) : (
-                      <div className="flex items-start justify-between gap-2 my-auto">
+                      <div className="flex items-center justify-between gap-3 my-1">
                         <div className="flex-1 min-w-0 pr-2">
-                          <h4 className="font-extrabold text-xl text-[var(--text-primary)] group-hover:text-sky-400 transition leading-snug break-words">
+                          <h4 className="font-extrabold text-base sm:text-lg text-[var(--text-primary)] group-hover:text-sky-500 transition leading-snug break-words">
                             {item.name}
                           </h4>
                           {item.barcode && (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-mono text-[var(--accent-brand)] mt-1 font-bold">
-                              <Barcode className="h-3 w-3" />
+                            <span className="inline-flex items-center gap-1 text-xs font-mono text-[var(--accent-brand)] mt-0.5 font-bold">
+                              <Barcode className="h-3.5 w-3.5" />
                               {item.barcode}
                             </span>
                           )}
                         </div>
 
                         <div className="flex flex-col items-end flex-shrink-0">
-                          <span className={`font-mono text-base font-black ${pricingMode === "WHOLESALE" && wholesalePriceNum !== null ? "text-purple-400" : "text-sky-400"}`}>
+                          <span className={`font-mono text-base sm:text-lg font-black ${pricingMode === "WHOLESALE" && wholesalePriceNum !== null ? "text-purple-600 dark:text-purple-400" : "text-black dark:text-white"}`}>
                             ₹{activePriceNum.toFixed(2)}
                           </span>
                           {hasDiscount && (
-                            <span className="font-mono text-[10px] text-[var(--text-muted)] line-through">
+                            <span className="font-mono text-[11px] text-[var(--text-muted)] line-through">
                               MRP ₹{mrpVal.toFixed(2)}
                             </span>
                           )}
@@ -2386,7 +2386,7 @@ export function CreateBillDrawer({
                     </span>
                   )}
                 </div>
-                <span className="font-mono text-3xl font-black text-sky-400">
+                <span className="font-mono text-3xl font-black text-black dark:text-white">
                   ₹{grandTotalPayable.toFixed(2)}
                 </span>
               </div>
