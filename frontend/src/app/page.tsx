@@ -455,7 +455,7 @@ export default function AdminDashboardPage() {
                 {restaurant?.name || "ApnaGreen Basket"}
               </h1>
               <p className="text-xs text-[var(--text-muted)] hidden sm:block">
-                {(TAB_TITLES[activeTab] || activeTab)} • Real-Time Store Controls
+                {(TAB_TITLES[activeTab] || activeTab)}
               </p>
             </div>
           </div>
@@ -505,84 +505,68 @@ export default function AdminDashboardPage() {
                     </button>
                   </div>
                 )}
-                <div className="h-4 w-px bg-[var(--border-strong)] mx-1"></div>
-                <div className="flex items-center gap-1.5 text-lg sm:text-xl font-black" title="Gross POS Sales (Counter Bills)">
-                  <span className="text-xs sm:text-sm font-semibold text-[var(--text-muted)] mt-0.5">Total:</span>
-                  <span className="font-mono text-[var(--text-primary)]">₹{billingState.dailyGrandTotal.toFixed(2)}</span>
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] text-sm sm:text-base font-black shadow-2xs" title="Gross POS Sales (Counter Bills)">
+                  <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-neutral-900 dark:text-neutral-100">Total:</span>
+                  <span className="font-mono text-neutral-900 dark:text-neutral-100 font-black">₹{billingState.dailyGrandTotal.toFixed(2)}</span>
                 </div>
 
                 {/* Counter Credit / Debit Activity Pill */}
                 {billingState.dailyCreditDebitNet !== 0 && (
-                  <>
-                    <div className="h-4 w-px bg-[var(--border-strong)] mx-0.5"></div>
-                    <div
-                      className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-lg border cursor-help ${
-                        billingState.dailyCreditDebitNet < 0
-                          ? "text-amber-400 bg-amber-500/10 border-amber-500/25"
-                          : "text-sky-400 bg-sky-500/10 border-sky-500/25"
-                      }`}
-                      title={
-                        [
-                          billingState.dailyDebitApplied > 0 ? `Udhaar Taken: -₹${billingState.dailyDebitApplied.toFixed(2)}` : null,
-                          billingState.dailyCreditApplied > 0 ? `Store Credit Used: -₹${billingState.dailyCreditApplied.toFixed(2)}` : null,
-                          billingState.dailyDebtSettled > 0 ? `Debt Settled: +₹${billingState.dailyDebtSettled.toFixed(2)}` : null,
-                          billingState.dailyCreditAwarded > 0 ? `Wallet Credited: +₹${billingState.dailyCreditAwarded.toFixed(2)}` : null,
-                          billingState.dailyCreditCashedOut > 0 ? `Credit Cashed Out: -₹${billingState.dailyCreditCashedOut.toFixed(2)}` : null,
-                        ]
-                          .filter(Boolean)
-                          .join(" • ") || "Net Credit / Debit Adjustment"
-                      }
-                    >
-                      <span className="text-[10px] uppercase tracking-wider font-semibold opacity-80">Credit-Debit:</span>
-                      <span className="font-mono font-black">
-                        {billingState.dailyCreditDebitNet > 0 ? "+" : "-"}₹{Math.abs(billingState.dailyCreditDebitNet).toFixed(2)}
-                      </span>
-                    </div>
-                  </>
+                  <div
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] text-sm sm:text-base font-black shadow-2xs cursor-help"
+                    title={
+                      [
+                        billingState.dailyDebitApplied > 0 ? `Udhaar Taken: -₹${billingState.dailyDebitApplied.toFixed(2)}` : null,
+                        billingState.dailyCreditApplied > 0 ? `Store Credit Used: -₹${billingState.dailyCreditApplied.toFixed(2)}` : null,
+                        billingState.dailyDebtSettled > 0 ? `Debt Settled: +₹${billingState.dailyDebtSettled.toFixed(2)}` : null,
+                        billingState.dailyCreditAwarded > 0 ? `Wallet Credited: +₹${billingState.dailyCreditAwarded.toFixed(2)}` : null,
+                        billingState.dailyCreditCashedOut > 0 ? `Credit Cashed Out: -₹${billingState.dailyCreditCashedOut.toFixed(2)}` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" • ") || "Net Credit / Debit Adjustment"
+                    }
+                  >
+                    <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-neutral-900 dark:text-neutral-100">Credit-Debit:</span>
+                    <span className="font-mono text-neutral-900 dark:text-neutral-100 font-black">
+                      {billingState.dailyCreditDebitNet > 0 ? "+" : "-"}₹{Math.abs(billingState.dailyCreditDebitNet).toFixed(2)}
+                    </span>
+                  </div>
                 )}
 
                 {/* Loyalty Redemptions Pill */}
                 {billingState.dailyLoyaltyRedeemed > 0 && (
-                  <>
-                    <div className="h-4 w-px bg-[var(--border-strong)] mx-0.5"></div>
-                    <div
-                      className="flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-lg border text-purple-400 bg-purple-500/10 border-purple-500/25 cursor-help"
-                      title={`Loyalty Points Redeemed: -₹${billingState.dailyLoyaltyRedeemed.toFixed(2)}`}
-                    >
-                      <span className="text-[10px] uppercase tracking-wider font-semibold opacity-80">Loyalty:</span>
-                      <span className="font-mono font-black">-₹{billingState.dailyLoyaltyRedeemed.toFixed(2)}</span>
-                    </div>
-                  </>
+                  <div
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] text-sm sm:text-base font-black shadow-2xs cursor-help"
+                    title={`Loyalty Points Redeemed: -₹${billingState.dailyLoyaltyRedeemed.toFixed(2)}`}
+                  >
+                    <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-neutral-900 dark:text-neutral-100">Loyalty:</span>
+                    <span className="font-mono text-neutral-900 dark:text-neutral-100 font-black">-₹{billingState.dailyLoyaltyRedeemed.toFixed(2)}</span>
+                  </div>
                 )}
 
-                <div className="h-4 w-px bg-[var(--border-strong)] mx-1"></div>
-                <div className="flex items-center gap-1.5 text-lg sm:text-xl font-black" title="Net Realized Settlement (Cash & Digital Payments Collected at Counter)">
-                  <span className="text-xs sm:text-sm font-semibold text-[var(--text-muted)] mt-0.5">Net:</span>
-                  <span className="font-mono text-[var(--accent-brand)]">₹{billingState.dailyNetPaid.toFixed(2)}</span>
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] text-sm sm:text-base font-black shadow-2xs" title="Net Realized Settlement (Cash & Digital Payments Collected at Counter)">
+                  <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-neutral-900 dark:text-neutral-100">Net:</span>
+                  <span className="font-mono text-neutral-900 dark:text-neutral-100 font-black">₹{billingState.dailyNetPaid.toFixed(2)}</span>
                 </div>
 
                 {/* UPI Contribution Pill */}
                 {billingState.dailyUpiPaid > 0 && (
-                  <>
-                    <div className="h-4 w-px bg-[var(--border-strong)] mx-0.5"></div>
-                    <div
-                      className="flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-lg border text-sky-400 bg-sky-500/10 border-sky-500/25 cursor-help"
-                      title="UPI / Online Contribution Collected at Counter"
-                    >
-                      <span className="text-[10px] uppercase tracking-wider font-semibold opacity-80">UPI:</span>
-                      <span className="font-mono font-black">₹{billingState.dailyUpiPaid.toFixed(2)}</span>
-                    </div>
-                  </>
+                  <div
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] text-sm sm:text-base font-black shadow-2xs cursor-help"
+                    title="UPI / Online Contribution Collected at Counter"
+                  >
+                    <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-neutral-900 dark:text-neutral-100">UPI:</span>
+                    <span className="font-mono text-neutral-900 dark:text-neutral-100 font-black">₹{billingState.dailyUpiPaid.toFixed(2)}</span>
+                  </div>
                 )}
 
                 {/* Net Cash Pill */}
-                <div className="h-4 w-px bg-[var(--border-strong)] mx-0.5"></div>
                 <div
-                  className="flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-lg border text-emerald-400 bg-emerald-500/10 border-emerald-500/25 cursor-help"
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] text-sm sm:text-base font-black shadow-2xs cursor-help"
                   title="Net Physical Cash Collected = Net Settlement - UPI Contribution"
                 >
-                  <span className="text-[10px] uppercase tracking-wider font-semibold opacity-80">Net Cash:</span>
-                  <span className="font-mono font-black">₹{billingState.dailyNetCash.toFixed(2)}</span>
+                  <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-neutral-900 dark:text-neutral-100">Net Cash:</span>
+                  <span className="font-mono text-neutral-900 dark:text-neutral-100 font-black">₹{billingState.dailyNetCash.toFixed(2)}</span>
                 </div>
               </div>
             )}

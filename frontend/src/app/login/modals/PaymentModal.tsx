@@ -850,7 +850,7 @@ export function PaymentModal({
                     Order Summary
                   </span>
                   {totalItemCount > 0 && (
-                    <span className="text-[10px] font-mono font-bold text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-full">
+                    <span className="text-[10px] font-mono font-bold text-white bg-black border border-neutral-700 px-2 py-0.5 rounded-full shadow-xs">
                       {totalItemCount} {totalItemCount === 1 ? "Item" : "Items"} ({formattedTotalQty} Qty)
                     </span>
                   )}
@@ -944,7 +944,7 @@ export function PaymentModal({
                   <div className="flex items-center gap-2">
                     <span>Item Description</span>
                     {totalItemCount > 0 && (
-                      <span className="text-[9px] font-mono font-bold text-sky-400 bg-sky-500/10 border border-sky-500/20 px-1.5 py-0.2 rounded-full normal-case">
+                      <span className="text-[9px] font-mono font-bold text-white bg-black border border-neutral-700 px-1.5 py-0.2 rounded-full normal-case shadow-xs">
                         {totalItemCount} {totalItemCount === 1 ? "item" : "items"} • {formattedTotalQty} qty
                       </span>
                     )}
@@ -1073,12 +1073,12 @@ export function PaymentModal({
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-sans font-black text-xs uppercase tracking-wider">Grand Total Payable:</span>
                   {totalItemCount > 0 && (
-                    <span className="text-[10px] font-mono font-bold text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded-md border border-sky-500/20 font-sans tracking-normal">
+                    <span className="text-[10px] font-mono font-bold text-white bg-black px-2 py-0.5 rounded-md border border-neutral-700 font-sans tracking-normal shadow-xs">
                       {totalItemCount} {totalItemCount === 1 ? "Item" : "Items"} ({formattedTotalQty} Qty)
                     </span>
                   )}
                 </div>
-                <span className={`text-xl font-black ${editingCompletedBill && paymentEditMode === "ADJUST" ? "text-[var(--text-muted)] line-through" : "text-sky-400"}`}>₹{grandTotal.toFixed(2)}</span>
+                <span className={`text-3xl font-black ${editingCompletedBill && paymentEditMode === "ADJUST" ? "text-[var(--text-muted)] line-through" : "text-sky-400"}`}>₹{grandTotal.toFixed(2)}</span>
               </div>
 
               {editingCompletedBill && (
@@ -1125,12 +1125,12 @@ export function PaymentModal({
             <div className="flex-shrink-0 grid grid-cols-2 gap-3 mt-3">
               {/* Box 1: Delivery & Handling (Horizontally Split) */}
               <div className="flex flex-col p-2.5 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] shadow-sm">
-                <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] mb-2">
+                <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-wider text-neutral-900 dark:text-neutral-100 mb-2">
                   <span>Additional Charges</span>
                 </div>
                 <div className="flex gap-2 h-full">
                   <div className="flex-1 flex flex-col justify-end">
-                    <label className="block text-[9px] font-bold uppercase tracking-wider text-[var(--text-muted)] mb-1">Delivery</label>
+                    <label className="block text-[9px] font-black uppercase tracking-wider text-neutral-900 dark:text-neutral-100 mb-1">Delivery</label>
                     <input
                       type="number"
                       min="0"
@@ -1141,7 +1141,7 @@ export function PaymentModal({
                     />
                   </div>
                   <div className="flex-1 flex flex-col justify-end">
-                    <label className="block text-[9px] font-bold uppercase tracking-wider text-[var(--text-muted)] mb-1">Handling</label>
+                    <label className="block text-[9px] font-black uppercase tracking-wider text-neutral-900 dark:text-neutral-100 mb-1">Handling</label>
                     <input
                       type="number"
                       min="0"
@@ -1156,7 +1156,7 @@ export function PaymentModal({
 
               {/* Box 2: Customer Wallet */}
               <div className="flex flex-col space-y-1.5 p-2.5 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] shadow-sm">
-                <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
+                <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-wider text-neutral-900 dark:text-neutral-100">
                   <span>Customer Wallet</span>
                   {customerAnalytics && customerAnalytics.credit_balance !== undefined && (
                     (() => {
@@ -1356,13 +1356,13 @@ export function PaymentModal({
 
                   {/* Quick Auto-Tap Shortcuts Bar */}
                   <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
-                    <span className="text-[10px] uppercase font-bold text-[var(--text-muted)] whitespace-nowrap">
+                    <span className="text-[10px] uppercase font-black text-neutral-900 dark:text-neutral-100 whitespace-nowrap">
                       Quick Auto-Tap:
                     </span>
                     <button
                       type="button"
                       onClick={() => handleAutoTapExact(effectiveGrandTotalForCollection)}
-                      className="rounded-lg bg-[var(--bg-surface)] border border-[var(--border-strong)] px-2 py-0.5 text-[10px] font-mono font-bold text-[var(--text-primary)] hover:border-[var(--text-muted)] hover:text-[var(--text-primary)] transition whitespace-nowrap"
+                      className="rounded-lg bg-black hover:bg-neutral-800 text-white border border-black px-3 py-1 text-xs font-mono font-bold transition whitespace-nowrap cursor-pointer shadow-sm"
                       title={
                         paymentEditMode === "ADJUST" && editingCompletedBill
                           ? "Auto-fill exact note breakdown for Additional Amount Due"
@@ -1467,8 +1467,8 @@ export function PaymentModal({
                 )}
 
                 {targetCash < effectiveGrandTotalForCollection && (
-                  <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 p-2.5 space-y-2 text-xs">
-                    <div className="flex justify-between items-center text-sky-300 font-bold font-mono">
+                  <div className="rounded-lg border border-blue-500/30 bg-blue-500/10 p-2.5 space-y-2 text-xs">
+                    <div className="flex justify-between items-center text-blue-900 dark:text-blue-300 font-extrabold font-mono text-xs">
                       <span>Shortfall / Cash Deficiency:</span>
                       <span>₹{remainingNeeded.toFixed(2)} short</span>
                     </div>
@@ -1547,10 +1547,10 @@ export function PaymentModal({
                                   }
                                   setIsCustomUpiEditing(true);
                                 }}
-                                className="inline-flex items-center gap-1 text-[11px] font-bold text-sky-400 hover:text-sky-300 bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/30 px-2 py-0.5 rounded-lg transition cursor-pointer"
+                                className="inline-flex items-center gap-1 text-[11px] font-bold text-white bg-black hover:bg-neutral-800 border border-neutral-800 px-2 py-0.5 rounded-lg transition cursor-pointer shadow-xs"
                                 title="Edit UPI amount for partial split"
                               >
-                                <Pencil className="w-3 h-3" />
+                                <Pencil className="w-3 h-3 text-white" />
                                 <span>{effectiveUpiAmount !== remainingNeeded ? `₹${effectiveUpiAmount.toFixed(2)}` : "Edit"}</span>
                               </button>
                             )}
@@ -1848,10 +1848,10 @@ export function PaymentModal({
                             }
                             setIsDirectUpiEditing(true);
                           }}
-                          className="inline-flex items-center gap-1 text-[11px] font-bold text-sky-400 hover:text-sky-300 bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/30 px-2 py-0.5 rounded-lg transition cursor-pointer"
+                          className="inline-flex items-center gap-1 text-xs font-bold text-white bg-black hover:bg-neutral-800 border border-neutral-800 px-2.5 py-1 rounded-lg transition cursor-pointer shadow-xs"
                           title="Edit UPI Amount"
                         >
-                          <Pencil className="w-3 h-3" />
+                          <Pencil className="w-3.5 h-3.5 text-white" />
                           <span>{effectiveDirectUpiAmount !== effectiveGrandTotalForCollection ? `₹${effectiveDirectUpiAmount.toFixed(2)}` : "Edit"}</span>
                         </button>
                       </div>
@@ -1970,10 +1970,10 @@ export function PaymentModal({
                   <button
                     type="button"
                     onClick={onKeepAsDraft || onClose}
-                    className="rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3.5 py-2 text-xs font-bold text-[var(--text-secondary)] hover:border-sky-500/40 hover:text-sky-400 transition flex items-center gap-1"
+                    className="rounded-xl border border-black bg-black px-3.5 py-2 text-xs font-bold text-white hover:bg-neutral-800 transition flex items-center gap-1 shadow-sm"
                     title="Park this bill as draft to resume later"
                   >
-                    <Bookmark className="h-3.5 w-3.5" />
+                    <Bookmark className="h-3.5 w-3.5 text-white" />
                     <span>Keep as Draft</span>
                   </button>
                 )}

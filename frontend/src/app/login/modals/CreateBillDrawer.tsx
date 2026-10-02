@@ -1021,12 +1021,11 @@ export function CreateBillDrawer({
         (ci) => ci.menu_item_id === item.id && ci.variant_id === (v ? v.id : null) && ci.allow_oversell === isBackorder
       );
       if (existingIdx >= 0) {
-        return prev.map((ci, i) =>
-          i === existingIdx ? { ...ci, quantity: ci.quantity + qty } : ci
-        );
+        const updatedItem = { ...prev[existingIdx], quantity: prev[existingIdx].quantity + qty };
+        const otherItems = prev.filter((_, i) => i !== existingIdx);
+        return [updatedItem, ...otherItems];
       }
       return [
-        ...prev,
         {
           menu_item_id: item.id,
           variant_id: v ? v.id : null,
@@ -1045,6 +1044,7 @@ export function CreateBillDrawer({
           base_unit_price: resolved.baseUnitPrice,
           base_mrp: resolved.baseMrp,
         },
+        ...prev,
       ];
     });
     if (isBackorder) {
@@ -1485,7 +1485,7 @@ export function CreateBillDrawer({
                           </button>
                         )}
                         {cartQtyForItem > 0 && (
-                          <span className="rounded-md bg-sky-500 px-1.5 py-0.5 font-mono text-[10px] font-bold text-white shadow-xs">
+                          <span className="rounded-md bg-black px-1.5 py-0.5 font-mono text-[10px] font-bold text-white border border-neutral-700 shadow-xs">
                             In Cart: {cartQtyForItem}
                           </span>
                         )}
@@ -1565,9 +1565,17 @@ export function CreateBillDrawer({
                       </div>
                     ) : (
                       <div className="flex items-start justify-between gap-2 my-auto">
-                        <h4 className="font-extrabold text-xl text-[var(--text-primary)] group-hover:text-sky-400 transition leading-snug line-clamp-2 break-words flex-1 min-w-0 pr-2">
-                          {item.name}
-                        </h4>
+                        <div className="flex-1 min-w-0 pr-2">
+                          <h4 className="font-extrabold text-xl text-[var(--text-primary)] group-hover:text-sky-400 transition leading-snug break-words">
+                            {item.name}
+                          </h4>
+                          {item.barcode && (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-mono text-[var(--accent-brand)] mt-1 font-bold">
+                              <Barcode className="h-3 w-3" />
+                              {item.barcode}
+                            </span>
+                          )}
+                        </div>
 
                         <div className="flex flex-col items-end flex-shrink-0">
                           <span className={`font-mono text-base font-black ${pricingMode === "WHOLESALE" && wholesalePriceNum !== null ? "text-purple-400" : "text-sky-400"}`}>
@@ -2007,7 +2015,7 @@ export function CreateBillDrawer({
                   <div className="flex items-center justify-between pb-1.5 px-1 text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)] border-b border-[var(--border-subtle)]">
                     <div className="flex items-center gap-2">
                       <span>Billed Items</span>
-                      <span className="text-[10px] font-mono font-bold text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-full normal-case">
+                      <span className="text-[10px] font-mono font-bold text-white bg-black border border-neutral-700 px-2 py-0.5 rounded-full normal-case shadow-xs">
                         {totalItemCount} {totalItemCount === 1 ? "Item" : "Items"} ({formattedTotalQty} Qty)
                       </span>
                     </div>
@@ -2373,7 +2381,7 @@ export function CreateBillDrawer({
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[var(--text-primary)] font-black">Grand Total Payable:</span>
                   {totalItemCount > 0 && (
-                    <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20 font-mono tracking-normal">
+                    <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-black text-white border border-neutral-700 font-mono tracking-normal shadow-xs">
                       {totalItemCount} {totalItemCount === 1 ? "Item" : "Items"} ({formattedTotalQty} Qty)
                     </span>
                   )}
@@ -2396,7 +2404,7 @@ export function CreateBillDrawer({
                     type="button"
                     disabled={draftCartItems.length === 0}
                     onClick={() => validateBeforeCreateBill(false)}
-                    className="rounded-xl border border-[var(--border-strong)] py-3 text-base font-bold text-[var(--text-primary)] hover:bg-[var(--bg-surface-elevated)] transition disabled:opacity-50"
+                    className="rounded-xl border border-black bg-black py-3 text-base font-bold text-white hover:bg-neutral-800 transition disabled:opacity-50 shadow-sm"
                   >
                     Save as Draft
                   </button>

@@ -1866,7 +1866,15 @@ async def onboard_scanned_item(
             db.add(menu_item)
 
     await db.flush()
-    await sync_item_prices_from_oldest_batch(db, item.id, outlet_id)
+
+    # Check outlet's latest_batch_price_override setting
+    from app.models.outlet import Outlet
+    outlet = await db.get(Outlet, outlet_id)
+    if intake and outlet and outlet.latest_batch_price_override:
+        # Override is ON: propagate new batch's prices to ALL active batches
+        await propagate_latest_batch_prices_to_all_batches(db, item.id, outlet_id, intake)
+    else:
+        await sync_item_prices_from_oldest_batch(db, item.id, outlet_id)
 
     from app.services.menu_service import invalidate_outlet_menu
     await invalidate_outlet_menu(db, outlet_id)

@@ -550,51 +550,44 @@ export function BillingTab({
             Billing &amp; Point of Sale (POS)
           </h1>
           <p className="text-sm text-[var(--text-secondary)]">
-            Create walk-in &amp; phone bills, apply manager discounts, process Cash &amp; UPI payments, and print PDF receipts
+            Create walk-in &amp; phone bills
           </p>
         </div>
 
         {/* Mobile KPI Summary Bridge (visible when sticky top bar is hidden on smaller screens) */}
         {(dailyGrandTotal !== undefined || dailyNetPaid !== undefined) && (
           <div className="sm:hidden w-full flex flex-wrap items-center gap-2 p-2.5 rounded-2xl bg-[var(--bg-surface-elevated)] border border-[var(--border-strong)] text-xs shadow-xs">
-            <div className="flex items-center gap-1 font-bold">
-              <span className="text-[var(--text-muted)]">Total:</span>
-              <span className="font-mono text-[var(--text-primary)] font-black">₹{(dailyGrandTotal || 0).toFixed(2)}</span>
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] text-xs font-black">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-900 dark:text-neutral-100">Total:</span>
+              <span className="font-mono text-neutral-900 dark:text-neutral-100 font-black">₹{(dailyGrandTotal || 0).toFixed(2)}</span>
             </div>
 
             {/* Mobile Counter Credit / Debit Pill */}
-
             {(dailyCreditDebitNet || 0) !== 0 && (
-              <div
-                className={`flex items-center gap-1 font-bold px-2 py-0.5 rounded-md border ${
-                  (dailyCreditDebitNet || 0) < 0
-                    ? "text-amber-400 bg-amber-500/10 border-amber-500/20"
-                    : "text-sky-400 bg-sky-500/10 border-sky-500/20"
-                }`}
-              >
-                <span className="text-[10px] uppercase tracking-wider">Credit-Debit:</span>
-                <span className="font-mono font-black">
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] text-xs font-black">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-900 dark:text-neutral-100">Credit-Debit:</span>
+                <span className="font-mono text-neutral-900 dark:text-neutral-100 font-black">
                   {(dailyCreditDebitNet || 0) > 0 ? "+" : "-"}₹{Math.abs(dailyCreditDebitNet || 0).toFixed(2)}
                 </span>
               </div>
             )}
 
-            <div className="flex items-center gap-1 font-bold">
-              <span className="text-[var(--text-muted)]">Net:</span>
-              <span className="font-mono text-[var(--accent-brand)] font-black">₹{(dailyNetPaid || 0).toFixed(2)}</span>
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] text-xs font-black">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-900 dark:text-neutral-100">Net:</span>
+              <span className="font-mono text-neutral-900 dark:text-neutral-100 font-black">₹{(dailyNetPaid || 0).toFixed(2)}</span>
             </div>
 
             {dailyUpiPaid !== undefined && dailyUpiPaid > 0 && (
-              <div className="flex items-center gap-1 font-bold px-2 py-0.5 rounded-md border text-sky-400 bg-sky-500/10 border-sky-500/20">
-                <span className="text-[10px] uppercase tracking-wider">UPI:</span>
-                <span className="font-mono font-black">₹{dailyUpiPaid.toFixed(2)}</span>
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] text-xs font-black">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-900 dark:text-neutral-100">UPI:</span>
+                <span className="font-mono text-neutral-900 dark:text-neutral-100 font-black">₹{dailyUpiPaid.toFixed(2)}</span>
               </div>
             )}
 
             {dailyNetCash !== undefined && (
-              <div className="flex items-center gap-1 font-bold px-2 py-0.5 rounded-md border text-emerald-400 bg-emerald-500/10 border-emerald-500/20">
-                <span className="text-[10px] uppercase tracking-wider">Net Cash:</span>
-                <span className="font-mono font-black">₹{dailyNetCash.toFixed(2)}</span>
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] text-xs font-black">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-900 dark:text-neutral-100">Net Cash:</span>
+                <span className="font-mono text-neutral-900 dark:text-neutral-100 font-black">₹{dailyNetCash.toFixed(2)}</span>
               </div>
             )}
           </div>
@@ -805,14 +798,14 @@ export function BillingTab({
       {/* BILL HISTORY & MANAGEMENT TABLE */}
       <article className="rounded-3xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] overflow-hidden shadow-xs space-y-4">
         {/* Filter Tabs */}
-        <div className="p-4 border-b border-[var(--border-subtle)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex w-full min-w-max gap-1.5 sm:w-auto">
+        <div className="p-4 border-b border-[var(--border-subtle)] flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 xl:pb-0 max-w-full flex-1 min-w-0">
             {(["ALL", "DRAFT", "PENDING / PAYMENT", "VERIFICATION", "PAID / COMPLETED", "PARTIALLY REFUNDED", "REFUNDED", "VOIDED", "CANCELLED"] as const).map((st) => (
               <button
                 key={st}
                 type="button"
                 onClick={() => setBillingStatusFilter(st)}
-                className={`rounded-lg px-2.5 py-1 text-[11px] font-medium whitespace-nowrap transition ${billingStatusFilter === st
+                className={`rounded-lg px-2.5 py-1 text-[11px] font-medium whitespace-nowrap transition shrink-0 ${billingStatusFilter === st
                   ? "bg-[var(--accent-brand)] text-[var(--text-on-accent)] shadow-xs"
                   : "text-[var(--text-secondary)] hover:bg-[var(--bg-surface-elevated)]"
                   }`}
@@ -822,8 +815,8 @@ export function BillingTab({
             ))}
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-            <div className="relative min-w-[220px] flex-1">
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0">
+            <div className="relative min-w-[200px] sm:min-w-[240px] flex-1">
               <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-[var(--text-muted)]" />
               <input
                 id="billing-search-input"
@@ -839,8 +832,8 @@ export function BillingTab({
                     }
                   }
                 }}
-                placeholder="Scan bill barcode or search Bill ID / Basket... (/)"
-                className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] py-1.5 pl-8 pr-16 text-xs font-mono text-[var(--text-primary)] focus:border-sky-400 outline-none"
+                placeholder="Search bill or scan barcode"
+                className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] py-1.5 pl-8 pr-16 text-xs font-mono text-[var(--text-primary)] placeholder:text-neutral-900 dark:placeholder:text-neutral-100 placeholder:font-bold focus:border-sky-400 outline-none"
               />
               <div className="absolute right-2 top-2 flex items-center gap-1.5">
                 {isSearchingServerBills && (
@@ -866,9 +859,9 @@ export function BillingTab({
               type="button"
               onClick={handleExportBillsPdf}
               title={`Export ${filteredBills.length} filtered bills as PDF`}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3 py-1.5 text-xs font-bold text-[var(--text-primary)] hover:border-[var(--accent-brand)] hover:text-[var(--accent-brand)] shadow-xs transition shrink-0"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-black bg-black px-3.5 py-2 text-xs font-bold text-white hover:bg-neutral-800 shadow-xs transition shrink-0 cursor-pointer"
             >
-              <Download className="h-3.5 w-3.5 text-[var(--accent-brand)]" />
+              <Download className="h-3.5 w-3.5 text-white" />
               <span>Export PDF ({filteredBills.length})</span>
             </button>
           </div>
@@ -1095,7 +1088,7 @@ export function BillingTab({
                             </span>
                           </div>
                         ) : b.payment_method ? (
-                          <span className="block text-[10px] text-[var(--text-muted)] font-mono uppercase mt-0.5">
+                          <span className="block text-[10px] text-neutral-900 dark:text-neutral-100 font-black font-mono uppercase mt-0.5">
                             Via {b.payment_method}
                           </span>
                         ) : null}
@@ -1117,20 +1110,20 @@ export function BillingTab({
                             <button
                               type="button"
                               onClick={() => onEditCompletedBill(b)}
-                              className="flex items-center gap-1 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-xs font-bold text-[var(--text-secondary)] hover:border-[var(--text-muted)] hover:text-[var(--text-primary)] transition cursor-pointer shrink-0"
+                              className="flex items-center gap-1 rounded-lg border border-black bg-black text-white hover:bg-neutral-800 px-2.5 py-1.5 text-xs font-bold transition cursor-pointer shrink-0 shadow-xs"
                               title="Edit this completed bill (Voids old bill)"
                             >
-                              <FileEdit className="h-3.5 w-3.5" />
+                              <FileEdit className="h-3.5 w-3.5 text-white" />
                               <span>Edit</span>
                             </button>
                           ) : (b.status === "DRAFT" || b.status === "PENDING") && onResumeDraft ? (
                             <button
                               type="button"
                               onClick={() => onResumeDraft(b)}
-                              className="flex items-center gap-1 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-xs font-bold text-[var(--text-secondary)] hover:border-[var(--text-muted)] hover:text-[var(--text-primary)] transition cursor-pointer shrink-0"
+                              className="flex items-center gap-1 rounded-lg border border-black bg-black text-white hover:bg-neutral-800 px-2.5 py-1.5 text-xs font-bold transition cursor-pointer shrink-0 shadow-xs"
                               title="Resume / Edit Draft Bill"
                             >
-                              <FileEdit className="h-3.5 w-3.5" />
+                              <FileEdit className="h-3.5 w-3.5 text-white" />
                               <span>Edit</span>
                             </button>
                           ) : null}
@@ -1141,10 +1134,10 @@ export function BillingTab({
                             onClick={() => {
                               generateReceiptPDF(b as any, restaurant?.name || "RESTAURANT", menuItemsMap, restaurant || {}, "view");
                             }}
-                            className="p-1.5 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:border-[var(--text-muted)] hover:text-[var(--text-primary)] transition cursor-pointer shrink-0"
+                            className="p-1.5 rounded-lg border border-black bg-black text-white hover:bg-neutral-800 transition cursor-pointer shrink-0 shadow-xs"
                             title="View PDF Bill"
                           >
-                            <Eye className="h-4 w-4" />
+                            <Eye className="h-4 w-4 text-white" />
                           </button>
 
                           {/* 3. Direct Print Button */}
@@ -1153,10 +1146,10 @@ export function BillingTab({
                             onClick={() => {
                               generateReceiptPDF(b as any, restaurant?.name || "RESTAURANT", menuItemsMap, restaurant || {}, "print");
                             }}
-                            className="p-1.5 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:border-emerald-500 hover:text-emerald-500 transition cursor-pointer shrink-0"
+                            className="p-1.5 rounded-lg border border-black bg-black text-white hover:bg-neutral-800 transition cursor-pointer shrink-0 shadow-xs"
                             title="Print Bill Directly"
                           >
-                            <Printer className="h-4 w-4" />
+                            <Printer className="h-4 w-4 text-white" />
                           </button>
 
                           {/* 4. Direct Download Button */}
@@ -1165,10 +1158,10 @@ export function BillingTab({
                             onClick={() => {
                               generateReceiptPDF(b as any, restaurant?.name || "RESTAURANT", menuItemsMap, restaurant || {}, "download");
                             }}
-                            className="p-1.5 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:border-blue-500 hover:text-blue-500 transition cursor-pointer shrink-0"
+                            className="p-1.5 rounded-lg border border-black bg-black text-white hover:bg-neutral-800 transition cursor-pointer shrink-0 shadow-xs"
                             title="Download Bill PDF"
                           >
-                            <Download className="h-4 w-4" />
+                            <Download className="h-4 w-4 text-white" />
                           </button>
 
                           {/* 5. More Button with Dropdown Popup */}
@@ -1179,16 +1172,15 @@ export function BillingTab({
                                 e.stopPropagation();
                                 setActiveDropdownBillId(activeDropdownBillId === b.id ? null : b.id);
                               }}
-                              className={`flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-bold transition cursor-pointer shrink-0 ${
+                              className={`flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-bold transition cursor-pointer shrink-0 shadow-xs ${
                                 activeDropdownBillId === b.id
-                                  ? "border-[var(--accent-brand)] text-[var(--accent-brand)] bg-[var(--accent-brand)]/10"
-                                  : "border-[var(--border-strong)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:border-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                                  ? "border-black bg-neutral-800 text-white"
+                                  : "border-black bg-black text-white hover:bg-neutral-800"
                               }`}
                               title="More options"
                             >
-                              <MoreHorizontal className="h-3.5 w-3.5" />
                               <span>More</span>
-                              <ChevronDown className={`h-3 w-3 transition-transform ${activeDropdownBillId === b.id ? "rotate-180" : ""}`} />
+                              <ChevronDown className={`h-3 w-3 text-white transition-transform ${activeDropdownBillId === b.id ? "rotate-180" : ""}`} />
                             </button>
 
                             {/* Dropdown Popup Menu */}
