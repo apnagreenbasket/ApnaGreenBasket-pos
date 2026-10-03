@@ -72,6 +72,7 @@ export function useAnalyticsManagement({
   // Synchronize top date preset buttons with Day Book date
   const setDatePreset = useCallback((preset: DatePreset) => {
     setDatePresetState(preset);
+    setBillProfitPage(1);
     const now = new Date();
     if (preset === "today") {
       setDayBookDateState(formatLocalDate(now));
@@ -382,7 +383,9 @@ export function useAnalyticsManagement({
         setProfitData(res);
       }
       if (activeFinancialSubTab === "master_view" || activeFinancialSubTab === "bill_profit") {
-        const res = await apiRequest<BillProfitResponse>(`/api/analytics/bill-profit?page=${billProfitPage}&limit=15&${params.toString()}`);
+        const bpPageSize = 25;
+        const bpOffset = (Math.max(1, billProfitPage) - 1) * bpPageSize;
+        const res = await apiRequest<BillProfitResponse>(`/api/analytics/bill-profit?limit=${bpPageSize}&offset=${bpOffset}&${params.toString()}`);
         setBillProfitData(res);
       }
       if (activeFinancialSubTab === "master_view" || activeFinancialSubTab === "tax_summary") {

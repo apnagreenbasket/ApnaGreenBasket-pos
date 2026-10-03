@@ -27,9 +27,19 @@ type Props = {
   data: BillProfitResponse | null;
   isLoading: boolean;
   restaurant?: RestaurantProfile | null;
+  page?: number;
+  setPage?: (p: number) => void;
+  pageSize?: number;
 };
 
-export function BillProfitReport({ data, isLoading, restaurant }: Props) {
+export function BillProfitReport({
+  data,
+  isLoading,
+  restaurant,
+  page = 1,
+  setPage,
+  pageSize = 25,
+}: Props) {
   const [selectedBillForView, setSelectedBillForView] = useState<{
     summary: BillProfitRow;
     detail: ManualBill | null;
@@ -102,6 +112,10 @@ export function BillProfitReport({ data, isLoading, restaurant }: Props) {
   };
 
   const bills = data?.bills || [];
+  const totalBills = data?.total_bills || 0;
+  const totalPages = Math.max(1, Math.ceil(totalBills / pageSize));
+  const startItem = totalBills === 0 ? 0 : (page - 1) * pageSize + 1;
+  const endItem = Math.min(page * pageSize, totalBills);
 
   const {
     searchQuery,
@@ -256,6 +270,60 @@ export function BillProfitReport({ data, isLoading, restaurant }: Props) {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Controls */}
+        {totalBills > 0 && setPage && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-[var(--border-subtle)] bg-[var(--bg-surface)] px-5 py-3 text-xs text-[var(--text-muted)]">
+            <div>
+              Showing <span className="font-semibold text-[var(--text-primary)]">{startItem}–{endItem}</span> of{" "}
+              <span className="font-semibold text-[var(--text-primary)]">{totalBills}</span> bills (Page {page} of {totalPages})
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setPage(Math.max(1, page - 1))}
+                disabled={page <= 1}
+                className="px-3 py-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] hover:bg-[var(--bg-surface-elevated)] font-semibold transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer text-[var(--text-primary)]"
+              >
+                Previous
+              </button>
+              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                let pNum: number;
+                if (totalPages <= 5) {
+                  pNum = i + 1;
+                } else if (page <= 3) {
+                  pNum = i + 1;
+                } else if (page >= totalPages - 2) {
+                  pNum = totalPages - 4 + i;
+                } else {
+                  pNum = page - 2 + i;
+                }
+                return (
+                  <button
+                    key={pNum}
+                    type="button"
+                    onClick={() => setPage(pNum)}
+                    className={`min-w-[32px] px-2.5 py-1.5 rounded-lg border font-semibold transition text-xs ${
+                      page === pNum
+                        ? "bg-[var(--accent-brand)] border-[var(--accent-brand)] text-[var(--text-on-accent)] shadow-xs"
+                        : "border-[var(--border-subtle)] bg-[var(--bg-card)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-elevated)] cursor-pointer"
+                    }`}
+                  >
+                    {pNum}
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                onClick={() => setPage(Math.min(totalPages, page + 1))}
+                disabled={page >= totalPages}
+                className="px-3 py-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] hover:bg-[var(--bg-surface-elevated)] font-semibold transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer text-[var(--text-primary)]"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* DETAILED BILL VIEW MODAL */}

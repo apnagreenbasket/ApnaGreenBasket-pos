@@ -38,6 +38,8 @@ type Props = {
   restaurant?: RestaurantProfile | null;
 };
 
+const PAGE_SIZE = 25;
+
 export function ServiceChargesReport({ isLoading = false, fromDate, toDate, datePreset, restaurant }: Props) {
   const [isExportingCsv, setIsExportingCsv] = useState(false);
 
@@ -69,8 +71,8 @@ export function ServiceChargesReport({ isLoading = false, fromDate, toDate, date
       try {
         const queryParams: string[] = [
           `charge_filter=${chargeFilter}`,
-          `limit=50`,
-          `offset=${(billsPage - 1) * 50}`,
+          `limit=${PAGE_SIZE}`,
+          `offset=${(billsPage - 1) * PAGE_SIZE}`,
         ];
         if (fromDate) queryParams.push(`from_date=${encodeURIComponent(fromDate)}`);
         if (toDate) queryParams.push(`to_date=${encodeURIComponent(toDate)}`);
@@ -231,6 +233,22 @@ export function ServiceChargesReport({ isLoading = false, fromDate, toDate, date
   }
 
   const d = reportData;
+  const totalMatchingBills = d ? (
+    chargeFilter === "ALL_CHARGES"
+      ? (d.bills_with_charges_count ?? 0)
+      : chargeFilter === "HANDLING_ONLY"
+      ? (d.handling_only_count ?? 0)
+      : chargeFilter === "DELIVERY_ONLY"
+      ? (d.delivery_only_count ?? 0)
+      : chargeFilter === "BOTH"
+      ? (d.both_charges_count ?? 0)
+      : chargeFilter === "ZERO_CHARGES"
+      ? (d.zero_charges_count ?? 0)
+      : (d.total_bills ?? 0)
+  ) : 0;
+  const totalPages = Math.max(1, Math.ceil(totalMatchingBills / PAGE_SIZE));
+  const startItem = totalMatchingBills === 0 ? 0 : (billsPage - 1) * PAGE_SIZE + 1;
+  const endItem = Math.min(billsPage * PAGE_SIZE, totalMatchingBills);
 
   return (
     <div className="space-y-6">
@@ -612,24 +630,52 @@ export function ServiceChargesReport({ isLoading = false, fromDate, toDate, date
 
           {/* Pagination Controls */}
           {d && d.bills.length > 0 && (
-            <div className="flex items-center justify-between border-t border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 py-2.5 text-xs text-[var(--text-muted)]">
-              <span>
-                Showing page {billsPage} ({d.bills.length} bills)
-              </span>
-              <div className="flex items-center gap-2">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-[var(--border-subtle)] bg-[var(--bg-surface)] px-5 py-3 text-xs text-[var(--text-muted)]">
+              <div>
+                Showing <span className="font-semibold text-[var(--text-primary)]">{startItem}–{endItem}</span> of{" "}
+                <span className="font-semibold text-[var(--text-primary)]">{totalMatchingBills}</span> bills (Page {billsPage} of {totalPages})
+              </div>
+              <div className="flex items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => setBillsPage((p) => Math.max(1, p - 1))}
-                  disabled={billsPage <= 1}
-                  className="px-2.5 py-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] disabled:opacity-40 cursor-pointer font-semibold"
+                  disabled={billsPage <= 1 || isLoadingBills}
+                  className="px-3 py-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] hover:bg-[var(--bg-surface-elevated)] font-semibold transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer text-[var(--text-primary)]"
                 >
                   Previous
                 </button>
+                {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                  let pNum: number;
+                  if (totalPages <= 5) {
+                    pNum = i + 1;
+                  } else if (billsPage <= 3) {
+                    pNum = i + 1;
+                  } else if (billsPage >= totalPages - 2) {
+                    pNum = totalPages - 4 + i;
+                  } else {
+                    pNum = billsPage - 2 + i;
+                  }
+                  return (
+                    <button
+                      key={pNum}
+                      type="button"
+                      onClick={() => setBillsPage(pNum)}
+                      disabled={isLoadingBills}
+                      className={`min-w-[32px] px-2.5 py-1.5 rounded-lg border font-semibold transition text-xs ${
+                        billsPage === pNum
+                          ? "bg-indigo-600 border-indigo-600 text-white shadow-xs"
+                          : "border-[var(--border-subtle)] bg-[var(--bg-card)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-elevated)] cursor-pointer"
+                      }`}
+                    >
+                      {pNum}
+                    </button>
+                  );
+                })}
                 <button
                   type="button"
                   onClick={() => setBillsPage((p) => p + 1)}
-                  disabled={d.bills.length < 50}
-                  className="px-2.5 py-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] disabled:opacity-40 cursor-pointer font-semibold"
+                  disabled={billsPage >= totalPages || d.bills.length < PAGE_SIZE || isLoadingBills}
+                  className="px-3 py-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] hover:bg-[var(--bg-surface-elevated)] font-semibold transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer text-[var(--text-primary)]"
                 >
                   Next
                 </button>

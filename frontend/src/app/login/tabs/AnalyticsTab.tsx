@@ -608,14 +608,14 @@ export function AnalyticsTab(props: AnalyticsTabProps) {
               {props.activeFinancialSubTab === "master_view" && (
                 <div className="space-y-8">
                   <ProfitMarginReport data={props.profitData} />
-                  <BillProfitReport data={props.billProfitData} isLoading={props.isLoading} restaurant={props.restaurant} />
+                  <BillProfitReport data={props.billProfitData} isLoading={props.isLoading} restaurant={props.restaurant} page={props.billProfitPage} setPage={props.setBillProfitPage} pageSize={25} />
                   <TaxSummaryReport data={props.taxSummaryData} gstr1Data={props.gstr1HsnData} isLoading={props.isLoading} fromDate={effectiveDates.fromDate} toDate={effectiveDates.toDate} restaurant={props.restaurant} />
                   <ServiceChargesReport isLoading={props.isLoading} fromDate={effectiveDates.fromDate} toDate={effectiveDates.toDate} datePreset={props.datePreset} restaurant={props.restaurant} />
                   <CashDenominationReport data={props.cashDenomData} isLoading={props.isLoading} />
                 </div>
               )}
               {props.activeFinancialSubTab === "profit_margin" && <ProfitMarginReport data={props.profitData} />}
-              {props.activeFinancialSubTab === "bill_profit" && <BillProfitReport data={props.billProfitData} isLoading={props.isLoading} restaurant={props.restaurant} />}
+              {props.activeFinancialSubTab === "bill_profit" && <BillProfitReport data={props.billProfitData} isLoading={props.isLoading} restaurant={props.restaurant} page={props.billProfitPage} setPage={props.setBillProfitPage} pageSize={25} />}
               {props.activeFinancialSubTab === "tax_summary" && <TaxSummaryReport data={props.taxSummaryData} gstr1Data={props.gstr1HsnData} isLoading={props.isLoading} fromDate={effectiveDates.fromDate} toDate={effectiveDates.toDate} restaurant={props.restaurant} />}
               {props.activeFinancialSubTab === "service_charges" && <ServiceChargesReport isLoading={props.isLoading} fromDate={effectiveDates.fromDate} toDate={effectiveDates.toDate} datePreset={props.datePreset} restaurant={props.restaurant} />}
               {props.activeFinancialSubTab === "cash_denominations" && <CashDenominationReport data={props.cashDenomData} isLoading={props.isLoading} />}
