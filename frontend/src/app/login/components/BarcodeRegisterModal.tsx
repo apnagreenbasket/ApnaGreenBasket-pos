@@ -1,9 +1,19 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { Barcode, CheckCircle2, Package, Sparkles, X, Building2, Plus, Search, Percent, Trash2 } from "lucide-react";
+import { Barcode, CheckCircle2, Package, Sparkles, X, Building2, Plus, Search, Percent, Trash2, ChevronDown } from "lucide-react";
 import type { InventoryUnit, InventoryItem, Supplier } from "@/types";
 import { formatLocalDate } from "@/lib/api";
 import { parseBarcodeMask, generateItemPlu } from "../barcodeUtils";
 import { useBarcodeScanner } from "@/hooks/useBarcodeScanner";
+
+const STANDARD_INVENTORY_UNITS: Array<{ value: InventoryUnit; label: string }> = [
+  { value: "kg", label: "Kilogram (kg)" },
+  { value: "g", label: "Gram (g)" },
+  { value: "pcs", label: "Pieces / Pack (pcs)" },
+  { value: "box", label: "Box (box)" },
+  { value: "dozen", label: "Dozen (dozen)" },
+  { value: "l", label: "Liter (l)" },
+  { value: "ml", label: "Milliliter (ml)" },
+];
 
 interface BarcodeRegisterModalProps {
   isOpen: boolean;
@@ -80,11 +90,19 @@ export function BarcodeRegisterModal({
     }
   }, [filteredItems, isItemDropdownOpen]);
 
-  const [category, setCategory] = useState(categories[0] || "General");
+  const defaultCategory = useMemo(() => {
+    return categories.find((c) => c.toUpperCase() === "VEGETABLES") || categories[0] || "VEGETABLES";
+  }, [categories]);
+
+  const [category, setCategory] = useState(
+    categories.find((c) => c.toUpperCase() === "VEGETABLES") || categories[0] || "VEGETABLES"
+  );
   const [categorySearch, setCategorySearch] = useState("");
   const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
 
-  const [unit, setUnit] = useState<InventoryUnit>("pcs");
+  const [unit, setUnit] = useState<InventoryUnit>("kg");
+  const [unitSearch, setUnitSearch] = useState("");
+  const [isUnitDropdownOpen, setIsUnitDropdownOpen] = useState(false);
   const [alternateUnits, setAlternateUnits] = useState<Array<{ unit_label: string; conversion_factor: number }>>([]);
   const [initialStock, setInitialStock] = useState("0");
   const [sortedQuantity, setSortedQuantity] = useState("");
@@ -153,8 +171,8 @@ export function BarcodeRegisterModal({
   const populateFromItem = (itm: InventoryItem, shouldFocusQty: boolean = true) => {
     setSelectedItemId(itm.id);
     setName(itm.name);
-    setCategory(itm.category || categories[0] || "General");
-    setUnit(itm.unit || "pcs");
+    setCategory(itm.category || defaultCategory);
+    setUnit((itm.unit as InventoryUnit) || "kg");
     setError(null);
 
     // Auto-update barcode to this item's barcode if it has one,
@@ -267,8 +285,8 @@ export function BarcodeRegisterModal({
         setSelectedItemId(undefined);
         setCustomBarcode(barcode);
         setName("");
-        setCategory(categories[0] || "General");
-        setUnit("pcs");
+        setCategory(defaultCategory);
+        setUnit("kg");
         setCostPerUnit("0");
         setMrp("");
         setSellingPrice("");
@@ -288,6 +306,8 @@ export function BarcodeRegisterModal({
       }
       setCategorySearch("");
       setIsCategoryDropdownOpen(false);
+      setUnitSearch("");
+      setIsUnitDropdownOpen(false);
       setInitialStock("0");
       setSortedQuantity("");
       setTotalBilledAmount("");
@@ -405,9 +425,36 @@ export function BarcodeRegisterModal({
     else if (val === "GST 28%") setTaxRate("28");
   };
 
-  const filteredCategories = categories.filter((c) =>
-    c.toLowerCase().includes(categorySearch.toLowerCase())
-  );
+  const allAvailableUnits = useMemo(() => {
+    const existing = new Set<string>();
+    STANDARD_INVENTORY_UNITS.forEach((u) => existing.add(u.value.toLowerCase()));
+    const customUnits: Array<{ value: InventoryUnit; label: string }> = [];
+    items.forEach((itm) => {
+      if (itm.unit && !existing.has(itm.unit.toLowerCase())) {
+        existing.add(itm.unit.toLowerCase());
+        customUnits.push({ value: itm.unit, label: itm.unit });
+      }
+    });
+    return [...STANDARD_INVENTORY_UNITS, ...customUnits];
+  }, [items]);
+
+  const filteredCategories = useMemo(() => {
+    const q = categorySearch.trim().toLowerCase();
+    if (!q || q === category.trim().toLowerCase()) {
+      return categories;
+    }
+    return categories.filter((c) => c.toLowerCase().includes(q));
+  }, [categories, categorySearch, category]);
+
+  const filteredUnits = useMemo(() => {
+    const q = unitSearch.trim().toLowerCase();
+    if (!q || q === unit.trim().toLowerCase()) {
+      return allAvailableUnits;
+    }
+    return allAvailableUnits.filter(
+      (u) => u.value.toLowerCase().includes(q) || u.label.toLowerCase().includes(q)
+    );
+  }, [unitSearch, unit, allAvailableUnits]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -802,9 +849,15 @@ export function BarcodeRegisterModal({
                   type="text"
                   placeholder="Select or type new category..."
                   value={isCategoryDropdownOpen ? categorySearch : category}
-                  onFocus={() => {
+                  onFocus={(e) => {
                     setIsCategoryDropdownOpen(true);
                     setCategorySearch(category);
+                    e.target.select();
+                  }}
+                  onClick={(e) => {
+                    setIsCategoryDropdownOpen(true);
+                    setCategorySearch(category);
+                    (e.target as HTMLInputElement).select?.();
                   }}
                   onChange={(e) => {
                     setCategorySearch(e.target.value);
@@ -814,13 +867,26 @@ export function BarcodeRegisterModal({
                   onBlur={() => {
                     setTimeout(() => setIsCategoryDropdownOpen(false), 200);
                   }}
-                  className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3 py-2 text-xs text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none"
+                  className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3 py-2 pr-8 text-xs text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none cursor-pointer"
                 />
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  onClick={() => {
+                    setIsCategoryDropdownOpen((prev) => {
+                      if (!prev) setCategorySearch(category);
+                      return !prev;
+                    });
+                  }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
+                >
+                  <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isCategoryDropdownOpen ? "rotate-180" : ""}`} />
+                </button>
               </div>
 
               {/* Combobox Dropdown List */}
               {isCategoryDropdownOpen && (
-                <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-40 overflow-y-auto rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] py-1 shadow-xl">
+                <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-48 overflow-y-auto rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] py-1 shadow-xl">
                   {filteredCategories.map((c) => (
                     <button
                       key={c}
@@ -830,7 +896,11 @@ export function BarcodeRegisterModal({
                         setCategorySearch(c);
                         setIsCategoryDropdownOpen(false);
                       }}
-                      className="w-full px-3 py-1.5 text-left text-xs text-[var(--text-primary)] hover:bg-[var(--accent-brand)]/15 hover:text-[var(--accent-brand)] transition"
+                      className={`w-full px-3 py-1.5 text-left text-xs transition ${
+                        category.toLowerCase() === c.toLowerCase()
+                          ? "bg-[var(--accent-brand)]/15 text-[var(--accent-brand)] font-bold"
+                          : "text-[var(--text-primary)] hover:bg-[var(--accent-brand)]/10"
+                      }`}
                     >
                       {c}
                     </button>
@@ -842,7 +912,7 @@ export function BarcodeRegisterModal({
                         setCategory(categorySearch.trim());
                         setIsCategoryDropdownOpen(false);
                       }}
-                      className="w-full px-3 py-1.5 text-left text-xs font-semibold text-emerald-400 hover:bg-emerald-500/15 transition"
+                      className="w-full px-3 py-1.5 text-left text-xs font-semibold text-emerald-400 hover:bg-emerald-500/15 transition border-t border-[var(--border-subtle)]"
                     >
                       + Create category "{categorySearch.trim()}"
                     </button>
@@ -852,27 +922,90 @@ export function BarcodeRegisterModal({
             </div>
 
             {/* Unit */}
-            <div>
+            <div className="relative">
               <label className="block text-xs font-semibold text-[var(--text-primary)] mb-1">
-                Unit of Measurement
+                Unit of Measurement *
               </label>
-              <input
-                type="text"
-                list="inventory-units"
-                value={unit}
-                onChange={(e) => setUnit(e.target.value as InventoryUnit)}
-                placeholder="e.g. pcs, kg, box"
-                className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3 py-2 text-xs text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none"
-              />
-              <datalist id="inventory-units">
-                <option value="pcs">Pieces / Pack (pcs)</option>
-                <option value="kg">Kilogram (kg)</option>
-                <option value="g">Gram (g)</option>
-                <option value="l">Liter (l)</option>
-                <option value="ml">Milliliter (ml)</option>
-                <option value="box">Box</option>
-                <option value="dozen">Dozen</option>
-              </datalist>
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Select unit (e.g. kg, pcs, box)..."
+                  value={isUnitDropdownOpen ? unitSearch : unit}
+                  onFocus={(e) => {
+                    setIsUnitDropdownOpen(true);
+                    setUnitSearch(unit);
+                    e.target.select();
+                  }}
+                  onClick={(e) => {
+                    setIsUnitDropdownOpen(true);
+                    setUnitSearch(unit);
+                    (e.target as HTMLInputElement).select?.();
+                  }}
+                  onChange={(e) => {
+                    setUnitSearch(e.target.value);
+                    setUnit(e.target.value as InventoryUnit);
+                    setIsUnitDropdownOpen(true);
+                  }}
+                  onBlur={() => {
+                    setTimeout(() => setIsUnitDropdownOpen(false), 200);
+                  }}
+                  className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3 py-2 pr-8 text-xs text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none cursor-pointer"
+                />
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  onClick={() => {
+                    setIsUnitDropdownOpen((prev) => {
+                      if (!prev) setUnitSearch(unit);
+                      return !prev;
+                    });
+                  }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
+                >
+                  <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isUnitDropdownOpen ? "rotate-180" : ""}`} />
+                </button>
+              </div>
+
+              {/* Unit Dropdown List */}
+              {isUnitDropdownOpen && (
+                <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-48 overflow-y-auto rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] py-1 shadow-xl">
+                  {filteredUnits.map((u) => (
+                    <button
+                      key={u.value}
+                      type="button"
+                      onMouseDown={() => {
+                        setUnit(u.value);
+                        setUnitSearch(u.value);
+                        setIsUnitDropdownOpen(false);
+                      }}
+                      className={`w-full px-3 py-1.5 text-left text-xs transition flex items-center justify-between ${
+                        unit.toLowerCase() === u.value.toLowerCase()
+                          ? "bg-[var(--accent-brand)]/15 text-[var(--accent-brand)] font-bold"
+                          : "text-[var(--text-primary)] hover:bg-[var(--accent-brand)]/10"
+                      }`}
+                    >
+                      <span>{u.label}</span>
+                      <span className="text-[10px] text-[var(--text-muted)] font-normal">{u.value}</span>
+                    </button>
+                  ))}
+                  {unitSearch.trim() &&
+                    !allAvailableUnits.some(
+                      (u) => u.value.toLowerCase() === unitSearch.trim().toLowerCase()
+                    ) && (
+                      <button
+                        type="button"
+                        onMouseDown={() => {
+                          setUnit(unitSearch.trim() as InventoryUnit);
+                          setUnitSearch(unitSearch.trim());
+                          setIsUnitDropdownOpen(false);
+                        }}
+                        className="w-full px-3 py-1.5 text-left text-xs font-semibold text-emerald-400 hover:bg-emerald-500/15 transition border-t border-[var(--border-subtle)]"
+                      >
+                        + Use custom unit "{unitSearch.trim()}"
+                      </button>
+                    )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -914,7 +1047,7 @@ export function BarcodeRegisterModal({
                           newUnits[idx].conversion_factor = parseFloat(e.target.value) || 1;
                           setAlternateUnits(newUnits);
                         }}
-                        className="w-16 shrink-0 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2 py-1.5 font-mono text-xs text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none text-center"
+                        className="w-16 shrink-0 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2 py-1.5 font-mono text-xs text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
                       <input
                         type="text"
@@ -973,7 +1106,7 @@ export function BarcodeRegisterModal({
                       mrpRef.current?.select();
                     }
                   }}
-                  className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-2.5 py-1.5 text-xs font-mono text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none"
+                  className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-2.5 py-1.5 text-xs font-mono text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
 
@@ -995,7 +1128,7 @@ export function BarcodeRegisterModal({
                       mrpRef.current?.select();
                     }
                   }}
-                  className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-2.5 py-1.5 text-xs font-mono text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none"
+                  className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-2.5 py-1.5 text-xs font-mono text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
 
@@ -1010,7 +1143,7 @@ export function BarcodeRegisterModal({
                   placeholder="e.g. 80"
                   value={sortedQuantity}
                   onChange={(e) => setSortedQuantity(e.target.value)}
-                  className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-2.5 py-1.5 text-xs font-mono text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none"
+                  className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-2.5 py-1.5 text-xs font-mono text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
             </div>
@@ -1067,7 +1200,7 @@ export function BarcodeRegisterModal({
                       mrpRef.current?.select();
                     }
                   }}
-                  className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-xs font-mono text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none"
+                  className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-xs font-mono text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
               <div>
@@ -1080,7 +1213,7 @@ export function BarcodeRegisterModal({
                   placeholder="e.g. 20"
                   value={retailMarginPct}
                   onChange={(e) => setRetailMarginPct(e.target.value)}
-                  className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-xs font-mono text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none"
+                  className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-xs font-mono text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
               <div>
@@ -1093,7 +1226,7 @@ export function BarcodeRegisterModal({
                   placeholder="e.g. 10"
                   value={wholesaleMarginPct}
                   onChange={(e) => setWholesaleMarginPct(e.target.value)}
-                  className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-xs font-mono text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none"
+                  className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-xs font-mono text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
             </div>
@@ -1129,7 +1262,7 @@ export function BarcodeRegisterModal({
                     }
                   }
                 }}
-                className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3 py-2 text-xs font-mono text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none"
+                className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3 py-2 text-xs font-mono text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
               {mrpExact && mrpExact !== mrp && (
                 <div className="text-[9px] text-[var(--text-muted)] mt-1 ml-1 font-mono">
@@ -1165,7 +1298,7 @@ export function BarcodeRegisterModal({
                     }
                   }
                 }}
-                className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3 py-2 text-xs font-mono text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none"
+                className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3 py-2 text-xs font-mono text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
               {retailExact && retailExact !== sellingPrice && (
                 <div className="text-[9px] text-[var(--text-muted)] mt-1 ml-1 font-mono">
@@ -1189,7 +1322,7 @@ export function BarcodeRegisterModal({
                   setWholesaleMarginPct(""); // clear margin if manual override
                   setWholesaleExact("");
                 }}
-                className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3 py-2 text-xs font-mono text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none"
+                className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3 py-2 text-xs font-mono text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
               {wholesaleExact && wholesaleExact !== wholesalePrice && (
                 <div className="text-[9px] text-[var(--text-muted)] mt-1 ml-1 font-mono">
@@ -1237,7 +1370,7 @@ export function BarcodeRegisterModal({
                     placeholder="Custom GST %"
                     value={customTaxRate}
                     onChange={(e) => setCustomTaxRate(e.target.value)}
-                    className="w-24 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-2.5 py-2 text-xs font-mono text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none"
+                    className="w-24 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-2.5 py-2 text-xs font-mono text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
                 )}
               </div>
@@ -1377,7 +1510,7 @@ export function BarcodeRegisterModal({
                     placeholder={shelfLifeUnit === "DAYS" ? "e.g. 2 or 0.5" : "e.g. 48"}
                     value={shelfLifeValue}
                     onChange={(e) => setShelfLifeValue(e.target.value)}
-                    className="w-full rounded-lg border border-red-500/30 bg-red-500/5 px-2.5 py-1.5 pr-11 text-xs font-mono text-red-300 focus:border-red-500 focus:outline-none placeholder:text-red-900/50"
+                    className="w-full rounded-lg border border-red-500/30 bg-red-500/5 px-2.5 py-1.5 pr-11 text-xs font-mono text-red-300 focus:border-red-500 focus:outline-none placeholder:text-red-900/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
                   <span className="absolute right-2.5 top-1.5 text-[10px] font-mono font-semibold text-red-400/70 pointer-events-none">
                     {shelfLifeUnit === "DAYS" ? "days" : "hrs"}

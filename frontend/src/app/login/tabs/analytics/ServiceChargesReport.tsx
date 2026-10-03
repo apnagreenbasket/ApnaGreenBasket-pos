@@ -34,16 +34,18 @@ type Props = {
   isLoading?: boolean;
   fromDate?: string;
   toDate?: string;
+  datePreset?: string;
   restaurant?: RestaurantProfile | null;
 };
 
-export function ServiceChargesReport({ isLoading = false, fromDate, toDate, restaurant }: Props) {
+export function ServiceChargesReport({ isLoading = false, fromDate, toDate, datePreset, restaurant }: Props) {
   const [isExportingCsv, setIsExportingCsv] = useState(false);
 
   // ── Service Charges Register State ──────────────────────────────────────────
   const [chargeFilter, setChargeFilter] = useState<ChargeFilterType>("ALL_CHARGES");
   const [reportData, setReportData] = useState<ServiceChargesSummaryResponse | null>(null);
   const [isLoadingBills, setIsLoadingBills] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [billsPage, setBillsPage] = useState(1);
   const [selectedBillForView, setSelectedBillForView] = useState<{
     summary: ServiceChargeBillRow;
@@ -53,11 +55,17 @@ export function ServiceChargesReport({ isLoading = false, fromDate, toDate, rest
   } | null>(null);
   const [fetchingOrderId, setFetchingOrderId] = useState<string | null>(null);
 
+  // Reset page when dates or preset change
+  useEffect(() => {
+    setBillsPage(1);
+  }, [fromDate, toDate, datePreset]);
+
   // Load service charges summary & bills register
   useEffect(() => {
     let isCancelled = false;
     const loadBills = async () => {
       setIsLoadingBills(true);
+      setLoadError(null);
       try {
         const queryParams: string[] = [
           `charge_filter=${chargeFilter}`,
@@ -72,8 +80,11 @@ export function ServiceChargesReport({ isLoading = false, fromDate, toDate, rest
         if (!isCancelled) {
           setReportData(res);
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error("Failed to load service charges summary:", err);
+        if (!isCancelled) {
+          setLoadError(err.message || "Failed to load service charges summary");
+        }
       } finally {
         if (!isCancelled) {
           setIsLoadingBills(false);
@@ -84,7 +95,7 @@ export function ServiceChargesReport({ isLoading = false, fromDate, toDate, rest
     return () => {
       isCancelled = true;
     };
-  }, [fromDate, toDate, chargeFilter, billsPage]);
+  }, [fromDate, toDate, chargeFilter, billsPage, datePreset]);
 
   // Open detailed bill view modal
   const handleOpenBillView = async (bill: ServiceChargeBillRow) => {
@@ -503,6 +514,23 @@ export function ServiceChargesReport({ isLoading = false, fromDate, toDate, rest
                     <td colSpan={11} className="px-6 py-8 text-center text-xs text-[var(--text-muted)] font-sans">
                       <Loader2 className="mx-auto h-5 w-5 animate-spin mb-2 opacity-50 text-indigo-400" />
                       Loading service charges register...
+                    </td>
+                  </tr>
+                ) : loadError ? (
+                  <tr>
+                    <td colSpan={11} className="px-6 py-8 text-center text-xs text-rose-400 font-sans">
+                      <AlertCircle className="mx-auto h-6 w-6 mb-2 opacity-70 text-rose-400" />
+                      <p className="font-semibold">{loadError}</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBillsPage((p) => p);
+                          setIsLoadingBills(true);
+                        }}
+                        className="mt-2 text-xs text-indigo-400 hover:underline cursor-pointer"
+                      >
+                        Try again
+                      </button>
                     </td>
                   </tr>
                 ) : !d || d.bills.length === 0 ? (

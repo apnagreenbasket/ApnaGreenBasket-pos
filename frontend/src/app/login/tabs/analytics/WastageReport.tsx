@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Trash2, PackageOpen, Loader2 } from "lucide-react";
 import { useTableSortAndSearch } from "../../hooks/useTableSortAndSearch";
 import { SortableHeader, TableSearchBar } from "./shared";
@@ -11,7 +11,30 @@ type Props = {
 };
 
 export function WastageReport({ data, isLoading }: Props) {
-  const items = data?.items || [];
+  // Defensive filter: Ensure voided batches are never displayed in the wastage report
+  const rawItems = data?.items || [];
+  const items = useMemo(() => {
+    return rawItems.filter((item) => {
+      const r = (item.reason || "").toUpperCase();
+      const ct = (item.change_type || "").toUpperCase();
+      return !r.includes("VOID") && !ct.includes("VOID");
+    });
+  }, [rawItems]);
+
+  const totalEntries = items.length === rawItems.length ? (data?.total_wastage_entries ?? items.length) : items.length;
+  const totalQtyWasted = useMemo(() => {
+    if (items.length === rawItems.length && data?.total_quantity_wasted !== undefined) {
+      return data.total_quantity_wasted;
+    }
+    return Number(items.reduce((acc, it) => acc + (Number(it.quantity_wasted) || 0), 0).toFixed(2));
+  }, [items, rawItems.length, data?.total_quantity_wasted]);
+
+  const totalLossValue = useMemo(() => {
+    if (items.length === rawItems.length && data?.total_wastage_cost !== undefined) {
+      return data.total_wastage_cost;
+    }
+    return items.reduce((acc, it) => acc + (Number(it.wastage_cost) || 0), 0);
+  }, [items, rawItems.length, data?.total_wastage_cost]);
 
   const {
     searchQuery,
@@ -47,19 +70,19 @@ export function WastageReport({ data, isLoading }: Props) {
         <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-5 shadow-sm">
           <p className="text-sm font-medium text-[var(--text-secondary)]">Wastage Entries</p>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-3xl font-bold text-[var(--text-primary)]">{data.total_wastage_entries}</span>
+            <span className="text-3xl font-bold text-[var(--text-primary)]">{totalEntries}</span>
           </div>
         </div>
         <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-5 shadow-sm">
           <p className="text-sm font-medium text-[var(--text-secondary)]">Qty Wasted</p>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-3xl font-bold text-[var(--text-primary)]">{data.total_quantity_wasted}</span>
+            <span className="text-3xl font-bold text-[var(--text-primary)]">{totalQtyWasted}</span>
           </div>
         </div>
         <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-5 shadow-sm">
           <p className="text-sm font-medium text-red-600 dark:text-red-400">Total Loss Value</p>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-3xl font-bold text-red-600 dark:text-red-400">₹{data.total_wastage_cost.toFixed(2)}</span>
+            <span className="text-3xl font-bold text-red-600 dark:text-red-400">₹{totalLossValue.toFixed(2)}</span>
           </div>
           {(data.total_audit_corrections || 0) > 0 && (
             <p className="mt-1.5 text-xs text-[var(--text-muted)]">

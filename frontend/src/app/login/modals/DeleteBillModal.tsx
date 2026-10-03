@@ -25,7 +25,6 @@ export function DeleteBillModal({
       {/* Backdrop */}
       <div 
         className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" 
-        onClick={onClose}
       />
       
       {/* Modal */}

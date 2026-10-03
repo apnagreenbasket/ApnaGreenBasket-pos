@@ -149,6 +149,50 @@ export function AnalyticsTab(props: AnalyticsTabProps) {
     props.billProfitPage, props.dayBookDate
   ]);
 
+  // Memoize effective ISO date range so sub-reports receive live dates matching presets
+  const effectiveDates = React.useMemo(() => {
+    let fromStr = "";
+    let toStr = "";
+    const now = new Date();
+
+    if (props.datePreset === "today") {
+      const from = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+      const to = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      fromStr = from.toISOString();
+      toStr = to.toISOString();
+    } else if (props.datePreset === "yesterday") {
+      const from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0);
+      const to = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59, 999);
+      fromStr = from.toISOString();
+      toStr = to.toISOString();
+    } else if (props.datePreset === "last_7") {
+      const from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      fromStr = from.toISOString();
+      toStr = now.toISOString();
+    } else if (props.datePreset === "last_30") {
+      const from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      fromStr = from.toISOString();
+      toStr = now.toISOString();
+    } else if (props.datePreset === "this_month") {
+      const from = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
+      fromStr = from.toISOString();
+      toStr = now.toISOString();
+    } else if (props.datePreset === "last_month") {
+      const from = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0);
+      const to = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+      fromStr = from.toISOString();
+      toStr = to.toISOString();
+    } else if (props.datePreset === "custom" && props.customFromDate && props.customToDate) {
+      const [fYear, fMonth, fDay] = props.customFromDate.split("-").map(Number);
+      fromStr = new Date(fYear, fMonth - 1, fDay, 0, 0, 0).toISOString();
+
+      const [tYear, tMonth, tDay] = props.customToDate.split("-").map(Number);
+      toStr = new Date(tYear, tMonth - 1, tDay, 23, 59, 59, 999).toISOString();
+    }
+
+    return { fromDate: fromStr, toDate: toStr };
+  }, [props.datePreset, props.customFromDate, props.customToDate]);
+
   return (
     <div className="space-y-6">
       {/* HEADER */}
@@ -319,9 +363,7 @@ export function AnalyticsTab(props: AnalyticsTabProps) {
                   });
                 }
               } else if (props.activeTab === "financial") {
-                if (props.activeFinancialSubTab === "outlet_earnings") {
-                  generateOutletEarningsPdfReport(props.restaurant, dateRangeLabel, props.outletEarningsData);
-                } else if (props.activeFinancialSubTab === "profit_margin") {
+                if (props.activeFinancialSubTab === "profit_margin") {
                   generateProfitMarginPdfReport(props.restaurant, dateRangeLabel, props.profitData);
                 } else if (props.activeFinancialSubTab === "bill_profit") {
                   generateBillProfitPdfReport(props.restaurant, dateRangeLabel, props.billProfitData);
@@ -552,7 +594,7 @@ export function AnalyticsTab(props: AnalyticsTabProps) {
           {props.activeTab === "financial" && (
             <div className="space-y-4">
               <div className="flex gap-2">
-                {["master_view", "outlet_earnings", "profit_margin", "bill_profit", "tax_summary", "service_charges", "cash_denominations"].map(sub => (
+                {["master_view", "profit_margin", "bill_profit", "tax_summary", "service_charges", "cash_denominations"].map(sub => (
                   <button
                     key={sub}
                     onClick={() => props.setActiveFinancialSubTab(sub)}
@@ -565,19 +607,17 @@ export function AnalyticsTab(props: AnalyticsTabProps) {
               
               {props.activeFinancialSubTab === "master_view" && (
                 <div className="space-y-8">
-                  <OutletEarningsReport data={props.outletEarningsData} isLoading={props.isLoading} />
                   <ProfitMarginReport data={props.profitData} />
                   <BillProfitReport data={props.billProfitData} isLoading={props.isLoading} restaurant={props.restaurant} />
-                  <TaxSummaryReport data={props.taxSummaryData} gstr1Data={props.gstr1HsnData} isLoading={props.isLoading} fromDate={props.customFromDate} toDate={props.customToDate} restaurant={props.restaurant} />
-                  <ServiceChargesReport isLoading={props.isLoading} fromDate={props.customFromDate} toDate={props.customToDate} restaurant={props.restaurant} />
+                  <TaxSummaryReport data={props.taxSummaryData} gstr1Data={props.gstr1HsnData} isLoading={props.isLoading} fromDate={effectiveDates.fromDate} toDate={effectiveDates.toDate} restaurant={props.restaurant} />
+                  <ServiceChargesReport isLoading={props.isLoading} fromDate={effectiveDates.fromDate} toDate={effectiveDates.toDate} datePreset={props.datePreset} restaurant={props.restaurant} />
                   <CashDenominationReport data={props.cashDenomData} isLoading={props.isLoading} />
                 </div>
               )}
-              {props.activeFinancialSubTab === "outlet_earnings" && <OutletEarningsReport data={props.outletEarningsData} isLoading={props.isLoading} />}
               {props.activeFinancialSubTab === "profit_margin" && <ProfitMarginReport data={props.profitData} />}
               {props.activeFinancialSubTab === "bill_profit" && <BillProfitReport data={props.billProfitData} isLoading={props.isLoading} restaurant={props.restaurant} />}
-              {props.activeFinancialSubTab === "tax_summary" && <TaxSummaryReport data={props.taxSummaryData} gstr1Data={props.gstr1HsnData} isLoading={props.isLoading} fromDate={props.customFromDate} toDate={props.customToDate} restaurant={props.restaurant} />}
-              {props.activeFinancialSubTab === "service_charges" && <ServiceChargesReport isLoading={props.isLoading} fromDate={props.customFromDate} toDate={props.customToDate} restaurant={props.restaurant} />}
+              {props.activeFinancialSubTab === "tax_summary" && <TaxSummaryReport data={props.taxSummaryData} gstr1Data={props.gstr1HsnData} isLoading={props.isLoading} fromDate={effectiveDates.fromDate} toDate={effectiveDates.toDate} restaurant={props.restaurant} />}
+              {props.activeFinancialSubTab === "service_charges" && <ServiceChargesReport isLoading={props.isLoading} fromDate={effectiveDates.fromDate} toDate={effectiveDates.toDate} datePreset={props.datePreset} restaurant={props.restaurant} />}
               {props.activeFinancialSubTab === "cash_denominations" && <CashDenominationReport data={props.cashDenomData} isLoading={props.isLoading} />}
             </div>
           )}

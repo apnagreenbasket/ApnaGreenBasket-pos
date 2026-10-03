@@ -1864,8 +1864,12 @@ async def get_wastage_report(
             StockLedger.outlet_id == outlet_id,
             StockLedger.created_at >= from_dt,
             StockLedger.created_at <= to_dt,
-            ( (StockLedger.change_type == StockChangeTypeEnum.MANUAL_ADJUSTMENT) & (StockLedger.quantity_change < 0) ) | 
-            (StockLedger.change_type == StockChangeTypeEnum.VOID_BATCH)
+            StockLedger.change_type == StockChangeTypeEnum.MANUAL_ADJUSTMENT,
+            StockLedger.quantity_change < 0,
+            or_(
+                StockLedger.reason.is_(None),
+                ~StockLedger.reason.in_(["VOID_BATCH", "INTAKE_CORRECTION", "OVERSOLD_RECONCILE"]),
+            ),
         )
         .order_by(StockLedger.created_at.desc())
     )
@@ -1881,7 +1885,6 @@ async def get_wastage_report(
         "AUDIT_CORRECTION": "Audit Variance",
         "THEFT_LOST": "Theft / Missing",
         "OTHER": "Other Reason",
-        "VOID_BATCH": "Batch Voided",
     }
 
     audit_count = 0
@@ -3263,7 +3266,7 @@ async def get_service_charges_summary(
             Order.created_at >= from_dt_naive,
             Order.created_at <= to_dt_naive,
             Order.status.in_(SETTLED_STATUSES),
-            Order.is_void == False,
+            func.coalesce(Order.is_void, False) == False,
         )
         .group_by(OrderItem.order_id)
     )
@@ -3278,7 +3281,7 @@ async def get_service_charges_summary(
             Order.created_at >= from_dt_naive,
             Order.created_at <= to_dt_naive,
             Order.status.in_(SETTLED_STATUSES),
-            Order.is_void == False,
+            func.coalesce(Order.is_void, False) == False,
         )
         .order_by(Order.created_at.desc())
     )
@@ -3332,19 +3335,20 @@ async def get_service_charges_summary(
             zero_charges_count += 1
             zero_charges_turnover += order_total
 
-        # Filter check
+        # Filter check (case-insensitive)
+        norm_filter = (charge_filter or "").upper().strip()
         matches_filter = False
-        if charge_filter == "ALL_CHARGES":
+        if norm_filter == "ALL_CHARGES":
             matches_filter = has_any_chg
-        elif charge_filter == "HANDLING_ONLY":
+        elif norm_filter == "HANDLING_ONLY":
             matches_filter = has_hnd and not has_del
-        elif charge_filter == "DELIVERY_ONLY":
+        elif norm_filter == "DELIVERY_ONLY":
             matches_filter = has_del and not has_hnd
-        elif charge_filter == "BOTH":
+        elif norm_filter == "BOTH":
             matches_filter = has_del and has_hnd
-        elif charge_filter == "ZERO_CHARGES":
+        elif norm_filter == "ZERO_CHARGES":
             matches_filter = not has_any_chg
-        elif charge_filter == "ALL_BILLS":
+        elif norm_filter == "ALL_BILLS":
             matches_filter = True
         else:
             matches_filter = has_any_chg
@@ -3361,7 +3365,7 @@ async def get_service_charges_summary(
                 ServiceChargeBillRow(
                     order_id=str(ord_obj.id),
                     basket_number=ord_obj.basket_number or "",
-                    invoice_no=ord_obj.invoice_no,
+                    invoice_no=getattr(ord_obj, "invoice_no", None) or ord_obj.basket_number,
                     created_at=ord_obj.created_at.isoformat()
                     if hasattr(ord_obj.created_at, "isoformat")
                     else str(ord_obj.created_at),

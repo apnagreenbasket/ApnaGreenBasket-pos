@@ -75,7 +75,6 @@ export function DeleteInventoryModal({
       {/* Backdrop */}
       <div
         className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity animate-in fade-in duration-200"
-        onClick={handleClose}
       />
 
       {/* Modal Dialog */}

@@ -196,10 +196,10 @@ export function BulkOperationsMenu({
                     setIsOpen(false);
                     onAddItem();
                   }}
-                  className="w-full px-3.5 py-2 text-left text-xs font-bold text-black dark:text-white hover:bg-[var(--bg-surface-hover)] flex items-center gap-2 cursor-pointer"
+                  className="w-full px-3.5 py-2.5 text-left text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--accent-brand)]/10 hover:text-[var(--accent-brand)] flex items-center gap-2 cursor-pointer transition"
                 >
                   <Plus className="h-4 w-4 text-[var(--accent-brand)]" />
-                  <span>+ Add Item</span>
+                  <span>Add New Item</span>
                 </button>
                 <div className="my-1 border-t border-[var(--border-subtle)]" />
               </>

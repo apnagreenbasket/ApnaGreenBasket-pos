@@ -445,7 +445,7 @@ export function SettingsTab({
                           near_expiry_threshold_days: parseInt(event.target.value) || 7,
                         }))
                       }
-                      className="w-20 rounded-xl border border-amber-500/40 bg-[var(--bg-surface-elevated)] px-3 py-1.5 text-center text-sm font-bold text-amber-400 focus:border-amber-400 focus:outline-none"
+                      className="w-20 rounded-xl border border-amber-500/40 bg-[var(--bg-surface-elevated)] px-3 py-1.5 text-center text-sm font-bold text-amber-400 focus:border-amber-400 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                     <span className="text-xs font-semibold text-amber-400">Days</span>
                   </div>
@@ -672,7 +672,7 @@ export function SettingsTab({
                       max={120}
                       value={restaurantForm.session_duration_minutes}
                       onChange={(event) => setRestaurantForm((current) => ({ ...current, session_duration_minutes: parseInt(event.target.value) || 30 }))}
-                      className="w-24 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3 py-2 text-sm text-center"
+                      className="w-24 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3 py-2 text-sm text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                     <span className="text-xs text-[var(--text-muted)]">min (5–120). How long a customer's basket session lasts before expiry.</span>
                   </div>
@@ -709,7 +709,7 @@ export function SettingsTab({
                       placeholder="Disabled (Manual for all)"
                       value={restaurantForm.verification_amount_cutoff || ""}
                       onChange={(event) => setRestaurantForm((current) => ({ ...current, verification_amount_cutoff: event.target.value }))}
-                      className="w-44 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-2 text-sm"
+                      className="w-44 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-2 text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                     <span className="text-xs text-[var(--text-muted)]">Orders under this amount skip manual verification.</span>
                   </div>
@@ -767,7 +767,7 @@ export function SettingsTab({
                       min={0}
                       value={restaurantForm.loyalty_points_per_100_inr}
                       onChange={(event) => setRestaurantForm((current) => ({ ...current, loyalty_points_per_100_inr: parseInt(event.target.value) || 0 }))}
-                      className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-2 text-sm font-bold text-sky-400"
+                      className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-2 text-sm font-bold text-sky-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                     <span className="text-[10px] text-[var(--text-muted)] block">e.g. 5 means ₹350 bill earns 18 points. Set 0 to disable.</span>
                   </label>
@@ -782,7 +782,7 @@ export function SettingsTab({
                       value={restaurantForm.loyalty_max_bill_percentage}
                       onChange={(event) => setRestaurantForm((current) => ({ ...current, loyalty_max_bill_percentage: event.target.value }))}
                       placeholder="100.00"
-                      className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-2 text-sm font-mono"
+                      className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-2 text-sm font-mono [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                     <span className="text-[10px] text-[var(--text-muted)] block">Cap to prevent 100% free bills.</span>
                   </label>
@@ -823,7 +823,7 @@ export function SettingsTab({
                               newTiers[idx].min_points = parseInt(e.target.value) || 0;
                               setRestaurantForm({ ...restaurantForm, loyalty_redemption_tiers: newTiers });
                             }}
-                            className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2 py-1.5 text-xs font-mono"
+                            className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2 py-1.5 text-xs font-mono [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           />
                           <input
                             type="number"
@@ -835,7 +835,7 @@ export function SettingsTab({
                               newTiers[idx].max_points = e.target.value === "" ? null : parseInt(e.target.value);
                               setRestaurantForm({ ...restaurantForm, loyalty_redemption_tiers: newTiers });
                             }}
-                            className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2 py-1.5 text-xs font-mono"
+                            className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2 py-1.5 text-xs font-mono [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           />
                           <div className="relative">
                             <input
@@ -849,7 +849,7 @@ export function SettingsTab({
                                 newTiers[idx].discount_percentage = parseFloat(e.target.value) || 0;
                                 setRestaurantForm({ ...restaurantForm, loyalty_redemption_tiers: newTiers });
                               }}
-                              className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2 py-1.5 text-xs font-mono"
+                              className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2 py-1.5 text-xs font-mono [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                             />
                             <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-[var(--text-muted)]">%</span>
                           </div>

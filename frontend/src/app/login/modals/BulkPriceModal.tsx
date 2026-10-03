@@ -443,7 +443,7 @@ export function BulkPriceModal({
                       placeholder="0.00"
                       value={row.mrp}
                       onChange={(e) => handleRowChange(row.id, "mrp", e.target.value)}
-                      className="w-24 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2 py-1 font-mono text-xs text-[var(--text-primary)] focus:border-sky-500 outline-none"
+                      className="w-24 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2 py-1 font-mono text-xs text-[var(--text-primary)] focus:border-sky-500 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                   </td>
                   <td className="py-2 px-3">
@@ -454,7 +454,7 @@ export function BulkPriceModal({
                       placeholder="0.00"
                       value={row.price}
                       onChange={(e) => handleRowChange(row.id, "price", e.target.value)}
-                      className="w-24 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2 py-1 font-mono text-xs text-[var(--text-primary)] focus:border-sky-500 outline-none"
+                      className="w-24 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2 py-1 font-mono text-xs text-[var(--text-primary)] focus:border-sky-500 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                   </td>
                   <td className="py-2 px-3">
@@ -465,7 +465,7 @@ export function BulkPriceModal({
                       placeholder="Optional"
                       value={row.evening_price}
                       onChange={(e) => handleRowChange(row.id, "evening_price", e.target.value)}
-                      className="w-28 rounded-lg border border-amber-500/40 bg-amber-500/5 px-2 py-1 font-mono text-xs text-[var(--text-primary)] focus:border-amber-400 outline-none"
+                      className="w-28 rounded-lg border border-amber-500/40 bg-amber-500/5 px-2 py-1 font-mono text-xs text-[var(--text-primary)] focus:border-amber-400 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                   </td>
                 </tr>

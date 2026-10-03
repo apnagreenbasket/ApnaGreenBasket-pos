@@ -486,7 +486,7 @@ export function EditBatchModal({
                   value={shelfLifeValue}
                   onChange={(e) => setShelfLifeValue(e.target.value)}
                   placeholder={shelfLifeUnit === "DAYS" ? "e.g. 2 or 0.5" : "e.g. 48"}
-                  className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3 py-2 pr-12 font-mono text-xs text-[var(--text-primary)] focus:border-amber-500 focus:outline-none"
+                  className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3 py-2 pr-12 font-mono text-xs text-[var(--text-primary)] focus:border-amber-500 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
                 <span className="absolute right-3 top-2 text-xs text-[var(--text-muted)] font-mono">
                   {shelfLifeUnit === "DAYS" ? "days" : "hrs"}
@@ -537,7 +537,7 @@ export function EditBatchModal({
                   value={mrp}
                   onChange={(e) => setMrp(e.target.value)}
                   placeholder="e.g. 25.00"
-                  className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] focus:border-amber-500 focus:outline-none"
+                  className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] focus:border-amber-500 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
               <div>
@@ -551,7 +551,7 @@ export function EditBatchModal({
                   value={retailPrice}
                   onChange={(e) => setRetailPrice(e.target.value)}
                   placeholder="e.g. 20.00"
-                  className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-emerald-400 font-bold focus:border-amber-500 focus:outline-none"
+                  className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-emerald-400 font-bold focus:border-amber-500 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
               <div>
@@ -565,7 +565,7 @@ export function EditBatchModal({
                   value={wholesalePrice}
                   onChange={(e) => setWholesalePrice(e.target.value)}
                   placeholder="e.g. 18.00"
-                  className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-purple-300 font-bold focus:border-amber-500 focus:outline-none"
+                  className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-xs text-purple-300 font-bold focus:border-amber-500 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
             </div>

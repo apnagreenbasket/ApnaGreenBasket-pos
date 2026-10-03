@@ -308,8 +308,8 @@ export function AdjustBatchStockModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150" onClick={onClose}>
-      <div className="w-full max-w-xl rounded-3xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] shadow-2xl overflow-hidden flex flex-col max-h-[92vh]" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+      <div className="w-full max-w-xl rounded-3xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--border-subtle)] p-4 bg-[var(--bg-surface-elevated)]">
           <div className="flex items-center gap-2.5">
@@ -513,7 +513,7 @@ export function AdjustBatchStockModal({
                         if (!isNaN(val)) handleQtyChange(val);
                       }}
                       placeholder={`Current: ${sortedQty.toFixed(2)} ${batch.unit}`}
-                      className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-2.5 text-xs text-[var(--text-primary)] font-mono focus:border-indigo-500 focus:outline-hidden"
+                      className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-2.5 text-xs text-[var(--text-primary)] font-mono focus:border-indigo-500 focus:outline-hidden [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       required
                     />
                     <span className="text-[10px] text-[var(--text-muted)] mt-1 block">
@@ -534,7 +534,7 @@ export function AdjustBatchStockModal({
                           handleQtyChange(sortedQty + added);
                         }}
                         placeholder="0.00"
-                        className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] pl-7 p-2.5 text-xs text-[var(--text-primary)] font-mono focus:border-indigo-500 focus:outline-hidden"
+                        className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] pl-7 p-2.5 text-xs text-[var(--text-primary)] font-mono focus:border-indigo-500 focus:outline-hidden [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         required
                       />
                     </div>
@@ -605,7 +605,7 @@ export function AdjustBatchStockModal({
                       value={totalBilled}
                       onChange={(e) => handleTotalBilledChange(e.target.value)}
                       placeholder="Total invoice amount"
-                      className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-2.5 text-xs text-[var(--text-primary)] font-mono focus:border-indigo-500 focus:outline-hidden"
+                      className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-2.5 text-xs text-[var(--text-primary)] font-mono focus:border-indigo-500 focus:outline-hidden [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                     <span className="text-[9px] text-[var(--text-muted)] mt-1 block">
                       Retains original invoice • auto-divides across {effectiveNewTotalQty.toFixed(2)} {batch.unit}
@@ -623,7 +623,7 @@ export function AdjustBatchStockModal({
                       value={unitCost}
                       onChange={(e) => handleUnitCostChange(e.target.value)}
                       placeholder="Unit cost"
-                      className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-2.5 text-xs text-indigo-300 font-bold font-mono focus:border-indigo-500 focus:outline-hidden"
+                      className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-2.5 text-xs text-indigo-300 font-bold font-mono focus:border-indigo-500 focus:outline-hidden [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                     <span className="text-[9px] text-[var(--text-muted)] mt-1 block">
                       Original was ₹{purchaseUnitCost.toFixed(2)}
@@ -723,7 +723,7 @@ export function AdjustBatchStockModal({
                       value={customMrp}
                       onChange={(e) => setCustomMrp(e.target.value)}
                       placeholder="e.g. 25.00"
-                      className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2.5 py-1.5 font-mono text-xs text-[var(--text-primary)] focus:border-indigo-500 focus:outline-none"
+                      className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2.5 py-1.5 font-mono text-xs text-[var(--text-primary)] focus:border-indigo-500 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                   </div>
 
@@ -748,7 +748,7 @@ export function AdjustBatchStockModal({
                       value={customRetailPrice}
                       onChange={(e) => setCustomRetailPrice(e.target.value)}
                       placeholder="e.g. 20.00"
-                      className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2.5 py-1.5 font-mono text-xs text-emerald-400 font-bold focus:border-indigo-500 focus:outline-none"
+                      className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2.5 py-1.5 font-mono text-xs text-emerald-400 font-bold focus:border-indigo-500 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                   </div>
 
@@ -773,7 +773,7 @@ export function AdjustBatchStockModal({
                       value={customWholesalePrice}
                       onChange={(e) => setCustomWholesalePrice(e.target.value)}
                       placeholder="e.g. 18.00"
-                      className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2.5 py-1.5 font-mono text-xs text-purple-300 font-bold focus:border-indigo-500 focus:outline-none"
+                      className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2.5 py-1.5 font-mono text-xs text-purple-300 font-bold focus:border-indigo-500 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                   </div>
                 </div>
@@ -862,7 +862,7 @@ export function AdjustBatchStockModal({
                     max={remainingQty}
                     value={quantity}
                     onChange={(e) => setQuantity(e.target.value)}
-                    className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-2.5 text-xs text-[var(--text-primary)] font-mono focus:border-emerald-500 focus:outline-hidden"
+                    className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-2.5 text-xs text-[var(--text-primary)] font-mono focus:border-emerald-500 focus:outline-hidden [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     required
                   />
                 </div>
@@ -950,7 +950,7 @@ export function AdjustBatchStockModal({
                   max={remainingQty}
                   value={quantity}
                   onChange={(e) => setQuantity(e.target.value)}
-                  className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-2.5 text-xs text-[var(--text-primary)] font-mono focus:border-amber-500 focus:outline-hidden"
+                  className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-2.5 text-xs text-[var(--text-primary)] font-mono focus:border-amber-500 focus:outline-hidden [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   required
                 />
               </div>

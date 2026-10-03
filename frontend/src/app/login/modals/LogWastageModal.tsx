@@ -278,9 +278,9 @@ export function LogWastageModal({
                 autoFocus
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
-                className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3.5 py-2.5 text-sm font-mono text-[var(--text-primary)] focus:border-red-500 focus:outline-none"
+                className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3.5 pr-14 py-2.5 text-sm font-mono text-[var(--text-primary)] focus:border-red-500 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
-              <span className="absolute right-3.5 top-2.5 text-xs font-bold text-[var(--text-muted)]">
+              <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-[var(--text-muted)] pointer-events-none">
                 {item.unit}
               </span>
             </div>

@@ -225,11 +225,9 @@ export function PrintBarcodesModal({
       {/* Screen Modal */}
       <div
         className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"
-        onClick={onClose}
       >
         <div
           className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-[var(--border-strong)] bg-[var(--bg-surface)] p-6 shadow-2xl space-y-5"
-          onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
@@ -374,7 +372,7 @@ export function PrintBarcodesModal({
                       value={weightValue}
                       onChange={(e) => handleWeightChange(e.target.value)}
                       placeholder="e.g. 500"
-                      className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-1.5 text-sm font-mono focus:border-amber-400 focus:outline-none"
+                      className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-1.5 text-sm font-mono focus:border-amber-400 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                   </div>
                 ) : null}
@@ -394,7 +392,7 @@ export function PrintBarcodesModal({
                         setIsManuallyOverridden(false);
                       }}
                       placeholder="e.g. 150"
-                      className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-1.5 text-sm font-mono focus:border-amber-400 focus:outline-none"
+                      className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-1.5 text-sm font-mono focus:border-amber-400 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                   </div>
                 ) : null}
@@ -489,7 +487,7 @@ export function PrintBarcodesModal({
                 max="500"
                 value={quantity}
                 onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
-                className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none"
+                className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
             </div>
           </div>

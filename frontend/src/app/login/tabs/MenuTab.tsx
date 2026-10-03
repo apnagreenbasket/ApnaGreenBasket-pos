@@ -1128,11 +1128,9 @@ export function MenuTab({
       {isItemModalOpen && (
         <div 
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto"
-          onClick={() => setIsItemModalOpen(false)}
         >
           <div 
             className="w-full max-w-lg max-h-[90vh] flex flex-col rounded-2xl border border-[var(--border-strong)] bg-[var(--bg-surface)] shadow-2xl overflow-hidden my-auto"
-            onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)]/50 flex-shrink-0">
@@ -1381,7 +1379,7 @@ export function MenuTab({
                               newUnits[idx].conversion_factor = parseFloat(e.target.value) || 1;
                               setFormData({ ...formData, alternate_units: newUnits });
                             }}
-                            className="w-16 shrink-0 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2 py-1.5 font-mono text-xs text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none text-center"
+                            className="w-16 shrink-0 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2 py-1.5 font-mono text-xs text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           />
                           <input
                             type="text"
@@ -1464,7 +1462,7 @@ export function MenuTab({
                             tax_rate: rateVal,
                           });
                         }}
-                        className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-2.5 py-1 font-mono text-xs text-[var(--text-primary)]"
+                        className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-2.5 py-1 font-mono text-xs text-[var(--text-primary)] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
                       <span className="text-xs font-bold text-[var(--text-muted)]">%</span>
                     </div>
@@ -1494,7 +1492,7 @@ export function MenuTab({
                     placeholder="Printed price"
                     value={formData.mrp || ""}
                     onChange={(e) => setFormData({ ...formData, mrp: e.target.value })}
-                    className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3 py-2 font-mono text-xs text-[var(--text-primary)]"
+                    className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
                 </div>
                 <div>
@@ -1507,7 +1505,7 @@ export function MenuTab({
                     placeholder="POS Billed price"
                     value={formData.price}
                     onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                    className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3 py-2 font-mono text-xs text-[var(--text-primary)]"
+                    className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
                 </div>
               </div>
@@ -1524,7 +1522,7 @@ export function MenuTab({
                   placeholder="Evening override price (replaces selling price)"
                   value={formData.evening_price || ""}
                   onChange={(e) => setFormData({ ...formData, evening_price: e.target.value })}
-                  className="w-full rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-2 font-mono text-xs text-[var(--text-primary)] focus:border-amber-500 outline-none"
+                  className="w-full rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-2 font-mono text-xs text-[var(--text-primary)] focus:border-amber-500 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
 
@@ -1602,11 +1600,9 @@ export function MenuTab({
       {isCategoryModalOpen && (
         <div 
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto"
-          onClick={() => setIsCategoryModalOpen(false)}
         >
           <div 
             className="w-full max-w-md rounded-2xl border border-[var(--border-strong)] bg-[var(--bg-surface)] p-6 space-y-5 shadow-2xl my-auto"
-            onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -1704,11 +1700,9 @@ export function MenuTab({
       {itemPendingDelete && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-          onClick={() => !isDeletingItem && setItemPendingDelete(null)}
         >
           <div
             className="w-full max-w-md rounded-2xl border border-[var(--border-strong)] bg-[var(--bg-surface)] p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150"
-            onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start gap-3.5">
               <div className="rounded-full bg-rose-500/10 p-2.5 text-rose-500 border border-rose-500/20 shrink-0">
@@ -1775,11 +1769,9 @@ export function MenuTab({
       {catPendingDelete && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-          onClick={() => !isDeletingCat && setCatPendingDelete(null)}
         >
           <div
             className="w-full max-w-md rounded-2xl border border-[var(--border-strong)] bg-[var(--bg-surface)] p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150"
-            onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start gap-3.5">
               <div className="rounded-full bg-rose-500/10 p-2.5 text-rose-500 border border-rose-500/20 shrink-0">

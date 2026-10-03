@@ -292,7 +292,7 @@ export function PunchOutModal({
                     onChange={(e) => setActualCashInput(e.target.value)}
                     placeholder="Enter physical cash handed over"
                     disabled={isPunchingOut}
-                    className="w-full rounded-xl border-2 border-[var(--border-strong)] bg-[var(--bg-base)] pl-8 pr-4 py-2.5 font-mono text-base font-bold text-[var(--text-primary)] focus:border-rose-500 focus:outline-none transition"
+                    className="w-full rounded-xl border-2 border-[var(--border-strong)] bg-[var(--bg-base)] pl-8 pr-4 py-2.5 font-mono text-base font-bold text-[var(--text-primary)] focus:border-rose-500 focus:outline-none transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
                 </div>
 

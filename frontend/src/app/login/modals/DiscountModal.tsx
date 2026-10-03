@@ -143,7 +143,7 @@ export function DiscountModal({
                   setDiscountValue(e.target.value === "" ? 0 : parseFloat(e.target.value) || 0);
                 }}
                 onFocus={(e) => e.target.select()}
-                className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] p-2.5 text-sm font-mono font-bold focus:border-sky-500 outline-none"
+                className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] p-2.5 text-sm font-mono font-bold focus:border-sky-500 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
             </label>
           )}

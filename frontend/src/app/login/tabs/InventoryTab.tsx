@@ -92,7 +92,9 @@ export type ItemSortOption =
   | "stock_desc"       // Current Stock (High to Low)
   | "stock_asc"        // Current Stock (Low to High)
   | "cost_desc"        // Cost Price (High to Low)
-  | "cost_asc";        // Cost Price (Low to High)
+  | "cost_asc"         // Cost Price (Low to High)
+  | "retail_desc"      // Retail Price (High to Low)
+  | "retail_asc";      // Retail Price (Low to High)
 
 interface InventoryTabProps {
   activeSubTab: InventoryTabType;
@@ -483,6 +485,16 @@ export function InventoryTab({
           return parseFloat(String(b.cost_per_unit || 0)) - parseFloat(String(a.cost_per_unit || 0));
         case "cost_asc":
           return parseFloat(String(a.cost_per_unit || 0)) - parseFloat(String(b.cost_per_unit || 0));
+        case "retail_desc": {
+          const rA = parseFloat(String(a.retail_price ?? (a as any).selling_price ?? (a as any).price ?? 0));
+          const rB = parseFloat(String(b.retail_price ?? (b as any).selling_price ?? (b as any).price ?? 0));
+          return rB - rA;
+        }
+        case "retail_asc": {
+          const rA = parseFloat(String(a.retail_price ?? (a as any).selling_price ?? (a as any).price ?? 0));
+          const rB = parseFloat(String(b.retail_price ?? (b as any).selling_price ?? (b as any).price ?? 0));
+          return rA - rB;
+        }
         default:
           return 0;
       }
@@ -1109,6 +1121,8 @@ export function InventoryTab({
                   <option value="stock_desc">Current Stock: High → Low</option>
                   <option value="cost_desc">Cost Price: High → Low</option>
                   <option value="cost_asc">Cost Price: Low → High</option>
+                  <option value="retail_desc">Retail Price: High → Low</option>
+                  <option value="retail_asc">Retail Price: Low → High</option>
                 </select>
               </div>
             </div>
@@ -1170,7 +1184,22 @@ export function InventoryTab({
                         )}
                       </div>
                     </th>
-                    <th className="py-3 px-4">HSN</th>
+                    <th
+                      className="py-3 px-4 cursor-pointer select-none hover:text-[var(--text-primary)] transition"
+                      onClick={() => setItemSortOption(itemSortOption === "retail_desc" ? "retail_asc" : "retail_desc")}
+                      title="Click to sort by retail price"
+                    >
+                      <div className="flex items-center gap-1">
+                        <span>Retail Price</span>
+                        {itemSortOption === "retail_desc" ? (
+                          <ArrowDown className="h-3.5 w-3.5 text-[var(--accent-brand)]" />
+                        ) : itemSortOption === "retail_asc" ? (
+                          <ArrowUp className="h-3.5 w-3.5 text-[var(--accent-brand)]" />
+                        ) : (
+                          <ArrowUpDown className="h-3 w-3 opacity-40 hover:opacity-100" />
+                        )}
+                      </div>
+                    </th>
                     <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
@@ -1265,14 +1294,31 @@ export function InventoryTab({
                           <td className="py-3 px-4 font-mono text-[var(--text-secondary)]">
                             ₹{parseFloat(item.cost_per_unit).toFixed(2)}
                           </td>
-                          <td className="py-3 px-4 font-mono text-xs text-[var(--text-secondary)]">
-                            {item.hsn_code ? (
-                              <span className="rounded bg-[var(--bg-surface-elevated)] px-1.5 py-0.5 border border-[var(--border-subtle)] text-[11px] font-bold text-amber-400">
-                                {item.hsn_code}
-                              </span>
-                            ) : (
-                              <span className="text-[11px] text-[var(--text-muted)] italic">-</span>
-                            )}
+                          <td className="py-3 px-4 font-mono text-xs">
+                            {(() => {
+                              const retailVal = item.retail_price ?? (item as any).selling_price ?? (item as any).price;
+                              const num = retailVal !== undefined && retailVal !== null && retailVal !== "" ? parseFloat(String(retailVal)) : null;
+                              return (
+                                <div>
+                                  {num !== null && !isNaN(num) && num > 0 ? (
+                                    <span className="font-bold text-emerald-400">
+                                      ₹{num.toFixed(2)}
+                                    </span>
+                                  ) : num !== null && !isNaN(num) ? (
+                                    <span className="font-bold text-[var(--text-secondary)]">
+                                      ₹{num.toFixed(2)}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[11px] text-[var(--text-muted)] italic">-</span>
+                                  )}
+                                  {item.hsn_code && (
+                                    <span className="block text-[10px] text-[var(--text-muted)] font-normal tracking-tight">
+                                      HSN: {item.hsn_code}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </td>
                           <td className="py-3 px-4 text-right">
                             <div className="flex items-center justify-end gap-2">
