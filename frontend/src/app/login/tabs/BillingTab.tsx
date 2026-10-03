@@ -904,7 +904,7 @@ export function BillingTab({
                   }
                 }}
                 placeholder="Search or scan bill"
-                className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] py-1.5 pl-8 pr-16 text-xs font-mono font-bold text-black dark:text-white placeholder:text-neutral-500 dark:placeholder:text-neutral-400 placeholder:font-semibold focus:border-black outline-none"
+                className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] py-1.5 pl-8 pr-16 text-xs font-mono font-bold !text-black placeholder:text-neutral-500 placeholder:font-semibold focus:border-black outline-none"
               />
               <div className="absolute right-2 top-2 flex items-center gap-1.5">
                 {isSearchingServerBills && (
