@@ -625,10 +625,28 @@ export function AnalyticsTab(props: AnalyticsTabProps) {
           {/* DAY BOOK */}
           {props.activeTab === "day_book" && (
             <div className="space-y-4">
-              <div className="flex items-center gap-3 rounded-2xl border bg-[var(--bg-surface)] p-3 text-xs mb-4">
-                <Calendar className="h-4 w-4 text-[var(--accent-brand)]" />
-                <span className="font-bold">Select Date:</span>
-                <input type="date" value={props.dayBookDate} onChange={(e) => props.setDayBookDate(e.target.value)} className="rounded-lg border px-2.5 py-1" />
+              <div className="flex flex-wrap items-center gap-3 rounded-2xl border bg-[var(--bg-surface)] p-3 text-xs mb-4">
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-[var(--accent-brand)]" />
+                  <span className="font-bold">Select Date:</span>
+                  <input type="date" value={props.dayBookDate} onChange={(e) => props.setDayBookDate(e.target.value)} className="rounded-lg border px-2.5 py-1" />
+                </div>
+                <div className="flex items-center gap-1.5 border-l pl-3 border-[var(--border-subtle)]">
+                  <button
+                    type="button"
+                    onClick={() => props.setDatePreset("today")}
+                    className={`rounded-lg px-2.5 py-1 font-semibold transition ${props.datePreset === "today" ? "bg-[var(--accent-brand)] text-[var(--text-on-accent)] shadow-xs" : "bg-[var(--bg-surface-elevated)] border text-[var(--text-secondary)] hover:text-[var(--text-primary)]"}`}
+                  >
+                    Today
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => props.setDatePreset("yesterday")}
+                    className={`rounded-lg px-2.5 py-1 font-semibold transition ${props.datePreset === "yesterday" ? "bg-[var(--accent-brand)] text-[var(--text-on-accent)] shadow-xs" : "bg-[var(--bg-surface-elevated)] border text-[var(--text-secondary)] hover:text-[var(--text-primary)]"}`}
+                  >
+                    Yesterday
+                  </button>
+                </div>
               </div>
               <DayBookReport data={props.dayBookData} />
             </div>

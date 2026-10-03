@@ -58,8 +58,8 @@ export function useAnalyticsManagement({
   const [activeFinancialSubTab, setActiveFinancialSubTab] = useState<FinancialSubTab>("profit_margin");
 
   // Filter State
-  const [datePreset, setDatePreset] = useState<DatePreset>("today");
-  const [customFromDate, setCustomFromDate] = useState<string>("");
+  const [datePreset, setDatePresetState] = useState<DatePreset>("today");
+  const [customFromDate, setCustomFromDateState] = useState<string>("");
   const [customToDate, setCustomToDate] = useState<string>("");
   const [granularity, setGranularity] = useState<"hourly" | "daily" | "weekly" | "monthly">("daily");
   
@@ -67,7 +67,53 @@ export function useAnalyticsManagement({
   const [topItemsSortBy, setTopItemsSortBy] = useState<"quantity" | "revenue">("revenue");
   const [itemSalesCategoryId, setItemSalesCategoryId] = useState<string>("");
   const [billProfitPage, setBillProfitPage] = useState<number>(1);
-  const [dayBookDate, setDayBookDate] = useState<string>(formatLocalDate());
+  const [dayBookDate, setDayBookDateState] = useState<string>(formatLocalDate());
+
+  // Synchronize top date preset buttons with Day Book date
+  const setDatePreset = useCallback((preset: DatePreset) => {
+    setDatePresetState(preset);
+    const now = new Date();
+    if (preset === "today") {
+      setDayBookDateState(formatLocalDate(now));
+    } else if (preset === "yesterday") {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      setDayBookDateState(formatLocalDate(yesterday));
+    } else if (preset === "last_month") {
+      const lastDayOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+      setDayBookDateState(formatLocalDate(lastDayOfLastMonth));
+    } else if (preset === "custom" && customFromDate) {
+      setDayBookDateState(customFromDate);
+    } else {
+      setDayBookDateState(formatLocalDate(now));
+    }
+  }, [customFromDate]);
+
+  const setCustomFromDate = useCallback((val: string) => {
+    setCustomFromDateState(val);
+    if (datePreset === "custom" && val) {
+      setDayBookDateState(val);
+    }
+  }, [datePreset]);
+
+  const setDayBookDate = useCallback((newDate: string) => {
+    setDayBookDateState(newDate);
+    if (!newDate) return;
+    const todayStr = formatLocalDate(new Date());
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = formatLocalDate(yesterday);
+
+    if (newDate === todayStr) {
+      setDatePresetState("today");
+    } else if (newDate === yesterdayStr) {
+      setDatePresetState("yesterday");
+    } else {
+      setDatePresetState("custom");
+      setCustomFromDateState(newDate);
+      setCustomToDate(newDate);
+    }
+  }, []);
 
   // Loading States
   const [isLoading, setIsLoading] = useState(false);
