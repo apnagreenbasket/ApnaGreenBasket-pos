@@ -67,12 +67,14 @@ export function useAnalyticsManagement({
   const [topItemsSortBy, setTopItemsSortBy] = useState<"quantity" | "revenue">("revenue");
   const [itemSalesCategoryId, setItemSalesCategoryId] = useState<string>("");
   const [billProfitPage, setBillProfitPage] = useState<number>(1);
+  const [newCustomersPage, setNewCustomersPage] = useState<number>(1);
   const [dayBookDate, setDayBookDateState] = useState<string>(formatLocalDate());
 
   // Synchronize top date preset buttons with Day Book date
   const setDatePreset = useCallback((preset: DatePreset) => {
     setDatePresetState(preset);
     setBillProfitPage(1);
+    setNewCustomersPage(1);
     const now = new Date();
     if (preset === "today") {
       setDayBookDateState(formatLocalDate(now));
@@ -92,6 +94,8 @@ export function useAnalyticsManagement({
 
   const setCustomFromDate = useCallback((val: string) => {
     setCustomFromDateState(val);
+    setBillProfitPage(1);
+    setNewCustomersPage(1);
     if (datePreset === "custom" && val) {
       setDayBookDateState(val);
     }
@@ -349,7 +353,9 @@ export function useAnalyticsManagement({
         );
         setCustomerSpendsData(res);
       } else if (activeCustomersSubTab === "new_customers") {
-        setNewCustomerData(await apiRequest<any>(`/api/analytics/new-customers?${params.toString()}`));
+        const ncPageSize = 50;
+        const ncOffset = (Math.max(1, newCustomersPage) - 1) * ncPageSize;
+        setNewCustomerData(await apiRequest<any>(`/api/analytics/new-customers?limit=${ncPageSize}&offset=${ncOffset}&${params.toString()}`));
       } else if (activeCustomersSubTab === "returns") {
         setCustomerReturnData(await apiRequest<CustomerReturnReportResponse>(`/api/analytics/customer-returns?${params.toString()}`));
       } else if (activeCustomersSubTab === "loyalty") {
@@ -370,7 +376,7 @@ export function useAnalyticsManagement({
     } finally {
       setIsLoading(false);
     }
-  }, [apiRequest, authHeaders, getDateRangeParams, activeCustomersSubTab, granularity]);
+  }, [apiRequest, authHeaders, getDateRangeParams, activeCustomersSubTab, granularity, newCustomersPage]);
 
   // Load Financial Data
   const loadFinancialData = useCallback(async () => {
@@ -455,6 +461,7 @@ export function useAnalyticsManagement({
     topItemsSortBy, setTopItemsSortBy,
     itemSalesCategoryId, setItemSalesCategoryId,
     billProfitPage, setBillProfitPage,
+    newCustomersPage, setNewCustomersPage,
     dayBookDate, setDayBookDate,
     
     isLoading,

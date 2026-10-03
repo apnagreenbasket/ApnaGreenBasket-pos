@@ -362,7 +362,23 @@ export function useBillingManagement({
           is_custom_price: !!it.is_custom_price,
         };
       });
-      setDraftCartItems(itemsMapped);
+      // Consolidate duplicate lines for the same menu_item and variant into a single row
+      const consolidated: DraftCartItem[] = [];
+      for (const it of itemsMapped) {
+        const existing = consolidated.find(
+          (c) =>
+            c.menu_item_id === it.menu_item_id &&
+            c.variant_id === it.variant_id &&
+            c.unit_price === it.unit_price &&
+            c.selected_unit === it.selected_unit
+        );
+        if (existing) {
+          existing.quantity = (Number(existing.quantity) || 0) + (Number(it.quantity) || 0);
+        } else {
+          consolidated.push({ ...it });
+        }
+      }
+      setDraftCartItems(consolidated);
     } else {
       setDraftCartItems([]);
     }
@@ -403,7 +419,23 @@ export function useBillingManagement({
           base_mrp: uMrp,
         };
       });
-      setDraftCartItems(itemsMapped);
+      // Consolidate duplicate lines for the same menu_item and variant into a single row
+      const consolidated: DraftCartItem[] = [];
+      for (const it of itemsMapped) {
+        const existing = consolidated.find(
+          (c) =>
+            c.menu_item_id === it.menu_item_id &&
+            c.variant_id === it.variant_id &&
+            c.unit_price === it.unit_price &&
+            c.selected_unit === it.selected_unit
+        );
+        if (existing) {
+          existing.quantity = (Number(existing.quantity) || 0) + (Number(it.quantity) || 0);
+        } else {
+          consolidated.push({ ...it });
+        }
+      }
+      setDraftCartItems(consolidated);
     } else {
       setDraftCartItems([]);
     }

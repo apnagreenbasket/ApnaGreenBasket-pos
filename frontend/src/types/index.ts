@@ -169,6 +169,7 @@ export type BatchDetail = components["schemas"]["BatchDetailResponse"] & {
   mrp?: number | string | null;
   wholesale_price?: number | string | null;
   is_oldest?: boolean;
+  is_void?: boolean;
 };
 
 export interface PurchaseReturn {

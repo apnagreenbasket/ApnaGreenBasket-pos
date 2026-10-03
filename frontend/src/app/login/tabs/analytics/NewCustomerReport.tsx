@@ -8,10 +8,23 @@ import { parseUTCDate } from "@/lib/api";
 type Props = {
   data: NewCustomerReportResponse | null;
   isLoading: boolean;
+  page?: number;
+  setPage?: (p: number) => void;
+  pageSize?: number;
 };
 
-export function NewCustomerReport({ data, isLoading }: Props) {
+export function NewCustomerReport({
+  data,
+  isLoading,
+  page = 1,
+  setPage,
+  pageSize = 50,
+}: Props) {
   const recentCustomers = data?.recent_customers || [];
+  const totalNewCustomers = data?.total_new_customers || 0;
+  const totalPages = Math.max(1, Math.ceil(totalNewCustomers / pageSize));
+  const startItem = totalNewCustomers === 0 ? 0 : (page - 1) * pageSize + 1;
+  const endItem = Math.min(page * pageSize, totalNewCustomers);
 
   const {
     searchQuery,
@@ -149,6 +162,60 @@ export function NewCustomerReport({ data, isLoading }: Props) {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Controls */}
+        {totalNewCustomers > 0 && setPage && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-[var(--border-subtle)] bg-[var(--bg-surface)] px-5 py-3 text-xs text-[var(--text-muted)]">
+            <div>
+              Showing <span className="font-semibold text-[var(--text-primary)]">{startItem}–{endItem}</span> of{" "}
+              <span className="font-semibold text-[var(--text-primary)]">{totalNewCustomers}</span> customers (Page {page} of {totalPages})
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setPage(Math.max(1, page - 1))}
+                disabled={page <= 1}
+                className="px-3 py-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] hover:bg-[var(--bg-surface-elevated)] font-semibold transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer text-[var(--text-primary)]"
+              >
+                Previous
+              </button>
+              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                let pNum: number;
+                if (totalPages <= 5) {
+                  pNum = i + 1;
+                } else if (page <= 3) {
+                  pNum = i + 1;
+                } else if (page >= totalPages - 2) {
+                  pNum = totalPages - 4 + i;
+                } else {
+                  pNum = page - 2 + i;
+                }
+                return (
+                  <button
+                    key={pNum}
+                    type="button"
+                    onClick={() => setPage(pNum)}
+                    className={`min-w-[32px] px-2.5 py-1.5 rounded-lg border font-semibold transition text-xs ${
+                      page === pNum
+                        ? "bg-[var(--accent-brand)] border-[var(--accent-brand)] text-[var(--text-on-accent)] shadow-xs"
+                        : "border-[var(--border-subtle)] bg-[var(--bg-card)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-elevated)] cursor-pointer"
+                    }`}
+                  >
+                    {pNum}
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                onClick={() => setPage(Math.min(totalPages, page + 1))}
+                disabled={page >= totalPages}
+                className="px-3 py-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] hover:bg-[var(--bg-surface-elevated)] font-semibold transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer text-[var(--text-primary)]"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

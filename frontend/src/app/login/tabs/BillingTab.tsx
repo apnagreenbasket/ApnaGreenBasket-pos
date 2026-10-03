@@ -1055,12 +1055,12 @@ export function BillingTab({
 
                       <td className="p-3.5 text-right font-mono font-black text-base text-[var(--text-primary)] min-w-[130px] max-w-[170px]">
                         <div>₹{b.total_amount.toFixed(2)}</div>
-                        {((b as any).total_refunded_amount > 0 || b.status === "PARTIALLY_REFUNDED") && (
+                        {((b as any).total_refunded_amount > 0 || b.status === "PARTIALLY_REFUNDED") && !b.is_void && (
                           <div className="text-[11px] text-rose-400 font-bold mt-0.5 break-words leading-tight">
                             ↩ Refunded: -₹{Number((b as any).total_refunded_amount || 0).toFixed(2)}
                           </div>
                         )}
-                        {b.status === "PARTIALLY_REFUNDED" && (
+                        {b.status === "PARTIALLY_REFUNDED" && !b.is_void && (
                           <div className="text-[11px] text-amber-400 font-bold mt-0.5 break-words leading-tight">
                             Net: ₹{(b as any).net_amount !== undefined ? Number((b as any).net_amount).toFixed(2) : (b.total_amount - Number((b as any).total_refunded_amount || 0)).toFixed(2)}
                           </div>

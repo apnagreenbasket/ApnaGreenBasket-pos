@@ -63,14 +63,19 @@ async def list_customers(
     stats_res = await db.execute(stats_stmt)
     stats_map = {row.customer_id: (row.total_orders, float(row.total_spent)) for row in stats_res}
 
-    # Pre-fetch customer refunds to net out returns
+    # Pre-fetch customer refunds to net out returns (excluding voided edit bills)
     from app.models.customer_return import CustomerReturn
+    from sqlalchemy import or_
     ret_stmt = (
         select(
             CustomerReturn.customer_phone,
             func.coalesce(func.sum(CustomerReturn.total_refund_amount), 0).label("total_refunded"),
         )
-        .where(CustomerReturn.outlet_id == outlet_id)
+        .outerjoin(Order, CustomerReturn.order_id == Order.id)
+        .where(
+            CustomerReturn.outlet_id == outlet_id,
+            or_(Order.id.is_(None), Order.is_void == False),
+        )
         .group_by(CustomerReturn.customer_phone)
     )
     ret_res = await db.execute(ret_stmt)
@@ -292,9 +297,15 @@ async def get_customer_analytics(
         Order.outlet_id == outlet_id,
         Order.status.in_([OrderStatusEnum.PAID, OrderStatusEnum.COMPLETED, OrderStatusEnum.PARTIALLY_REFUNDED]),
     )
-    ret_stmt = select(func.coalesce(func.sum(CustomerReturn.total_refund_amount), 0)).where(
-        CustomerReturn.outlet_id == outlet_id,
-        CustomerReturn.customer_phone == clean_phone,
+    from sqlalchemy import or_
+    ret_stmt = (
+        select(func.coalesce(func.sum(CustomerReturn.total_refund_amount), 0))
+        .outerjoin(Order, CustomerReturn.order_id == Order.id)
+        .where(
+            CustomerReturn.outlet_id == outlet_id,
+            CustomerReturn.customer_phone == clean_phone,
+            or_(Order.id.is_(None), Order.is_void == False),
+        )
     )
 
     if cust:

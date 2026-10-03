@@ -311,12 +311,14 @@ async def get_new_customers_endpoint(
     granularity: str = Query("daily", pattern="^(daily|weekly|monthly)$"),
     from_date: str | None = Query(None),
     to_date: str | None = Query(None),
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
 ):
     target_outlet_id = current_user.outlet_id
     if not target_outlet_id:
         raise HTTPException(status_code=400, detail="outlet_id required")
     from_dt, to_dt = _parse_date_range(from_date, to_date)
-    return await get_new_customers(db, target_outlet_id, granularity, from_dt, to_dt)
+    return await get_new_customers(db, target_outlet_id, granularity, from_dt, to_dt, limit=limit, offset=offset)
 
 
 @router.get("/customer-returns", response_model=CustomerReturnReportResponse)

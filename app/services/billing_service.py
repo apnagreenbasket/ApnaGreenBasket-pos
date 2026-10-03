@@ -1095,7 +1095,7 @@ async def mark_bill_paid(
         order.customer_loyalty_balance = cust.loyalty_points
 
 
-    # 1. Deferred refund: if this bill replaces an old one, void the old bill first so its stock is restored to batches
+    # 1. Deferred void & inventory restock: if this bill replaces an old one, reverse stock deduction and mark old bill void
     if getattr(order, "replaces_bill_id", None):
         try:
             old_order_res = await db.execute(
@@ -1105,42 +1105,9 @@ async def mark_bill_paid(
                 )
             )
             old_order = old_order_res.scalar_one_or_none()
-            if old_order and old_order.status != OrderStatusEnum.REFUNDED:
-                from app.schemas.billing import CustomerReturnRequest, CustomerReturnItemInput
-                return_items = []
-                for it in old_order.items:
-                    rem_qty = float(it.quantity - (it.returned_quantity or 0))
-                    if rem_qty > 0:
-                        return_items.append(
-                            CustomerReturnItemInput(
-                                order_item_id=str(it.id),
-                                menu_item_id=str(it.menu_item_id) if it.menu_item_id else None,
-                                item_name=it.item_name,
-                                quantity=rem_qty,
-                                unit_price=float(it.unit_price) if it.unit_price is not None else 0.0,
-                                reason="EDIT_BILL_VOID"
-                            )
-                        )
-                
-                if return_items:
-                    return_req = CustomerReturnRequest(
-                        order_id=str(old_order.id),
-                        customer_name=old_order.customer_name,
-                        customer_phone=old_order.customer_phone,
-                        return_items=return_items,
-                        exchange_items=[],
-                        refund_payment_method=old_order.payment_method or "CASH",
-                        notes="Automatic return due to bill edit"
-                    )
-                    try:
-                        await process_customer_return(db, outlet_id, None, return_req)
-                    except Exception as e:
-                        import traceback
-                        traceback.print_exc()
-                        raise HTTPException(
-                            status_code=500,
-                            detail=f"Failed to void previous bill #{str(old_order.id)[:8].upper()}: {e}"
-                        )
+            if old_order and not old_order.is_void:
+                from app.services.inventory_service import process_order_cancellation_reversal
+                await process_order_cancellation_reversal(db, old_order)
                 old_order.status = OrderStatusEnum.REFUNDED
                 old_order.is_void = True
                 await db.flush()
@@ -1855,6 +1822,15 @@ async def list_customer_returns(
     returns_list = res.scalars().all()
     out = []
     for ret in returns_list:
+        # Exclude internal returns generated during bill edits/voids
+        if ret.order and getattr(ret.order, "is_void", False):
+            continue
+        if ret.notes and ("bill edit" in ret.notes.lower() or "automatic return" in ret.notes.lower()):
+            continue
+        ritems = ret.returned_items if isinstance(ret.returned_items, list) else []
+        if any(it.get("reason") == "EDIT_BILL_VOID" for it in ritems):
+            continue
+
         orig_bill = f"#{ret.order.id.hex[:8].upper()}" if ret.order else "Direct Return (No Bill)"
         is_interstate = bool(ret.order.is_interstate) if ret.order else (
             (ret.outlet.interstate_mode == "ALWAYS_ON") if ret.outlet else False
@@ -2049,7 +2025,15 @@ async def get_item_level_return_ledger(
     all_rows: list[ItemReturnLedgerRow] = []
 
     for ret in returns_list:
+        # Exclude internal returns generated during bill edits/voids
+        if ret.order and getattr(ret.order, "is_void", False):
+            continue
+        if ret.notes and ("bill edit" in ret.notes.lower() or "automatic return" in ret.notes.lower()):
+            continue
         ritems = ret.returned_items if isinstance(ret.returned_items, list) else []
+        if any(it.get("reason") == "EDIT_BILL_VOID" for it in ritems):
+            continue
+
         if ret.order:
             orig_bill = f"#{ret.order.basket_number}" if ret.order.basket_number else f"#{ret.order.id.hex[:8].upper()}"
         else:
@@ -2061,6 +2045,9 @@ async def get_item_level_return_ledger(
         is_exc = bool(ret.exchange_order_id or (getattr(ret, "exchange_items", None) and len(ret.exchange_items) > 0))
 
         for idx, it in enumerate(ritems):
+            item_reason = it.get("reason") or "CUSTOMER_RETURN"
+            if item_reason == "EDIT_BILL_VOID":
+                continue
             m_id_str = str(it.get("menu_item_id")) if it.get("menu_item_id") else None
             m_obj = menu_items_map.get(m_id_str) if m_id_str else None
 

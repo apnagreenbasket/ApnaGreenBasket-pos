@@ -12,7 +12,7 @@ from typing import Sequence
 logger = logging.getLogger(__name__)
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import func, or_, select, update, distinct
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -1937,10 +1937,28 @@ async def get_all_batches(
     res = await db.execute(stmt)
     batches = res.scalars().all()
 
+    # Fetch all voided batch IDs for this outlet from StockLedger
+    voided_res = await db.execute(
+        select(distinct(StockLedger.intake_id))
+        .where(
+            StockLedger.outlet_id == outlet_id,
+            StockLedger.change_type == StockChangeTypeEnum.VOID_BATCH,
+            StockLedger.intake_id.isnot(None)
+        )
+    )
+    voided_batch_ids = set(voided_res.scalars().all())
+
     result = []
     for b in batches:
         is_ov = bool(b.batch_number and "-OV-" in b.batch_number)
-        if b.remaining_quantity < Decimal("0.000"):
+        is_voided = bool(
+            getattr(b, "is_void", False)
+            or b.id in voided_batch_ids
+            or (b.notes and "[VOIDED]" in b.notes.upper())
+        )
+        if is_voided:
+            status_str = "VOIDED"
+        elif b.remaining_quantity < Decimal("0.000"):
             status_str = "OVERSOLD"
         elif b.remaining_quantity == Decimal("0.000"):
             status_str = "SETTLED" if is_ov else "DEPLETED"
@@ -1979,6 +1997,7 @@ async def get_all_batches(
             "expiry_date": b.expiry_date.replace(tzinfo=timezone.utc) if b.expiry_date else None,
             "shelf_life_alert_hrs": b.item.shelf_life_alert_hrs if b.item else None,
             "status": status_str,
+            "is_void": is_voided,
             "notes": b.notes,
             "item_cost_per_unit": b.item.cost_per_unit if b.item else None,
             "item_retail_price": b.item.retail_price if b.item else None,
@@ -2697,6 +2716,7 @@ async def adjust_batch_stock(
         # Zero out remaining stock for this batch
         deduct_qty = batch.remaining_quantity
         batch.remaining_quantity = Decimal("0.000")
+        batch.notes = f"[VOIDED] {batch.notes or ''} {data.notes or ''}".strip()
         item.current_stock = max(Decimal("0.000"), item.current_stock - deduct_qty)
 
         change_enum = StockChangeTypeEnum.VOID_BATCH

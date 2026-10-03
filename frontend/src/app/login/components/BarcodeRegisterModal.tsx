@@ -574,6 +574,42 @@ export function BarcodeRegisterModal({
   const discountPercent = mrpVal > 0 && sellVal > 0 && mrpVal > sellVal ? Math.round(((mrpVal - sellVal) / mrpVal) * 100) : 0;
   const discountAmount = mrpVal > 0 && sellVal > 0 && mrpVal > sellVal ? (mrpVal - sellVal).toFixed(2) : "0.00";
 
+  const renderPriceMarginBadge = (priceStr: string) => {
+    if (computedCostNum <= 0) return null;
+    const priceVal = parseFloat(priceStr);
+    if (isNaN(priceVal) || priceVal <= 0) return null;
+
+    const profit = priceVal - computedCostNum;
+    const trueMarginPct = (profit / priceVal) * 100;
+    const markupPct = (profit / computedCostNum) * 100;
+    const isLoss = profit < -0.001;
+    const isBreakEven = Math.abs(profit) <= 0.001;
+
+    const displayPct = marginType === "MARKUP" ? markupPct : trueMarginPct;
+    const label = isLoss ? "Loss" : marginType === "MARKUP" ? "Markup" : "Margin";
+
+    return (
+      <div
+        className={`mt-1.5 flex flex-col gap-0.5 rounded-lg px-2 py-1 text-[10px] font-mono border transition-all ${
+          isLoss
+            ? "bg-rose-500/10 border-rose-500/25 text-rose-400"
+            : isBreakEven
+            ? "bg-amber-500/10 border-amber-500/25 text-amber-300"
+            : "bg-emerald-500/10 border-emerald-500/25 text-emerald-400 font-medium"
+        }`}
+      >
+        <div className="flex items-center justify-between">
+          <span className="font-semibold">
+            {label}: {displayPct >= 0 ? "+" : ""}{displayPct.toFixed(1)}%
+          </span>
+          <span className={isLoss ? "text-rose-400 font-bold" : "text-[var(--text-secondary)]"}>
+            {profit >= 0 ? `+₹${profit.toFixed(2)}` : `-₹${Math.abs(profit).toFixed(2)}`} / {unit}
+          </span>
+        </div>
+      </div>
+    );
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -1269,6 +1305,7 @@ export function BarcodeRegisterModal({
                   Exact: ₹{mrpExact}
                 </div>
               )}
+              {renderPriceMarginBadge(mrp)}
             </div>
 
             <div>
@@ -1305,6 +1342,7 @@ export function BarcodeRegisterModal({
                   Exact: ₹{retailExact}
                 </div>
               )}
+              {renderPriceMarginBadge(sellingPrice)}
             </div>
 
             <div>
@@ -1329,6 +1367,7 @@ export function BarcodeRegisterModal({
                   Exact: ₹{wholesaleExact}
                 </div>
               )}
+              {renderPriceMarginBadge(wholesalePrice)}
             </div>
           </div>
 

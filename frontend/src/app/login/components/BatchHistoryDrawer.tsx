@@ -18,6 +18,7 @@ import {
   Hourglass,
   PackageX,
   Edit,
+  Ban,
 } from "lucide-react";
 import type { BatchDetail, InventoryItem } from "@/types";
 import { parseUTCDate } from "@/lib/api";
@@ -506,6 +507,20 @@ export function BatchHistoryDrawer({
                               b.batch_number?.includes("-OV-")
                             );
 
+                            const isVoided = Boolean(
+                              (b as any).is_void ||
+                              b.status === "VOIDED" ||
+                              (b.notes && b.notes.toUpperCase().includes("[VOIDED]"))
+                            );
+
+                            if (isVoided) {
+                              return (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/10 px-2 py-0.5 text-[10px] font-bold text-rose-400 border border-rose-500/20">
+                                  <Ban className="h-3 w-3" /> Voided
+                                </span>
+                              );
+                            }
+
                             if (b.status === "SETTLED" || (isOv && rem === 0)) {
                               return (
                                 <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-bold text-blue-400 border border-blue-500/20">
@@ -552,9 +567,22 @@ export function BatchHistoryDrawer({
                         <td className="px-3 py-3 text-right">
                           <div className="flex items-center justify-end gap-1.5">
                             {(() => {
+                              const isVoided = Boolean(
+                                (b as any).is_void ||
+                                b.status === "VOIDED" ||
+                                (b.notes && b.notes.toUpperCase().includes("[VOIDED]"))
+                              );
                               const isSettledBackorder = b.status === "SETTLED" || (b.batch_number?.includes("-OV-") && Number(b.remaining_quantity) === 0);
                               const isOversold = b.status === "OVERSOLD" || (b.batch_number?.includes("-OV-") && Number(b.remaining_quantity) < 0);
                               const isDeficit = isSettledBackorder || isOversold;
+
+                              if (isVoided) {
+                                return (
+                                  <span className="inline-flex items-center gap-1 rounded-lg border border-rose-500/20 bg-rose-500/10 px-2 py-1 text-[11px] font-medium text-rose-400/80 cursor-default">
+                                    Voided
+                                  </span>
+                                );
+                              }
 
                               return (
                                 <>

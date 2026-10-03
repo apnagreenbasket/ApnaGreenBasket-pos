@@ -223,7 +223,7 @@ async def delete_batch(
     current_user: RequireAdmin,
     db: DBSession,
 ):
-    """Hard-delete a batch and adjust parent item's stock."""
+    """Void a batch, zero remaining stock, adjust parent item's stock, and record StockLedger."""
     stmt = select(StockIntake).options(selectinload(StockIntake.item)).where(
         StockIntake.id == batch_id,
         StockIntake.outlet_id == current_user.outlet_id,
@@ -238,16 +238,33 @@ async def delete_batch(
         )
 
     # Adjust parent item stock
-    if batch.item and batch.remaining_quantity > 0:
-        batch.item.current_stock -= batch.remaining_quantity
+    deduct_qty = batch.remaining_quantity
+    if batch.item and deduct_qty > 0:
+        batch.item.current_stock = max(type(deduct_qty)("0.000"), batch.item.current_stock - deduct_qty)
     
-    await db.delete(batch)
+    batch.remaining_quantity = type(deduct_qty)("0.000")
+    batch.notes = f"[VOIDED] {batch.notes or ''}".strip()
+
+    db.add(StockLedger(
+        id=uuid.uuid4(),
+        outlet_id=current_user.outlet_id,
+        item_id=batch.item_id,
+        intake_id=batch.id,
+        batch_balance=type(deduct_qty)("0.000"),
+        change_type=StockChangeTypeEnum.VOID_BATCH,
+        quantity_change=-deduct_qty,
+        resulting_stock=batch.item.current_stock if batch.item else type(deduct_qty)("0.000"),
+        created_by=current_user.user_id,
+        unit_cost_snapshot=batch.unit_cost,
+        reason="VOID_BATCH",
+        notes=f"Batch #{batch.batch_number or batch.id} voided by user.",
+    ))
     await db.flush()
 
     await log_action(
         db, current_user.outlet_id, current_user.user_id,
         "INVENTORY UPDATED", "StockIntake", str(batch_id),
-        details={"event": "BATCH_DELETED", "batch_number": batch.batch_number, "deducted_qty": float(batch.remaining_quantity)},
+        details={"event": "BATCH_VOIDED", "batch_number": batch.batch_number, "deducted_qty": float(deduct_qty)},
     )
 
 

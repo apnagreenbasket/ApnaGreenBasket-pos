@@ -240,7 +240,8 @@ class BatchDetailResponse(BaseResponse):
     intake_date: datetime
     expiry_date: datetime | None = None
     shelf_life_alert_hrs: int | None = None
-    status: str  # "ACTIVE", "EXPIRING_SOON", "EXPIRED", "DEPLETED", "OVERSOLD"
+    status: str  # "ACTIVE", "EXPIRING_SOON", "EXPIRED", "DEPLETED", "OVERSOLD", "VOIDED"
+    is_void: bool = False
     notes: str | None = None
     retail_price: Decimal | None = None
     mrp: Decimal | None = None

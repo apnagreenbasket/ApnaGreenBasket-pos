@@ -261,7 +261,7 @@ export function CustomerReturnsModal({
         `/api/billing/bills?start_date=${sDate}&end_date=${eDate}&status=PAID,COMPLETED,PARTIALLY_REFUNDED&limit=250`
       );
       if (Array.isArray(bills)) {
-        setModalBills(bills);
+        setModalBills(bills.filter((b) => !b.is_void));
       }
     } catch (err) {
       console.error("Error loading bills for return modal:", err);
@@ -1056,7 +1056,7 @@ export function CustomerReturnsModal({
           `/api/billing/bills?search=${encodeURIComponent(query)}&start_date=${sDate}&end_date=${eDate}&status=PAID,COMPLETED,PARTIALLY_REFUNDED&limit=50`
         );
         if (Array.isArray(data)) {
-          setServerSearchedBills(data);
+          setServerSearchedBills(data.filter((b) => !b.is_void));
         }
       } catch (err) {
         console.error("Error searching past 30 days bills:", err);
@@ -1169,7 +1169,11 @@ export function CustomerReturnsModal({
       const qs = params.toString();
       const url = qs ? `/api/billing/returns?${qs}` : "/api/billing/returns";
       const data = await apiRequest<any[]>(url);
-      setReturnsHistoryList(data || []);
+      setReturnsHistoryList(
+        (data || []).filter(
+          (r) => !r.is_void_return && !(r.notes && r.notes.toLowerCase().includes("bill edit"))
+        )
+      );
     } catch (err) {
       console.error("Error loading returns history:", err);
     } finally {
@@ -1191,6 +1195,9 @@ export function CustomerReturnsModal({
       if (modalComputedEndDate) params.set("to_date", modalComputedEndDate);
       params.set("page_size", "200");
       const data = await apiRequest<ItemReturnLedgerResponse>(`/api/billing/returns/item-ledger?${params.toString()}`);
+      if (data && Array.isArray(data.items)) {
+        data.items = data.items.filter((it) => it.reason !== "EDIT_BILL_VOID");
+      }
       setItemLedgerData(data);
     } catch (err) {
       console.error("Error loading item ledger:", err);
@@ -1307,7 +1314,7 @@ export function CustomerReturnsModal({
     serverSearchedBills.forEach((b) => {
       if (!map.has(b.id)) map.set(b.id, b);
     });
-    return Array.from(map.values());
+    return Array.from(map.values()).filter((b) => !b.is_void);
   }, [modalBills, billsList, serverSearchedBills]);
 
   // Filter bills by customer search

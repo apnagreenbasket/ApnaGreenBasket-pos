@@ -103,6 +103,8 @@ type AnalyticsTabProps = {
   setItemSalesCategoryId: (v: any) => void;
   billProfitPage: number;
   setBillProfitPage: (v: any) => void;
+  newCustomersPage?: number;
+  setNewCustomersPage?: (v: any) => void;
   dayBookDate: string;
   setDayBookDate: (v: any) => void;
   
@@ -146,7 +148,7 @@ export function AnalyticsTab(props: AnalyticsTabProps) {
     props.activeCustomersSubTab, props.activeFinancialSubTab,
     props.datePreset, props.customFromDate, props.customToDate,
     props.granularity, props.topItemsSortBy, props.itemSalesCategoryId,
-    props.billProfitPage, props.dayBookDate
+    props.billProfitPage, props.newCustomersPage, props.dayBookDate
   ]);
 
   // Memoize effective ISO date range so sub-reports receive live dates matching presets
@@ -574,7 +576,7 @@ export function AnalyticsTab(props: AnalyticsTabProps) {
               {props.activeCustomersSubTab === "master_view" && (
                 <div className="space-y-8">
                   <CustomerSpendsReport data={props.customerSpendsData} isLoading={props.isLoading} restaurant={props.restaurant} />
-                  <NewCustomerReport data={props.newCustomerData} isLoading={props.isLoading} />
+                  <NewCustomerReport data={props.newCustomerData} isLoading={props.isLoading} page={props.newCustomersPage} setPage={props.setNewCustomersPage} pageSize={50} />
                   <CustomerReturnReport data={props.customerReturnData} isLoading={props.isLoading} />
                   <CreditDebitReport data={props.creditDebitData} isLoading={props.isLoading} restaurant={props.restaurant} />
                   <LoyaltyReport data={props.loyaltyData} isLoading={props.isLoading} />
@@ -582,7 +584,7 @@ export function AnalyticsTab(props: AnalyticsTabProps) {
                 </div>
               )}
               {props.activeCustomersSubTab === "customer_spends" && <CustomerSpendsReport data={props.customerSpendsData} isLoading={props.isLoading} restaurant={props.restaurant} />}
-              {props.activeCustomersSubTab === "new_customers" && <NewCustomerReport data={props.newCustomerData} isLoading={props.isLoading} />}
+              {props.activeCustomersSubTab === "new_customers" && <NewCustomerReport data={props.newCustomerData} isLoading={props.isLoading} page={props.newCustomersPage} setPage={props.setNewCustomersPage} pageSize={50} />}
               {props.activeCustomersSubTab === "returns" && <CustomerReturnReport data={props.customerReturnData} isLoading={props.isLoading} />}
               {props.activeCustomersSubTab === "credit_debit" && <CreditDebitReport data={props.creditDebitData} isLoading={props.isLoading} restaurant={props.restaurant} />}
               {props.activeCustomersSubTab === "loyalty" && <LoyaltyReport data={props.loyaltyData} isLoading={props.isLoading} />}

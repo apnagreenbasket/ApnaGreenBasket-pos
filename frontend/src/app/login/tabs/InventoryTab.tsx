@@ -544,13 +544,21 @@ export function InventoryTab({
     }
 
     // 4. Compute effective status & countdowns
-    let effectiveStatus: "ACTIVE" | "EXPIRING_SOON" | "EXPIRED" | "DEPLETED" | "OVERSOLD" = "ACTIVE";
+    let effectiveStatus: "ACTIVE" | "EXPIRING_SOON" | "EXPIRED" | "DEPLETED" | "OVERSOLD" | "VOIDED" = "ACTIVE";
     let isExpired = false;
     let isExpiringSoon = false;
     let daysUntilDeadline: number | null = null;
     let hoursUntilDeadline: number | null = null;
 
-    if (remQty < 0) {
+    const isVoided = Boolean(
+      (b as any).is_void ||
+      (b as any).status === "VOIDED" ||
+      (b.notes && b.notes.toUpperCase().includes("[VOIDED]"))
+    );
+
+    if (isVoided) {
+      effectiveStatus = "VOIDED";
+    } else if (remQty < 0) {
       effectiveStatus = "OVERSOLD";
     } else if (remQty <= 0) {
       effectiveStatus = "DEPLETED";
@@ -592,17 +600,18 @@ export function InventoryTab({
   const [batchSortOption, setBatchSortOption] = useState<BatchSortOption>("recent");
 
   const batchCounts = useMemo(() => {
-    let active = 0, expiring = 0, expired = 0, depleted = 0, oversold = 0;
+    let active = 0, expiring = 0, expired = 0, depleted = 0, oversold = 0, voided = 0;
     batches.forEach((b) => {
       const matchedItem = items.find((it) => it.id === b.item_id);
       const meta = getBatchFreshnessMeta(b, matchedItem);
-      if (meta.effectiveStatus === "OVERSOLD") oversold++;
+      if (meta.effectiveStatus === "VOIDED") voided++;
+      else if (meta.effectiveStatus === "OVERSOLD") oversold++;
       else if (meta.effectiveStatus === "ACTIVE") active++;
       else if (meta.effectiveStatus === "EXPIRING_SOON") expiring++;
       else if (meta.effectiveStatus === "EXPIRED") expired++;
       else if (meta.effectiveStatus === "DEPLETED") depleted++;
     });
-    return { all: batches.length, active, expiring, expired, depleted, oversold };
+    return { all: batches.length, active, expiring, expired, depleted, oversold, voided };
   }, [batches, items, getBatchFreshnessMeta]);
 
   const filteredAndSortedBatches = useMemo(() => {
@@ -775,9 +784,9 @@ export function InventoryTab({
           <p className="font-display text-2xl font-bold text-emerald-400">
             {batchCounts.active}
           </p>
-          {batchCounts.depleted > 0 && (
+          {(batchCounts.depleted > 0 || batchCounts.voided > 0) && (
             <span className="text-[10px] text-[var(--text-muted)] mt-0.5 block">
-              ({batchCounts.depleted} depleted excluded)
+              ({batchCounts.depleted} depleted{batchCounts.voided > 0 ? `, ${batchCounts.voided} voided` : ""} excluded)
             </span>
           )}
         </button>
@@ -1578,6 +1587,17 @@ export function InventoryTab({
                     Oversold ({batchCounts.oversold})
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={() => setBatchStatusFilter("VOIDED")}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition whitespace-nowrap ${
+                    batchStatusFilter === "VOIDED"
+                      ? "bg-rose-700 text-white shadow-xs"
+                      : "bg-rose-500/10 text-rose-400 hover:text-rose-300 border border-rose-500/20"
+                  }`}
+                >
+                  Voided ({batchCounts.voided})
+                </button>
               </div>
             </div>
           </div>
@@ -1671,6 +1691,7 @@ export function InventoryTab({
                     paginatedBatches.map((b) => {
                       const matchedItem = items.find((it) => it.id === b.item_id);
                       const shelfLifeHours = b.shelf_life_alert_hrs ?? matchedItem?.shelf_life_alert_hrs;
+                      const meta = getBatchFreshnessMeta(b, matchedItem);
                       return (
                         <tr
                           key={b.id}
@@ -1796,7 +1817,9 @@ export function InventoryTab({
                               return (
                                 <span
                                   className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-                                    meta.effectiveStatus === "OVERSOLD"
+                                    meta.effectiveStatus === "VOIDED"
+                                      ? "bg-rose-500/20 text-rose-400 border border-rose-500/30"
+                                      : meta.effectiveStatus === "OVERSOLD"
                                       ? "bg-rose-500/20 text-rose-400 border border-rose-500/30"
                                       : meta.effectiveStatus === "ACTIVE"
                                       ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20"
@@ -1807,7 +1830,9 @@ export function InventoryTab({
                                       : "bg-gray-500/15 text-[var(--text-muted)] border border-[var(--border-subtle)]"
                                   }`}
                                 >
-                                  {meta.effectiveStatus === "EXPIRING_SOON"
+                                  {meta.effectiveStatus === "VOIDED"
+                                    ? "Voided"
+                                    : meta.effectiveStatus === "EXPIRING_SOON"
                                     ? "Expiring Soon"
                                     : meta.effectiveStatus === "ACTIVE"
                                     ? "Active"
@@ -1835,24 +1860,33 @@ export function InventoryTab({
                                 Edit
                               </button>
 
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedAdjustBatch(b);
-                                  setIsAdjustModalOpen(true);
-                                }}
-                                className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-bold transition cursor-pointer ${
-                                  Number(b.remaining_quantity) < 0
-                                    ? "border-rose-500/40 bg-rose-500/15 text-rose-300 hover:bg-rose-500/25"
-                                    : "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
-                                }`}
-                                title={Number(b.remaining_quantity) < 0 ? "Reconcile oversold deficit stock" : "Adjust stock, return to supplier (issue bill), or void batch"}
-                              >
-                                <RotateCcw className="h-3.5 w-3.5" />
-                                {Number(b.remaining_quantity) < 0 ? "Reconcile Stock" : "Adjust / Return"}
-                              </button>
+                              {meta.effectiveStatus !== "VOIDED" ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedAdjustBatch(b);
+                                    setIsAdjustModalOpen(true);
+                                  }}
+                                  className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-bold transition cursor-pointer ${
+                                    Number(b.remaining_quantity) < 0
+                                      ? "border-rose-500/40 bg-rose-500/15 text-rose-300 hover:bg-rose-500/25"
+                                      : "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
+                                  }`}
+                                  title={Number(b.remaining_quantity) < 0 ? "Reconcile oversold deficit stock" : "Adjust stock, return to supplier (issue bill), or void batch"}
+                                >
+                                  <RotateCcw className="h-3.5 w-3.5" />
+                                  {Number(b.remaining_quantity) < 0 ? "Reconcile Stock" : "Adjust / Return"}
+                                </button>
+                              ) : (
+                                <span
+                                  className="inline-flex items-center gap-1 rounded-lg border border-rose-500/20 bg-rose-500/10 px-2 py-1 text-[11px] font-medium text-rose-400/80 cursor-default"
+                                  title="This batch was voided and has zero stock."
+                                >
+                                  Voided
+                                </span>
+                              )}
 
-                              {matchedItem && (
+                              {matchedItem && meta.effectiveStatus !== "VOIDED" && (
                                 (() => {
                                   const isBatchEmpty = parseFloat(String(b.remaining_quantity)) <= 0;
                                   return (

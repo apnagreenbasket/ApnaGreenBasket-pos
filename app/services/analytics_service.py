@@ -2142,6 +2142,8 @@ async def get_new_customers(
     granularity: str,
     from_dt: datetime,
     to_dt: datetime,
+    limit: int = 50,
+    offset: int = 0,
 ) -> NewCustomerReportResponse:
     bind = db.bind or db.get_bind()
     dialect = bind.dialect.name if bind else "sqlite"
@@ -2211,7 +2213,8 @@ async def get_new_customers(
         )
         .group_by(Customer.id, Customer.name, Customer.phone, Customer.created_at)
         .order_by(Customer.created_at.desc())
-        .limit(50)
+        .limit(limit)
+        .offset(offset)
     )
     
     recent_res = await db.execute(recent_cust_stmt)
@@ -2283,6 +2286,10 @@ async def get_customer_return_analytics(
     
     for r in rows:
         if getattr(r, "is_void_return", False) or False:
+            continue
+
+        ritems = r.returned_items if isinstance(r.returned_items, list) else []
+        if any(it.get("reason") == "EDIT_BILL_VOID" for it in ritems):
             continue
 
         amt = float(r.total_refund_amount or 0)
