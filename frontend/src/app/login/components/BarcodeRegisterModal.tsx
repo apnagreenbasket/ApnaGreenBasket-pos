@@ -414,8 +414,6 @@ export function BarcodeRegisterModal({
 
   }, [computedCostNum, marginType, retailMarginPct, mrpMarginPct, wholesaleMarginPct]);
 
-  if (!isOpen) return null;
-
   const handleTaxCategoryChange = (val: string) => {
     setTaxCategory(val);
     if (val === "GST 0%") setTaxRate("0");
@@ -575,6 +573,8 @@ export function BarcodeRegisterModal({
   const sellVal = parseFloat(sellingPrice);
   const discountPercent = mrpVal > 0 && sellVal > 0 && mrpVal > sellVal ? Math.round(((mrpVal - sellVal) / mrpVal) * 100) : 0;
   const discountAmount = mrpVal > 0 && sellVal > 0 && mrpVal > sellVal ? (mrpVal - sellVal).toFixed(2) : "0.00";
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
