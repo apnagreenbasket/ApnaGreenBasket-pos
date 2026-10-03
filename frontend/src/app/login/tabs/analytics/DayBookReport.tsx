@@ -1,17 +1,26 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import type { DayBookResponse } from "@/types";
 import { parseUTCDate } from "@/lib/api";
-import { ArrowDown, ArrowUp, Building2, Phone, User, UserCheck } from "lucide-react";
+import { ArrowDown, ArrowUp, Building2, Phone, User, UserCheck, ChevronLeft, ChevronRight } from "lucide-react";
 import { TableSearchBar } from "./shared";
+
+const PAGE_SIZE = 30;
 
 export function DayBookReport({ data }: { data: DayBookResponse | null }) {
   const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
   const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
 
+  // Reset to first page whenever search query or sort order changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, sortOrder]);
+
+  // Search and sort across the ENTIRE dataset (all pages)
   const filteredAndSortedEntries = useMemo(() => {
     if (!data?.entries) return [];
     
-    // First apply search filter
+    // First apply search filter across all records
     let filtered = data.entries;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -36,6 +45,19 @@ export function DayBookReport({ data }: { data: DayBookResponse | null }) {
     });
     return list.map((item) => item.entry);
   }, [data?.entries, sortOrder, searchQuery]);
+
+  const totalEntries = filteredAndSortedEntries.length;
+  const totalPages = Math.max(1, Math.ceil(totalEntries / PAGE_SIZE));
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+
+  // Paginate 30 items per page from the filtered/sorted results
+  const paginatedEntries = useMemo(() => {
+    const start = (safeCurrentPage - 1) * PAGE_SIZE;
+    return filteredAndSortedEntries.slice(start, start + PAGE_SIZE);
+  }, [filteredAndSortedEntries, safeCurrentPage]);
+
+  const startIndex = (safeCurrentPage - 1) * PAGE_SIZE;
+  const endIndex = Math.min(startIndex + PAGE_SIZE, totalEntries);
 
   if (!data) return <div className="p-8 text-center text-sm text-[var(--text-muted)]">No day book data.</div>;
   
@@ -102,14 +124,21 @@ export function DayBookReport({ data }: { data: DayBookResponse | null }) {
         title="Day Transactions"
       />
       <div className="rounded-3xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5 shadow-xs">
-        <div className="flex items-center justify-between mb-4 pb-2 border-b border-[var(--border-subtle)]">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-            Day Transactions ({filteredAndSortedEntries.length})
-          </h3>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-2 border-b border-[var(--border-subtle)]">
+          <div>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+              Day Transactions ({totalEntries})
+            </h3>
+            {totalEntries > 0 && (
+              <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                Showing {startIndex + 1}–{endIndex} of {totalEntries} {searchQuery ? "(searched across all pages)" : ""}
+              </p>
+            )}
+          </div>
           <button
             type="button"
             onClick={() => setSortOrder((prev) => (prev === "desc" ? "asc" : "desc"))}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] hover:border-sky-500 px-3 py-1.5 text-xs font-bold text-[var(--text-primary)] hover:text-sky-400 transition cursor-pointer shadow-xs"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] hover:border-sky-500 px-3 py-1.5 text-xs font-bold text-[var(--text-primary)] hover:text-sky-400 transition cursor-pointer shadow-xs shrink-0 self-start sm:self-auto"
             title={sortOrder === "desc" ? "Sorted: Latest on top (Click to view Earliest First)" : "Sorted: Earliest on top (Click to view Latest First)"}
           >
             {sortOrder === "desc" ? (
@@ -153,14 +182,14 @@ export function DayBookReport({ data }: { data: DayBookResponse | null }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border-subtle)]">
-              {filteredAndSortedEntries.length === 0 ? (
+              {paginatedEntries.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-8 text-center text-xs text-[var(--text-muted)]">
                     {searchQuery ? "No matching transactions found." : "No transactions recorded for this day."}
                   </td>
                 </tr>
               ) : (
-                filteredAndSortedEntries.map((e, idx) => (
+                paginatedEntries.map((e, idx) => (
                   <tr key={idx} className="hover:bg-[var(--bg-surface-elevated)]/40 transition">
                     <td className="py-2.5 px-3 text-[var(--text-muted)] font-mono text-xs whitespace-nowrap align-top">
                       {parseUTCDate(e.timestamp).toLocaleTimeString("en-IN", {
@@ -242,6 +271,77 @@ export function DayBookReport({ data }: { data: DayBookResponse | null }) {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Bar */}
+        {totalPages > 1 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-[var(--border-subtle)] pt-4 mt-2 text-xs">
+            <div className="text-[var(--text-secondary)]">
+              Showing <span className="font-bold text-[var(--text-primary)]">{startIndex + 1}</span> to{" "}
+              <span className="font-bold text-[var(--text-primary)]">{endIndex}</span> of{" "}
+              <span className="font-bold text-[var(--text-primary)]">{totalEntries}</span> transactions
+              {searchQuery && <span className="text-sky-400 font-medium ml-1">(searched across all pages)</span>}
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                disabled={safeCurrentPage <= 1}
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] font-semibold text-[var(--text-primary)] hover:border-sky-500 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+                Previous
+              </button>
+
+              <div className="flex items-center gap-1">
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter((p) => {
+                    if (totalPages <= 7) return true;
+                    if (p === 1 || p === totalPages) return true;
+                    if (Math.abs(p - safeCurrentPage) <= 1) return true;
+                    return false;
+                  })
+                  .reduce<(number | string)[]>((acc, p, idx, arr) => {
+                    if (idx > 0 && typeof arr[idx - 1] === "number" && (p as number) - (arr[idx - 1] as number) > 1) {
+                      acc.push("...");
+                    }
+                    acc.push(p);
+                    return acc;
+                  }, [])
+                  .map((item, idx) =>
+                    typeof item === "number" ? (
+                      <button
+                        key={item}
+                        type="button"
+                        onClick={() => setCurrentPage(item)}
+                        className={`min-w-[30px] h-7 px-2 rounded-lg text-xs font-bold transition cursor-pointer ${
+                          item === safeCurrentPage
+                            ? "bg-[var(--accent-brand)] text-[var(--text-on-accent)] shadow-xs"
+                            : "border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-strong)]"
+                        }`}
+                      >
+                        {item}
+                      </button>
+                    ) : (
+                      <span key={`ellipsis-${idx}`} className="px-1 text-[var(--text-muted)] select-none">
+                        ...
+                      </span>
+                    )
+                  )}
+              </div>
+
+              <button
+                type="button"
+                disabled={safeCurrentPage >= totalPages}
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] font-semibold text-[var(--text-primary)] hover:border-sky-500 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
+              >
+                Next
+                <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
