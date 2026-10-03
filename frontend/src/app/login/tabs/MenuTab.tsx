@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import {
   AlertTriangle,
   ArrowUpDown,
   Barcode,
   Boxes,
+  ChevronDown,
   Edit,
   FileText,
   Filter,
@@ -123,6 +124,20 @@ export function MenuTab({
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [newCatName, setNewCatName] = useState("");
   const [isSubmittingCat, setIsSubmittingCat] = useState(false);
+  const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
+  const categoryDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target as Node)) {
+        setIsCategoryDropdownOpen(false);
+      }
+    }
+    if (isCategoryDropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [isCategoryDropdownOpen]);
 
   // Delete Warning Confirmation States
   const [itemPendingDelete, setItemPendingDelete] = useState<AdminMenuItem | null>(null);
@@ -576,75 +591,112 @@ export function MenuTab({
 
   return (
     <div className="space-y-4">
-      {/* Category Pills & Actions Header */}
+      {/* Category Selection & Actions Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
+        {/* Left: All Products Button & Select Category Wise Dropdown */}
+        <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
             onClick={() => setSelectedCategory("ALL")}
-            className={`flex-shrink-0 rounded-xl px-3.5 py-1.5 text-xs font-bold transition ${
+            className={`rounded-xl px-3.5 py-1.5 text-xs font-black transition cursor-pointer ${
               selectedCategory === "ALL"
-                ? "bg-[var(--accent-brand)] text-[var(--text-on-accent)] shadow-md"
-                : "bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-surface-elevated)]"
+                ? "bg-black text-white shadow-xs"
+                : "bg-white text-neutral-900 border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-100"
             }`}
           >
             All Products ({menuItems.length})
           </button>
-          {categories.map((c) => {
-            const isSelected = selectedCategory === c.id;
-            return (
-              <div
-                key={c.id}
-                className={`group flex-shrink-0 inline-flex items-center rounded-xl transition ${
-                  isSelected
-                    ? "bg-[var(--accent-brand)] text-[var(--text-on-accent)] shadow-md"
-                    : "bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-surface-elevated)]"
+
+          {/* Select Category Wise Dropdown Button */}
+          <div className="relative" ref={categoryDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setIsCategoryDropdownOpen((prev) => !prev)}
+              className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-black transition cursor-pointer border ${
+                selectedCategory !== "ALL"
+                  ? "bg-black text-white border-black shadow-xs"
+                  : "bg-white text-neutral-900 border-neutral-300 dark:border-neutral-700 hover:bg-neutral-100"
+              }`}
+              title="Select Category Wise"
+            >
+              <span>
+                {selectedCategory !== "ALL" && categories.find((c) => c.id === selectedCategory)
+                  ? `Category: ${categories.find((c) => c.id === selectedCategory)!.name}`
+                  : "Select Category Wise"}
+              </span>
+              <ChevronDown
+                className={`h-3.5 w-3.5 transition-transform duration-150 ${
+                  isCategoryDropdownOpen ? "rotate-180" : ""
                 }`}
+              />
+            </button>
+
+            {isCategoryDropdownOpen && (
+              <div
+                className="absolute left-0 top-full mt-1.5 w-60 max-h-80 overflow-y-auto rounded-xl border border-[var(--border-strong)] bg-white dark:bg-neutral-900 py-1.5 shadow-2xl z-40"
+                onClick={(e) => e.stopPropagation()}
               >
-                <button
-                  type="button"
-                  onClick={() => setSelectedCategory(c.id)}
-                  className="px-3.5 py-1.5 text-xs font-bold cursor-pointer"
-                >
-                  {c.name}
-                </button>
-                {onDeleteCategory && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setCatPendingDelete(c);
-                    }}
-                    className={`pr-2 py-1.5 text-xs transition cursor-pointer ${
-                      isSelected
-                        ? "text-[var(--text-on-accent)]/70 hover:text-[var(--text-on-accent)]"
-                        : "opacity-0 group-hover:opacity-100 text-[var(--text-muted)] hover:text-rose-500"
-                    }`}
-                    title={`Delete category "${c.name}"`}
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </button>
-                )}
+                <div className="px-3.5 py-1 text-[10px] font-black uppercase tracking-wider text-neutral-500 border-b border-[var(--border-subtle)] mb-1">
+                  Select Category ({categories.length})
+                </div>
+                {categories.map((c) => {
+                  const isSelected = selectedCategory === c.id;
+                  return (
+                    <div
+                      key={c.id}
+                      className={`flex items-center justify-between px-3.5 py-2 text-xs font-bold transition cursor-pointer ${
+                        isSelected
+                          ? "bg-black text-white"
+                          : "text-neutral-800 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                      }`}
+                      onClick={() => {
+                        setSelectedCategory(c.id);
+                        setIsCategoryDropdownOpen(false);
+                      }}
+                    >
+                      <span className="truncate pr-2">{c.name}</span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {isSelected && <span className="text-[11px] font-black">✓</span>}
+                        {onDeleteCategory && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setCatPendingDelete(c);
+                              setIsCategoryDropdownOpen(false);
+                            }}
+                            className={`p-1 rounded hover:bg-rose-500/20 hover:text-rose-500 transition ${
+                              isSelected ? "text-white/70" : "text-neutral-400"
+                            }`}
+                            title={`Delete category "${c.name}"`}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
+            )}
+          </div>
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto flex-1 justify-end">
-          <div className="relative min-w-[260px] sm:min-w-[340px] md:min-w-[420px] flex-1 max-w-lg">
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="relative w-52 sm:w-56 shrink-0">
             <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-neutral-500" />
             <input
               type="text"
               placeholder="Search items or barcode..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] py-1.5 pl-8 pr-8 text-xs font-bold text-[var(--text-primary)] placeholder:text-neutral-500 placeholder:font-medium focus:border-black outline-none"
+              className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] py-1.5 pl-8 pr-7 text-xs font-bold text-[var(--text-primary)] placeholder:text-neutral-500 placeholder:font-medium focus:border-black outline-none"
             />
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => setSearchQuery("")}
-                className="absolute right-2.5 top-2 text-neutral-400 hover:text-black p-0.5 cursor-pointer"
+                className="absolute right-2 top-2 text-neutral-400 hover:text-black p-0.5 cursor-pointer"
                 title="Clear search"
               >
                 <X className="h-3.5 w-3.5" />
