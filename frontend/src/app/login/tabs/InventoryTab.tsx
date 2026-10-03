@@ -589,7 +589,7 @@ export function InventoryTab({
   // Batch Lots & FEFO Search, Status Filter & Sorting
   const [batchSearchQuery, setBatchSearchQuery] = useState("");
   const [batchStatusFilter, setBatchStatusFilter] = useState<string>("ALL");
-  const [batchSortOption, setBatchSortOption] = useState<BatchSortOption>("expiry_asc");
+  const [batchSortOption, setBatchSortOption] = useState<BatchSortOption>("recent");
 
   const batchCounts = useMemo(() => {
     let active = 0, expiring = 0, expired = 0, depleted = 0, oversold = 0;
@@ -1471,9 +1471,9 @@ export function InventoryTab({
                   onChange={(e) => setBatchSortOption(e.target.value as BatchSortOption)}
                   className="rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3 py-2 text-xs font-medium text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none transition cursor-pointer"
                 >
+                  <option value="recent">⏱️ Most Recent Arrival (Default)</option>
                   <option value="expiry_asc">⏳ Earliest Expiry / Shelf Deadline First (FEFO)</option>
                   <option value="expiry_desc">⌛ Latest Expiry / Shelf Deadline First</option>
-                  <option value="recent">⏱️ Most Recent Arrival (Default)</option>
                   <option value="oldest">🕰️ Oldest Arrival (FIFO)</option>
                   <option value="shelf_life_asc">🌿 Shelf Life: Shortest Alert First</option>
                   <option value="alpha_asc">🔤 Product Name: A → Z</option>

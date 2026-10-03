@@ -58,7 +58,7 @@ export function useAnalyticsManagement({
   const [activeFinancialSubTab, setActiveFinancialSubTab] = useState<FinancialSubTab>("profit_margin");
 
   // Filter State
-  const [datePreset, setDatePreset] = useState<DatePreset>("last_30");
+  const [datePreset, setDatePreset] = useState<DatePreset>("today");
   const [customFromDate, setCustomFromDate] = useState<string>("");
   const [customToDate, setCustomToDate] = useState<string>("");
   const [granularity, setGranularity] = useState<"hourly" | "daily" | "weekly" | "monthly">("daily");

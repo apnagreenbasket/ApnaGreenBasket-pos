@@ -43,7 +43,7 @@ export function ItemSalesReport({
   onCategoryChange,
   categories = [],
   restaurant,
-  datePreset = "last_30",
+  datePreset = "today",
   viewMode: controlledViewMode,
   onViewModeChange,
 }: ItemSalesReportProps) {

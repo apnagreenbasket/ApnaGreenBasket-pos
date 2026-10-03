@@ -3841,8 +3841,6 @@ export function CustomerReturnsModal({
                       className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] py-2.5 px-3.5 text-sm font-bold text-[var(--text-primary)] focus:border-sky-400 outline-none"
                     >
                       <option value="CASH">Cash Refund</option>
-                      <option value="UPI">UPI Refund</option>
-                      <option value="STORE_CREDIT">Store Credit Voucher</option>
                     </select>
                   </div>
                 </div>
