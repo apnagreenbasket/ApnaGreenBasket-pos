@@ -5062,6 +5062,7 @@ export function generateBillsHistoryPdfReport({
   let totalGrandSales = 0;
   let totalSubtotal = 0;
   let totalDiscounts = 0;
+  let totalAddlCharges = 0;
   let paidCount = 0;
   let draftCount = 0;
   let cancelledOrRefundedCount = 0;
@@ -5072,10 +5073,12 @@ export function generateBillsHistoryPdfReport({
     const total = Number(b.total_amount || 0);
     const sub = Number(b.subtotal_amount || total);
     const disc = Number(b.discount_value || 0) || Math.max(0, sub - total);
+    const addl = (Number(b.delivery_charge) || 0) + (Number(b.handling_charge) || 0);
 
     totalGrandSales += total;
     totalSubtotal += sub;
     totalDiscounts += disc;
+    totalAddlCharges += addl;
 
     if (s === "PAID" || s === "COMPLETED" || s === "FINALIZED") {
       paidCount++;
@@ -5144,8 +5147,8 @@ export function generateBillsHistoryPdfReport({
     const payMethod = b.payment_method || (b.status === "PAID" ? "CASH" : "—");
     const subtotal = `Rs. ${(Number(b.subtotal_amount) || Number(b.total_amount) || 0).toFixed(2)}`;
 
-    const discVal = Number(b.discount_value || 0) || Math.max(0, (Number(b.subtotal_amount) || 0) - (Number(b.total_amount) || 0));
-    const discount = discVal > 0 ? `Rs. ${discVal.toFixed(2)}` : "—";
+    const addlVal = (Number(b.delivery_charge) || 0) + (Number(b.handling_charge) || 0);
+    const addlCharges = addlVal > 0 ? `Rs. ${addlVal.toFixed(2)}` : "—";
 
     const grandTotal = `Rs. ${(Number(b.total_amount) || 0).toFixed(2)}`;
     const status = (b.status || "DRAFT").toUpperCase();
@@ -5158,7 +5161,7 @@ export function generateBillsHistoryPdfReport({
       itemsCount,
       payMethod,
       subtotal,
-      discount,
+      addlCharges,
       grandTotal,
       status,
     ];
@@ -5167,7 +5170,7 @@ export function generateBillsHistoryPdfReport({
   (autoTable as any)(doc, {
     startY: y,
     margin: { left: 14, right: 14 },
-    head: [["#", "Bill ID", "Date & Time", "Customer & Basket", "Items", "Pay Mode", "Subtotal", "Discount", "Grand Total", "Status"]],
+    head: [["#", "Bill ID", "Date & Time", "Customer & Basket", "Items", "Pay Mode", "Subtotal", "Addl. Charges", "Grand Total", "Status"]],
     body: tableRows.length > 0 ? tableRows : [["—", "No bills found", "—", "—", "—", "—", "—", "—", "—", "—"]],
     foot: tableRows.length > 0 ? [
       [
@@ -5176,7 +5179,7 @@ export function generateBillsHistoryPdfReport({
         "",
         "",
         `Rs. ${totalSubtotal.toFixed(2)}`,
-        `Rs. ${totalDiscounts.toFixed(2)}`,
+        `Rs. ${totalAddlCharges.toFixed(2)}`,
         `Rs. ${totalGrandSales.toFixed(2)}`,
         "",
       ]

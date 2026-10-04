@@ -2370,54 +2370,36 @@ export function CustomerReturnsModal({
               </div>
             </div>
           ) : (
-            /* 4 Executive Summary Boxes (Shown whenever a return bill is not being processed) */
+            /* 5 Executive Summary Boxes (Shown whenever a return bill is not being processed) */
             <div className="hidden md:flex items-center gap-2 shrink-0">
               {/* Gross Returns */}
-              <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 px-3 py-1.5 min-w-[105px] text-left">
-                <span className="text-[9px] font-bold text-rose-400 uppercase tracking-wider block">Gross Returns</span>
-                <span className="text-base font-black text-rose-500 font-mono">
+              <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] px-3 py-1.5 min-w-[105px] text-left">
+                <span className="text-[9px] font-bold text-black uppercase tracking-wider block">Gross Returns</span>
+                <span className="text-base font-black text-black font-mono">
                   ₹{vouchersSummary.grossReturns.toFixed(2)}
                 </span>
               </div>
 
               {/* Exchange Value */}
-              <div className="rounded-xl border border-sky-500/20 bg-sky-500/5 px-3 py-1.5 min-w-[105px] text-left">
-                <span className="text-[9px] font-bold text-sky-400 uppercase tracking-wider block">Exchange Value</span>
-                <span className="text-base font-black text-sky-500 font-mono">
+              <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] px-3 py-1.5 min-w-[105px] text-left">
+                <span className="text-[9px] font-bold text-black uppercase tracking-wider block">Exchange Value</span>
+                <span className="text-base font-black text-black font-mono">
                   ₹{vouchersSummary.totalExchanges.toFixed(2)}
                 </span>
               </div>
 
               {/* Net Refund */}
               <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] px-3 py-1.5 min-w-[105px] text-left">
-                <span className="text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-wider block">
+                <span className="text-[9px] font-bold text-black uppercase tracking-wider block">
                   {vouchersSummary.netBalance < 0 ? "Net Collected" : vouchersSummary.netBalance > 0 ? "Net Refund" : "Net Settlement"}
                 </span>
-                <span className={`text-base font-black font-mono ${
-                  vouchersSummary.netBalance < 0
-                    ? "text-emerald-400"
-                    : vouchersSummary.netBalance > 0
-                      ? "text-rose-500"
-                      : "text-[var(--text-primary)]"
-                }`}>
+                <span className="text-base font-black font-mono text-black">
                   {vouchersSummary.netBalance < 0
                     ? `+₹${Math.abs(vouchersSummary.netBalance).toFixed(2)}`
                     : vouchersSummary.netBalance > 0
                       ? `-₹${vouchersSummary.netBalance.toFixed(2)}`
                       : "₹0.00"}
                 </span>
-                {vouchersSummary.netBalance > 0 && vouchersSummary.netCreditDebit > 0 && (
-                  <div className="mt-1 pt-1 border-t border-[var(--border-subtle)] text-[11px] text-[var(--text-primary)] font-bold flex items-center justify-between">
-                    <span>CASH:</span>
-                    <span className="text-rose-500 font-mono">-₹{(vouchersSummary.netBalance - vouchersSummary.netCreditDebit).toFixed(2)}</span>
-                  </div>
-                )}
-                {vouchersSummary.netBalance < 0 && vouchersSummary.netCreditDebit < 0 && (
-                  <div className="mt-1 pt-1 border-t border-[var(--border-subtle)] text-[11px] text-[var(--text-primary)] font-bold flex items-center justify-between">
-                    <span>CASH:</span>
-                    <span className="text-emerald-400 font-mono">+₹{(Math.abs(vouchersSummary.netBalance) - Math.abs(vouchersSummary.netCreditDebit)).toFixed(2)}</span>
-                  </div>
-                )}
               </div>
 
               {/* Return Credit-Debit */}
@@ -2434,11 +2416,45 @@ export function CustomerReturnsModal({
                     .join(" • ") || "Return Wallet Activity"
                 }
               >
-                <span className="text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-wider block">Return Credit-Debit</span>
-                <span className={`text-base font-black font-mono ${vouchersSummary.netCreditDebit < 0 ? "text-amber-400" : "text-emerald-400"}`}>
+                <span className="text-[9px] font-bold text-black uppercase tracking-wider block">Return Credit-Debit</span>
+                <span className="text-base font-black font-mono text-black">
                   {vouchersSummary.netCreditDebit >= 0 ? "+" : "-"}₹{Math.abs(vouchersSummary.netCreditDebit).toFixed(2)}
                 </span>
               </div>
+
+              {/* New 5th Block: NET Cash / Settlement */}
+              {(() => {
+                let netVal = 0;
+                if (vouchersSummary.netBalance > 0) {
+                  netVal = -(vouchersSummary.netBalance - vouchersSummary.netCreditDebit);
+                } else if (vouchersSummary.netBalance < 0) {
+                  netVal = Math.abs(vouchersSummary.netBalance) - Math.abs(vouchersSummary.netCreditDebit);
+                }
+
+                const isPositive = netVal > 0;
+                const isNegative = netVal < 0;
+
+                return (
+                  <div className={`rounded-xl border px-3 py-1.5 min-w-[105px] text-left ${
+                    isPositive
+                      ? "border-emerald-500/30 bg-emerald-500/10"
+                      : isNegative
+                      ? "border-rose-500/30 bg-rose-500/10"
+                      : "border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)]"
+                  }`}>
+                    <span className="text-[9px] font-bold text-black uppercase tracking-wider block">NET</span>
+                    <span className={`text-base font-black font-mono ${
+                      isPositive
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : isNegative
+                        ? "text-rose-600 dark:text-rose-400"
+                        : "text-black"
+                    }`}>
+                      {isPositive ? `+₹${netVal.toFixed(2)}` : isNegative ? `-₹${Math.abs(netVal).toFixed(2)}` : "₹0.00"}
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -2942,48 +2958,30 @@ export function CustomerReturnsModal({
                     </div>
                   </div>
                 ) : (
-                  <div className={`${isProcessingReturn ? "grid" : "grid md:hidden"} grid-cols-4 gap-2.5 flex-shrink-0`}>
-                    <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-3">
-                      <span className="text-[10px] font-bold text-rose-400 uppercase tracking-wider block">Gross Returns</span>
-                      <span className="text-lg font-black text-rose-500 font-mono">
+                  <div className={`${isProcessingReturn ? "grid" : "grid md:hidden"} grid-cols-2 sm:grid-cols-5 gap-2.5 flex-shrink-0`}>
+                    <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-3">
+                      <span className="text-[10px] font-bold text-black uppercase tracking-wider block">Gross Returns</span>
+                      <span className="text-lg font-black text-black font-mono">
                         ₹{vouchersSummary.grossReturns.toFixed(2)}
                       </span>
                     </div>
-                    <div className="rounded-xl border border-sky-500/20 bg-sky-500/5 p-3">
-                      <span className="text-[10px] font-bold text-sky-400 uppercase tracking-wider block">Exchange Value</span>
-                      <span className="text-lg font-black text-sky-500 font-mono">
+                    <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-3">
+                      <span className="text-[10px] font-bold text-black uppercase tracking-wider block">Exchange Value</span>
+                      <span className="text-lg font-black text-black font-mono">
                         ₹{vouchersSummary.totalExchanges.toFixed(2)}
                       </span>
                     </div>
                     <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-3">
-                      <span className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider block">
+                      <span className="text-[10px] font-bold text-black uppercase tracking-wider block">
                         {vouchersSummary.netBalance < 0 ? "Net Collected" : vouchersSummary.netBalance > 0 ? "Net Refund" : "Net Settlement"}
                       </span>
-                      <span className={`text-lg font-black font-mono ${
-                        vouchersSummary.netBalance < 0
-                          ? "text-emerald-400"
-                          : vouchersSummary.netBalance > 0
-                            ? "text-rose-500"
-                            : "text-[var(--text-primary)]"
-                      }`}>
+                      <span className="text-lg font-black font-mono text-black">
                         {vouchersSummary.netBalance < 0
                           ? `+₹${Math.abs(vouchersSummary.netBalance).toFixed(2)}`
                           : vouchersSummary.netBalance > 0
                             ? `-₹${vouchersSummary.netBalance.toFixed(2)}`
                             : "₹0.00"}
                       </span>
-                      {vouchersSummary.netBalance > 0 && vouchersSummary.netCreditDebit > 0 && (
-                        <div className="mt-1 pt-1 border-t border-[var(--border-subtle)] text-xs text-[var(--text-primary)] font-bold flex items-center justify-between">
-                          <span>CASH:</span>
-                          <span className="text-rose-500 font-mono">-₹{(vouchersSummary.netBalance - vouchersSummary.netCreditDebit).toFixed(2)}</span>
-                        </div>
-                      )}
-                      {vouchersSummary.netBalance < 0 && vouchersSummary.netCreditDebit < 0 && (
-                        <div className="mt-1 pt-1 border-t border-[var(--border-subtle)] text-xs text-[var(--text-primary)] font-bold flex items-center justify-between">
-                          <span>CASH:</span>
-                          <span className="text-emerald-400 font-mono">+₹{(Math.abs(vouchersSummary.netBalance) - Math.abs(vouchersSummary.netCreditDebit)).toFixed(2)}</span>
-                        </div>
-                      )}
                     </div>
                     <div
                       className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-3 cursor-help"
@@ -2998,11 +2996,43 @@ export function CustomerReturnsModal({
                           .join(" • ") || "Return Wallet Activity"
                       }
                     >
-                      <span className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider block">Return Credit-Debit</span>
-                      <span className={`text-lg font-black font-mono ${vouchersSummary.netCreditDebit < 0 ? "text-amber-400" : "text-emerald-400"}`}>
+                      <span className="text-[10px] font-bold text-black uppercase tracking-wider block">Return Credit-Debit</span>
+                      <span className="text-lg font-black font-mono text-black">
                         {vouchersSummary.netCreditDebit >= 0 ? "+" : "-"}₹{Math.abs(vouchersSummary.netCreditDebit).toFixed(2)}
                       </span>
                     </div>
+                    {(() => {
+                      let netVal = 0;
+                      if (vouchersSummary.netBalance > 0) {
+                        netVal = -(vouchersSummary.netBalance - vouchersSummary.netCreditDebit);
+                      } else if (vouchersSummary.netBalance < 0) {
+                        netVal = Math.abs(vouchersSummary.netBalance) - Math.abs(vouchersSummary.netCreditDebit);
+                      }
+
+                      const isPositive = netVal > 0;
+                      const isNegative = netVal < 0;
+
+                      return (
+                        <div className={`rounded-xl border p-3 ${
+                          isPositive
+                            ? "border-emerald-500/30 bg-emerald-500/10"
+                            : isNegative
+                            ? "border-rose-500/30 bg-rose-500/10"
+                            : "border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)]"
+                        }`}>
+                          <span className="text-[10px] font-bold text-black uppercase tracking-wider block">NET</span>
+                          <span className={`text-lg font-black font-mono ${
+                            isPositive
+                              ? "text-emerald-600 dark:text-emerald-400"
+                              : isNegative
+                              ? "text-rose-600 dark:text-rose-400"
+                              : "text-black"
+                          }`}>
+                            {isPositive ? `+₹${netVal.toFixed(2)}` : isNegative ? `-₹${Math.abs(netVal).toFixed(2)}` : "₹0.00"}
+                          </span>
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
 
@@ -3942,12 +3972,12 @@ export function CustomerReturnsModal({
                             )}
                           </div>
                         ) : (isNetRefund ? (targetRefundAmt > 0 && refundDenomTotal > 0 && (refundDenomTotal - inwardDenomTotal === targetRefundAmt)) : (effectiveTargetOutward > 0 && refundDenomTotal === effectiveTargetOutward)) ? (
-                          <div className="flex items-center justify-between bg-emerald-500/15 rounded-xl py-2 px-3.5 border border-emerald-500/40 text-emerald-300 animate-in fade-in duration-200">
-                            <span className="font-mono text-sm font-black flex items-center gap-2">
-                              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-                              <span>Net Dispense Satisfied: <span className="text-xl font-black text-emerald-200">₹{effectiveTargetOutward.toFixed(2)}</span></span>
+                          <div className="flex items-center justify-between bg-emerald-500/15 rounded-xl py-2 px-3.5 border border-emerald-500/40 text-black animate-in fade-in duration-200">
+                            <span className="font-mono text-sm font-black flex items-center gap-2 text-black">
+                              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                              <span className="text-black font-bold">Net Dispense Satisfied: <span className="text-xl font-black text-black">₹{effectiveTargetOutward.toFixed(2)}</span></span>
                             </span>
-                            <span className="text-xs font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 px-2.5 py-1 rounded-md border border-emerald-500/30">
+                            <span className="text-xs font-black uppercase tracking-wider bg-emerald-500/25 text-black px-2.5 py-1 rounded-md border border-emerald-500/40">
                               Exact Change ✓
                             </span>
                           </div>
@@ -4128,12 +4158,12 @@ export function CustomerReturnsModal({
                             )}
                           </div>
                         ) : targetCollectionAmt > 0 && inwardDenomTotal > 0 && (inwardDenomTotal - refundDenomTotal === targetCollectionAmt) ? (
-                          <div className="flex items-center justify-between bg-emerald-500/15 rounded-xl py-2 px-3.5 border border-emerald-500/40 text-emerald-300 animate-in fade-in duration-200">
-                            <span className="font-mono text-sm font-black flex items-center gap-2">
-                              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-                              <span>Net Collection Satisfied: <span className="text-xl font-black text-emerald-200">₹{targetCollectionAmt.toFixed(2)}</span></span>
+                          <div className="flex items-center justify-between bg-emerald-500/15 rounded-xl py-2 px-3.5 border border-emerald-500/40 text-black animate-in fade-in duration-200">
+                            <span className="font-mono text-sm font-black flex items-center gap-2 text-black">
+                              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                              <span className="text-black font-bold">Net Collection Satisfied: <span className="text-xl font-black text-black">₹{targetCollectionAmt.toFixed(2)}</span></span>
                             </span>
-                            <span className="text-xs font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 px-2.5 py-1 rounded-md border border-emerald-500/30">
+                            <span className="text-xs font-black uppercase tracking-wider bg-emerald-500/25 text-black px-2.5 py-1 rounded-md border border-emerald-500/40">
                               Exact Cash ✓
                             </span>
                           </div>
@@ -4338,8 +4368,8 @@ export function CustomerReturnsModal({
                           <span className="text-emerald-400 font-black text-base font-mono">
                             ₹{Math.abs(refundDenomTotal - inwardDenomTotal).toFixed(2)}
                           </span>
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 animate-in fade-in">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-500/20 text-black border border-emerald-500/40 animate-in fade-in">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                             Satisfied
                           </span>
                         </div>
@@ -4382,21 +4412,21 @@ export function CustomerReturnsModal({
 
                   {/* Visual Status Indicator: Visible as soon as net is satisfied */}
                   {netSatisfactionStatus.isSatisfied ? (
-                    <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 animate-in fade-in duration-200 shadow-sm mt-1">
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-black animate-in fade-in duration-200 shadow-sm mt-1">
                       <div className="flex items-center gap-2.5">
-                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-slate-950 font-black">
+                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-black font-black">
                           <Check className="h-3.5 w-3.5 stroke-[3]" />
                         </div>
                         <div>
-                          <span className="font-bold text-sm block text-emerald-200 leading-tight">
+                          <span className="font-bold text-sm block text-black leading-tight">
                             Net Transaction Satisfied
                           </span>
-                          <span className="text-xs text-emerald-300/80 block font-mono">
+                          <span className="text-xs text-black font-bold block font-mono">
                             {netSatisfactionStatus.label}
                           </span>
                         </div>
                       </div>
-                      <span className="px-2.5 py-1 rounded-lg bg-emerald-500/25 border border-emerald-500/40 text-emerald-200 text-xs font-black tracking-wider uppercase flex items-center gap-1">
+                      <span className="px-2.5 py-1 rounded-lg bg-emerald-500/25 border border-emerald-500/40 text-black text-xs font-black tracking-wider uppercase flex items-center gap-1">
                         Ready ↵
                       </span>
                     </div>

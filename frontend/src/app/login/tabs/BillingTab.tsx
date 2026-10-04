@@ -593,7 +593,7 @@ export function BillingTab({
 
             <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] text-xs font-black">
               <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-900 dark:text-neutral-100">Net:</span>
-              <span className="font-mono text-neutral-900 dark:text-neutral-100 font-black">₹{(dailyNetPaid || 0).toFixed(2)}</span>
+              <span className="font-mono text-emerald-700 dark:text-emerald-400 font-black">₹{(dailyNetPaid || 0).toFixed(2)}</span>
             </div>
 
             {dailyUpiPaid !== undefined && dailyUpiPaid > 0 && (
@@ -968,7 +968,7 @@ export function BillingTab({
                 <th className="p-3.5 max-w-[170px]">Customer &amp; Basket</th>
                 <th className="p-3.5 text-center whitespace-nowrap">Items</th>
                 <th className="p-3.5 text-right whitespace-nowrap">Subtotal</th>
-                <th className="p-3.5 text-right whitespace-nowrap">Discount</th>
+                <th className="p-3.5 text-right whitespace-nowrap">Additional Charges</th>
                 <th className="p-3.5 text-right min-w-[130px] max-w-[170px]">Grand Total</th>
                 <th className="p-3.5 text-center whitespace-nowrap">Status</th>
                 <th className="p-3.5 text-center whitespace-nowrap min-w-[95px]">Date &amp; Time</th>
@@ -1038,23 +1038,53 @@ export function BillingTab({
                       <td className="p-3.5 text-right font-mono text-base">₹{b.subtotal_amount.toFixed(2)}</td>
 
                       <td className="p-3.5 text-right font-mono">
-                        {b.discount_type ? (
-                          <span className="text-emerald-600 font-bold">
-                            {b.discount_type === "PERCENT"
+                        {(() => {
+                          const delivery = Number(b.delivery_charge || 0);
+                          const handling = Number(b.handling_charge || 0);
+                          const totalAddl = delivery + handling;
+
+                          if (totalAddl > 0) {
+                            return (
+                              <div
+                                className="flex flex-col items-end"
+                                title={`Delivery: ₹${delivery.toFixed(2)} | Handling: ₹${handling.toFixed(2)}`}
+                              >
+                                <span className="font-bold text-[var(--text-primary)]">
+                                  ₹{totalAddl.toFixed(2)}
+                                </span>
+                                {delivery > 0 && handling > 0 ? (
+                                  <span className="text-[10px] text-[var(--text-muted)] font-sans">
+                                    D: ₹{delivery.toFixed(0)} | H: ₹{handling.toFixed(0)}
+                                  </span>
+                                ) : delivery > 0 ? (
+                                  <span className="text-[10px] text-[var(--text-muted)] font-sans">
+                                    Delivery
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] text-[var(--text-muted)] font-sans">
+                                    Handling
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          }
+                          return <span className="text-[var(--text-muted)]">—</span>;
+                        })()}
+                      </td>
+
+                      <td className="p-3.5 text-right font-mono font-black text-base text-[var(--text-primary)] min-w-[130px] max-w-[170px]">
+                        <div>₹{b.total_amount.toFixed(2)}</div>
+                        {b.discount_type && (
+                          <div className="text-[11px] text-emerald-500 font-bold mt-0.5 break-words leading-tight">
+                            Discount: {b.discount_type === "PERCENT"
                               ? `-${b.discount_value}%`
                               : b.discount_type === "FLAT"
                                 ? `-₹${b.discount_value}`
                                 : b.discount_type === "COMPLIMENTARY_ITEMS"
                                   ? `-₹${b.discount_value}`
                                   : "FREE"}
-                          </span>
-                        ) : (
-                          <span className="text-[var(--text-muted)]">—</span>
+                          </div>
                         )}
-                      </td>
-
-                      <td className="p-3.5 text-right font-mono font-black text-base text-[var(--text-primary)] min-w-[130px] max-w-[170px]">
-                        <div>₹{b.total_amount.toFixed(2)}</div>
                         {((b as any).total_refunded_amount > 0 || b.status === "PARTIALLY_REFUNDED") && !b.is_void && (
                           <div className="text-[11px] text-rose-400 font-bold mt-0.5 break-words leading-tight">
                             ↩ Refunded: -₹{Number((b as any).total_refunded_amount || 0).toFixed(2)}

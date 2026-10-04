@@ -546,7 +546,7 @@ export default function AdminDashboardPage() {
 
                 <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-neutral-400 bg-white text-sm sm:text-base font-black shadow-2xs" title="Net Realized Settlement (Cash & Digital Payments Collected at Counter)">
                   <span className="text-[10px] sm:text-xs font-black uppercase tracking-wider text-black">Net:</span>
-                  <span className="font-mono text-black font-black">₹{billingState.dailyNetPaid.toFixed(2)}</span>
+                  <span className="font-mono text-emerald-700 font-black">₹{billingState.dailyNetPaid.toFixed(2)}</span>
                 </div>
 
                 {/* UPI Contribution Pill */}

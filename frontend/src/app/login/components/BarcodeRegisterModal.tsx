@@ -1179,6 +1179,13 @@ export function BarcodeRegisterModal({
                   placeholder="e.g. 80"
                   value={sortedQuantity}
                   onChange={(e) => setSortedQuantity(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      mrpRef.current?.focus();
+                      mrpRef.current?.select();
+                    }
+                  }}
                   className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-2.5 py-1.5 text-xs font-mono text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
