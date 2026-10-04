@@ -1094,6 +1094,29 @@ async def mark_bill_paid(
         order.customer_balance = cust.credit_balance
         order.customer_loyalty_balance = cust.loyalty_points
 
+    # Reconcile direct tender amounts (Cash / UPI / Split) with the finalized rounded total_amount
+    direct_payable_final = max(
+        Decimal("0.00"),
+        (order.total_amount or Decimal("0.00"))
+        - (order.credit_applied or Decimal("0.00"))
+        - (order.debit_applied or Decimal("0.00"))
+        - (order.loyalty_discount_inr or Decimal("0.00"))
+        + max(Decimal("0.00"), record_credit)
+    )
+    if order.payment_method == "UPI":
+        order.upi_amount = direct_payable_final
+        order.cash_amount = Decimal("0.00")
+    elif order.payment_method == "CASH":
+        order.cash_amount = direct_payable_final
+        order.upi_amount = Decimal("0.00")
+    elif order.payment_method == "SPLIT":
+        cur_u = order.upi_amount or Decimal("0.00")
+        if cur_u >= direct_payable_final:
+            order.upi_amount = direct_payable_final
+            order.cash_amount = Decimal("0.00")
+        else:
+            order.cash_amount = direct_payable_final - cur_u
+        order.payment_reference = f"SPLIT [Cash: ₹{order.cash_amount:.2f}, UPI: ₹{order.upi_amount:.2f}]"
 
     # 1. Deferred void & inventory restock: if this bill replaces an old one, reverse stock deduction and mark old bill void
     if getattr(order, "replaces_bill_id", None):

@@ -57,6 +57,7 @@ async def list_customers(
             Order.outlet_id == outlet_id,
             Order.customer_id.isnot(None),
             Order.status.in_([OrderStatusEnum.PAID, OrderStatusEnum.COMPLETED, OrderStatusEnum.PARTIALLY_REFUNDED]),
+            Order.is_void == False,
         )
         .group_by(Order.customer_id)
     )
@@ -105,12 +106,30 @@ async def list_customers(
             "updated_at": c.updated_at,
         })
     if page is not None and page_size is not None:
+        # Calculate overall total customer spend and orders for all matching customers (not just current page)
+        all_matching_stmt = select(Customer.id, Customer.phone).where(Customer.outlet_id == outlet_id)
+        if search and search.strip():
+            q = f"%{search.strip()}%"
+            all_matching_stmt = all_matching_stmt.where(
+                (Customer.name.ilike(q)) | (Customer.phone.ilike(q))
+            )
+        all_matching_res = await db.execute(all_matching_stmt)
+        all_matching_rows = all_matching_res.all()
+
+        overall_orders = sum(stats_map.get(r.id, (0, 0.0))[0] for r in all_matching_rows)
+        overall_spent = round(sum(
+            max(0.0, stats_map.get(r.id, (0, 0.0))[1] - ret_map.get(r.phone, 0.0))
+            for r in all_matching_rows
+        ), 2)
+
         return {
             "items": result,
             "total": total,
             "page": page,
             "page_size": page_size,
-            "total_pages": (total + page_size - 1) // page_size if page_size > 0 else 0
+            "total_pages": (total + page_size - 1) // page_size if page_size > 0 else 0,
+            "total_customer_spend": overall_spent,
+            "total_customer_orders": overall_orders,
         }
     return result
 

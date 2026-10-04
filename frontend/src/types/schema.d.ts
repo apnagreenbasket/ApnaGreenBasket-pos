@@ -4375,6 +4375,10 @@ export interface components {
             page_size: number;
             /** Total Pages */
             total_pages: number;
+            /** Total Customer Spend */
+            total_customer_spend?: number;
+            /** Total Customer Orders */
+            total_customer_orders?: number;
         };
         /** CustomerResponse */
         CustomerResponse: {

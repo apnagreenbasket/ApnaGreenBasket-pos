@@ -1730,8 +1730,12 @@ async def get_aov_analytics(
                 breakdown_desc = " • ".join(parts)
         elif pm.upper() == "CASH":
             tenders_present.append("Cash")
+            if cr_sum == 0 and db_sum == 0 and rev > 0:
+                c_sum = rev
         elif pm.upper() == "UPI":
             tenders_present.append("UPI")
+            if cr_sum == 0 and db_sum == 0 and rev > 0:
+                u_sum = rev
 
         by_pm.append(
             AovByPaymentMethod(
@@ -2609,22 +2613,31 @@ async def get_payment_mix(
                     u_amt *= scale
 
         # 1. Direct tender allocation (Cash, UPI, Split)
+        net_direct = max(0.0, tot - credit_amt - debit_amt - loyalty_amt)
         is_split = (pm_str == "SPLIT") or (c_amt > 0 and u_amt > 0)
         if is_split:
             key = "SPLIT"
             if key not in pm_orders:
                 pm_orders[key] = {"pm": "SPLIT", "cnt": 0, "gross": 0.0, "cash_amt": 0.0, "upi_amt": 0.0, "tender_type": "DIRECT"}
-            allocated = (c_amt + u_amt) if (c_amt + u_amt) > 0 else max(0.0, tot - credit_amt - debit_amt - loyalty_amt)
+            split_raw = c_amt + u_amt
+            if split_raw > 0 and net_direct > 0:
+                scale = net_direct / split_raw
+                split_c = c_amt * scale
+                split_u = u_amt * scale
+            else:
+                split_c = c_amt
+                split_u = u_amt
+            allocated = net_direct if net_direct > 0 else split_raw
             if allocated > 0:
                 pm_orders[key]["gross"] += allocated
                 pm_orders[key]["cnt"] += 1
-                pm_orders[key]["cash_amt"] += c_amt
-                pm_orders[key]["upi_amt"] += u_amt
+                pm_orders[key]["cash_amt"] += split_c
+                pm_orders[key]["upi_amt"] += split_u
         elif pm_str == "UPI" or (u_amt > 0 and c_amt == 0):
             key = "UPI"
             if key not in pm_orders:
                 pm_orders[key] = {"pm": "UPI", "cnt": 0, "gross": 0.0, "cash_amt": 0.0, "upi_amt": 0.0, "tender_type": "DIRECT"}
-            allocated = u_amt if u_amt > 0 else max(0.0, tot - credit_amt - debit_amt - loyalty_amt)
+            allocated = net_direct if net_direct > 0 else u_amt
             if allocated > 0:
                 pm_orders[key]["gross"] += allocated
                 pm_orders[key]["cnt"] += 1
@@ -2633,7 +2646,7 @@ async def get_payment_mix(
             key = "CASH"
             if key not in pm_orders:
                 pm_orders[key] = {"pm": "CASH", "cnt": 0, "gross": 0.0, "cash_amt": 0.0, "upi_amt": 0.0, "tender_type": "DIRECT"}
-            allocated = c_amt if c_amt > 0 else max(0.0, tot - credit_amt - debit_amt - loyalty_amt)
+            allocated = net_direct if net_direct > 0 else c_amt
             if allocated > 0:
                 pm_orders[key]["gross"] += allocated
                 pm_orders[key]["cnt"] += 1
@@ -4172,15 +4185,22 @@ async def get_day_book(
                     cash_sales += min(c_amt, diff_paid)
         else:
             if pm == "SPLIT" or (c_amt > 0 and u_amt > 0):
-                desc = f"Bill via SPLIT [Cash: ₹{c_amt:.2f}, UPI: ₹{u_amt:.2f}]"
-                cash_sales += c_amt
+                if (c_amt + u_amt) > 0 and abs((c_amt + u_amt) - amt) > 0.001:
+                    scale = amt / (c_amt + u_amt)
+                    split_c = c_amt * scale
+                    split_u = u_amt * scale
+                else:
+                    split_c = c_amt
+                    split_u = u_amt
+                desc = f"Bill via SPLIT [Cash: ₹{split_c:.2f}, UPI: ₹{split_u:.2f}]"
+                cash_sales += split_c
             elif pm == "CASH":
                 desc = "Bill via CASH"
-                cash_sales += (c_amt if c_amt > 0 else amt)
+                cash_sales += amt
             else:
                 desc = f"Bill via {pm}"
                 if c_amt > 0:
-                    cash_sales += c_amt
+                    cash_sales += min(amt, c_amt)
             cr_amt = amt
 
         entries.append({

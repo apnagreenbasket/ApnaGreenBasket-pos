@@ -252,3 +252,84 @@ async def test_payment_mix_multi_tender_support(
 
     # Total reconciled in payment mix: 70 + 20 + 10 = 100.00
     assert float(mix_res.json()["total_revenue"]) == 100.0
+
+
+@pytest.mark.asyncio
+async def test_payment_mix_roundoff_reconciliation(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    """
+    Verify bills with fractional paise (e.g. ₹157.86) rounded off to nearest rupee (₹158.00)
+    store reconciled whole-rupee tender amounts in Order.cash_amount / Order.upi_amount
+    and match Payment Mix exactly with 0 discrepancy.
+    """
+    outlet = await create_test_outlet(db_session, slug="roundoff-outlet", name="Roundoff Outlet")
+    admin = await create_test_user(
+        db_session, outlet, email="admin_roundoff@test.com", role=RoleEnum.OUTLET_ADMIN
+    )
+    cat = await create_test_category(db_session, outlet)
+    item = await create_test_menu_item(db_session, outlet, cat, name="Grocery Item", price=Decimal("157.86"))
+    await db_session.commit()
+    auth_headers = get_auth_headers(admin, outlet)
+
+    # 1. Cash bill with fractional item price
+    b1_res = await client.post(
+        "/api/billing/bills",
+        headers=auth_headers,
+        json={
+            "basket_number": "ROUND-CASH",
+            "items": [{"menu_item_id": str(item.id), "quantity": 1, "unit_price": 157.86}],
+        },
+    )
+    assert b1_res.status_code == 200
+    b1_id = b1_res.json()["id"]
+
+    # Mark paid via CASH
+    p1_res = await client.post(
+        f"/api/billing/bills/{b1_id}/mark-paid",
+        headers=auth_headers,
+        json={"payment_method": "CASH"},
+    )
+    assert p1_res.status_code == 200
+    b1_data = p1_res.json()
+    assert float(b1_data["total_amount"]) == 158.0
+    assert float(b1_data["cash_amount"]) == 158.0
+
+    # 2. UPI bill with fractional item price
+    b2_res = await client.post(
+        "/api/billing/bills",
+        headers=auth_headers,
+        json={
+            "basket_number": "ROUND-UPI",
+            "items": [{"menu_item_id": str(item.id), "quantity": 1, "unit_price": 157.86}],
+        },
+    )
+    assert b2_res.status_code == 200
+    b2_id = b2_res.json()["id"]
+
+    # Mark paid via UPI
+    p2_res = await client.post(
+        f"/api/billing/bills/{b2_id}/mark-paid",
+        headers=auth_headers,
+        json={"payment_method": "UPI"},
+    )
+    assert p2_res.status_code == 200
+    b2_data = p2_res.json()
+    assert float(b2_data["total_amount"]) == 158.0
+    assert float(b2_data["upi_amount"]) == 158.0
+
+    # 3. Query Payment Mix
+    mix_res = await client.get("/api/analytics/payment-mix", headers=auth_headers)
+    assert mix_res.status_code == 200
+    mix_data = mix_res.json()
+
+    assert float(mix_data["gross_revenue"]) == 316.0  # 158 + 158
+    assert float(mix_data["total_revenue"]) == 316.0
+
+    methods = {m["payment_method"]: m for m in mix_data["methods"]}
+    assert float(methods["CASH"]["gross_revenue"]) == 158.0
+    assert float(methods["CASH"]["total_revenue"]) == 158.0
+    assert float(methods["UPI"]["gross_revenue"]) == 158.0
+    assert float(methods["UPI"]["total_revenue"]) == 158.0
+

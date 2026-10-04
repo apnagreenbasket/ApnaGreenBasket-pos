@@ -153,6 +153,8 @@ export type Customer = components["schemas"]["CustomerResponse"] & {
   state?: string | null;
 };
 
+export type CustomerPageResponse = components["schemas"]["CustomerPageResponse"];
+
 export type StockIntake = components["schemas"]["StockIntakeResponse"];
 
 export type BatchDetail = components["schemas"]["BatchDetailResponse"] & {

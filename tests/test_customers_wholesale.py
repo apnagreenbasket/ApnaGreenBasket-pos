@@ -1,7 +1,9 @@
+from decimal import Decimal
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-from tests.conftest import create_test_outlet, create_test_user, get_auth_headers
+from app.models.customer import Customer
+from tests.conftest import create_test_outlet, create_test_user, create_test_category, create_test_menu_item, get_auth_headers
 
 
 @pytest.mark.asyncio
@@ -123,3 +125,77 @@ async def test_pos_customer_auto_creation_and_wholesale_billing(
     assert len(customers_list) == 1
     assert customers_list[0]["name"] == cust_name
     assert customers_list[0]["phone"] == cust_phone
+
+
+@pytest.mark.asyncio
+async def test_customers_paginated_overall_stats(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    """
+    Verify paginated /api/admin/customers returns total_customer_spend and total_customer_orders
+    representing all matching customers across all pages rather than only the current page.
+    """
+    outlet = await create_test_outlet(db_session, slug="cust-stats-outlet", name="Cust Stats Outlet")
+    admin = await create_test_user(
+        db_session, outlet, email="admin_stats@test.com"
+    )
+    cat = await create_test_category(db_session, outlet)
+    item = await create_test_menu_item(db_session, outlet, cat, price=Decimal("100.00"))
+    auth_headers = get_auth_headers(admin, outlet)
+
+    # Create 2 customers
+    c1 = Customer(outlet_id=outlet.id, phone="9111111111", name="Customer One")
+    c2 = Customer(outlet_id=outlet.id, phone="9222222222", name="Customer Two")
+    db_session.add_all([c1, c2])
+    await db_session.commit()
+
+    # Create & pay bill for Customer 1: Rs 100
+    b1_res = await client.post(
+        "/api/billing/bills",
+        headers=auth_headers,
+        json={
+            "customer_name": "Customer One",
+            "customer_phone": "9111111111",
+            "items": [{"menu_item_id": str(item.id), "quantity": 1, "unit_price": 100.0}],
+        },
+    )
+    assert b1_res.status_code == 200
+    await client.post(
+        f"/api/billing/bills/{b1_res.json()['id']}/mark-paid",
+        headers=auth_headers,
+        json={"payment_method": "CASH"},
+    )
+
+    # Create & pay bill for Customer 2: Rs 200 (qty 2)
+    b2_res = await client.post(
+        "/api/billing/bills",
+        headers=auth_headers,
+        json={
+            "customer_name": "Customer Two",
+            "customer_phone": "9222222222",
+            "items": [{"menu_item_id": str(item.id), "quantity": 2, "unit_price": 100.0}],
+        },
+    )
+    assert b2_res.status_code == 200
+    await client.post(
+        f"/api/billing/bills/{b2_res.json()['id']}/mark-paid",
+        headers=auth_headers,
+        json={"payment_method": "CASH"},
+    )
+
+    # Request page 1 with page_size=1 (only 1 customer on this page, but 2 total)
+    res = await client.get(
+        "/api/admin/customers?page=1&page_size=1",
+        headers=auth_headers,
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert len(data["items"]) == 1
+    assert data["total"] == 2
+    assert data["total_pages"] == 2
+
+    # Overall totals must include BOTH customers (100 + 200 = 300, orders = 1 + 1 = 2)
+    assert float(data["total_customer_spend"]) == 300.0
+    assert int(data["total_customer_orders"]) == 2
+

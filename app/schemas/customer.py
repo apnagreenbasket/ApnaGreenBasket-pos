@@ -91,3 +91,5 @@ class CustomerPageResponse(BaseModel):
     page: int
     page_size: int
     total_pages: int
+    total_customer_spend: float = 0.0
+    total_customer_orders: int = 0

@@ -41,6 +41,8 @@ export function CustomerServicesTab({
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
+  const [totalCustomerSpend, setTotalCustomerSpend] = useState<number | null>(null);
+  const [totalCustomerOrders, setTotalCustomerOrders] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isAddCustomerModalOpen, setIsAddCustomerModalOpen] = useState(false);
@@ -102,10 +104,20 @@ export function CustomerServicesTab({
         setCustomers(data.items);
         setTotalPages(data.total_pages);
         setTotalItems(data.total);
+        if (typeof data.total_customer_spend === "number") {
+          setTotalCustomerSpend(data.total_customer_spend);
+        }
+        if (typeof data.total_customer_orders === "number") {
+          setTotalCustomerOrders(data.total_customer_orders);
+        }
       } else {
         setCustomers(data);
         setTotalPages(1);
         setTotalItems(data.length);
+        const sumSpent = data.reduce((acc: number, c: Customer) => acc + (c.total_spent || 0), 0);
+        const sumOrders = data.reduce((acc: number, c: Customer) => acc + (c.total_orders || 0), 0);
+        setTotalCustomerSpend(sumSpent);
+        setTotalCustomerOrders(sumOrders);
       }
     } catch (err: any) {
       setError(err?.message || "Error loading customers.");
@@ -191,8 +203,8 @@ export function CustomerServicesTab({
     }
   };
 
-  const totalSpentAll = customers.reduce((acc, c) => acc + (c.total_spent || 0), 0);
-  const totalOrdersAll = customers.reduce((acc, c) => acc + (c.total_orders || 0), 0);
+  const totalSpentAll = totalCustomerSpend ?? customers.reduce((acc, c) => acc + (c.total_spent || 0), 0);
+  const totalOrdersAll = totalCustomerOrders ?? customers.reduce((acc, c) => acc + (c.total_orders || 0), 0);
 
   return (
     <div className="space-y-6">
@@ -235,9 +247,9 @@ export function CustomerServicesTab({
           >
             <Users className="h-4 w-4" />
             Customers Directory
-            {customers.length > 0 && (
+            {totalItems > 0 && (
               <span className="rounded-full bg-white/20 px-1.5 py-0.2 text-[10px] font-mono">
-                {customers.length}
+                {totalItems}
               </span>
             )}
           </button>
