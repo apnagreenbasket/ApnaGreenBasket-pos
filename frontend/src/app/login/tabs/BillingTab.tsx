@@ -968,7 +968,10 @@ export function BillingTab({
                 <th className="p-3.5 max-w-[170px]">Customer &amp; Basket</th>
                 <th className="p-3.5 text-center whitespace-nowrap">Items</th>
                 <th className="p-3.5 text-right whitespace-nowrap">Subtotal</th>
-                <th className="p-3.5 text-right whitespace-nowrap">Additional Charges</th>
+                <th className="p-3.5 text-right leading-tight whitespace-nowrap">
+                  <div>Additional</div>
+                  <div>Charges</div>
+                </th>
                 <th className="p-3.5 text-right min-w-[130px] max-w-[170px]">Grand Total</th>
                 <th className="p-3.5 text-center whitespace-nowrap">Status</th>
                 <th className="p-3.5 text-center whitespace-nowrap min-w-[95px]">Date &amp; Time</th>

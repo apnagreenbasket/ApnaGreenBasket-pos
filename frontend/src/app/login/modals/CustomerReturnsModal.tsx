@@ -1486,132 +1486,61 @@ export function CustomerReturnsModal({
       return;
     }
 
-    // Case 3: Item tracks batches in FIFO order
-    const batchIdx = activeBatches.findIndex(
-      (b) => b.id === (ci.selected_batch_id || activeBatches[0]?.id)
+    // Case 3: Item tracks batches - consolidate into 1 single line with total quantity
+    // Backend automatically draws down across active batches in strict FIFO order upon return/exchange.
+    const totalBatchStockInBaseUnit = activeBatches.reduce(
+      (sum, b) => sum + (Number(b.remaining_quantity) || 0),
+      0
     );
-    const curBatchEffectiveIdx = batchIdx >= 0 ? batchIdx : 0;
-    const curBatch = activeBatches[curBatchEffectiveIdx] || activeBatches[0];
-
-    // Batches available for allocation from curBatch forward
-    const allocatableBatches = activeBatches.slice(curBatchEffectiveIdx);
-
-    // Identify stock in allocatableBatches used by OTHER exchange items or strictly older lines before cartIdx
-    const otherCartLines = exchangeItems.filter((it, idx) => {
-      const isThisItem = it.menu_item_id === ci.menu_item_id && it.variant_id === ci.variant_id;
-      if (!isThisItem) return true;
-      const bIdx = activeBatches.findIndex((b) => b.id === it.selected_batch_id);
-      return bIdx >= 0 && bIdx < curBatchEffectiveIdx && idx < cartIdx;
-    });
-
-    let qtyRemaining = newQty;
-    const allocations: { batch: typeof activeBatches[0]; qty: number; isBackorder: boolean }[] = [];
-
-    for (let k = 0; k < allocatableBatches.length; k++) {
-      if (qtyRemaining <= 0) break;
-      const b = allocatableBatches[k];
-      const effectiveStock = Number(b.remaining_quantity) || 0;
-      const usedByOthers = otherCartLines
-        .filter((it) => it.selected_batch_id === b.id)
-        .reduce((sum, it) => sum + (Number(it.quantity) || 0), 0);
-      const availForThisBatch = Math.max(0, effectiveStock - usedByOthers);
-
-      const take = Math.min(availForThisBatch, qtyRemaining);
-      if (take > 0) {
-        allocations.push({ batch: b as any, qty: take, isBackorder: false });
-        qtyRemaining -= take;
-      }
-    }
-
-    // Handle any excess beyond total available stock across all batches
-    const messages: string[] = [];
-    if (qtyRemaining > 0) {
-      if (orig?.allow_oversell === false) {
-        messages.push(`Total stock reached. ${qtyRemaining} excess blocked (overselling disabled).`);
-        qtyRemaining = 0;
-      } else {
-        const latestBatch = activeBatches[activeBatches.length - 1] || curBatch;
-        allocations.push({ batch: latestBatch, qty: qtyRemaining, isBackorder: true });
-        messages.push(`Added ${qtyRemaining} as [Oversold Backorder].`);
-        qtyRemaining = 0;
-      }
-    }
-
-    if (allocations.length === 0) {
-      if (orig?.allow_oversell === false) {
-        setError(`Lot #${curBatch.batch_number} is out of stock. Overselling is disabled.`);
-        setExchangeItems((prev) => prev.filter((_, i) => i !== cartIdx));
-        return;
-      } else {
-        allocations.push({ batch: curBatch, qty: newQty, isBackorder: true });
-      }
-    }
-
-    // Build the new DraftCartItems from allocations
     const factor = getUnitFactor(orig, ci.selected_unit);
+    const totalBatchStockInSelectedUnit = factor > 0 ? totalBatchStockInBaseUnit * factor : totalBatchStockInBaseUnit;
+
+    const usedByOtherLinesInSelectedUnit = exchangeItems
+      .filter((it, idx) => idx !== cartIdx && it.menu_item_id === ci.menu_item_id && it.variant_id === ci.variant_id)
+      .reduce((sum, it) => {
+        const qty = Number(it.quantity) || 0;
+        const itemFactor = getUnitFactor(orig, it.selected_unit);
+        const qtyInBaseUnit = itemFactor > 0 ? qty / itemFactor : qty;
+        const callerFactor = getUnitFactor(orig, ci.selected_unit);
+        const qtyInCallerUnit = callerFactor > 0 ? qtyInBaseUnit * callerFactor : qtyInBaseUnit;
+        return sum + qtyInCallerUnit;
+      }, 0);
+
+    const maxAvailableInSelectedUnit = Math.max(0, totalBatchStockInSelectedUnit - usedByOtherLinesInSelectedUnit);
+
+    let finalQty = newQty;
+    let isBackorder = false;
+
+    if (newQty > maxAvailableInSelectedUnit) {
+      if (orig?.allow_oversell === false) {
+        if (maxAvailableInSelectedUnit <= 0) {
+          setError(`Item '${orig.name}' is out of stock across all lots (overselling disabled).`);
+          return;
+        }
+        setError(
+          `Total available stock is ${maxAvailableInSelectedUnit} ${ci.selected_unit || "units"} across all lots. Excess quantity blocked (overselling disabled).`
+        );
+        finalQty = maxAvailableInSelectedUnit;
+      } else {
+        isBackorder = true;
+      }
+    }
+
     const cleanName = ci.item_name.replace(/\[Oversold Backorder\]/gi, "").trim();
 
-    const newLines: DraftCartItem[] = allocations.map((alloc) => {
-      const basePrice = !ci.is_custom_price && alloc.batch.retail_price != null
-        ? Number(alloc.batch.retail_price)
-        : (ci.base_unit_price ?? ci.unit_price);
-      const baseMrp = !ci.is_custom_price && alloc.batch.mrp != null
-        ? Number(alloc.batch.mrp)
-        : (ci.base_mrp ?? ci.mrp ?? basePrice);
-      const linePrice = !ci.is_custom_price
-        ? (factor > 0 ? basePrice / factor : basePrice)
-        : ci.unit_price;
-      const lineMrp = !ci.is_custom_price
-        ? (factor > 0 ? Math.max(baseMrp / factor, linePrice) : Math.max(baseMrp, linePrice))
-        : ci.mrp;
-
-      return {
-        ...ci,
-        item_name: alloc.isBackorder ? `${cleanName} [Oversold Backorder]` : cleanName,
-        selected_batch_id: alloc.isBackorder ? null : alloc.batch.id,
-        selected_batch_number: alloc.batch.batch_number,
-        unit_price: linePrice,
-        base_unit_price: basePrice,
-        mrp: lineMrp,
-        base_mrp: baseMrp,
-        quantity: alloc.qty,
-        allow_oversell: alloc.isBackorder,
-      };
-    });
-
-    // Replace old lines for this item/variant at or after cartIdx with the newly allocated lines
-    setExchangeItems((prev) => {
-      const indicesToRemove = new Set<number>();
-      for (let i = cartIdx; i < prev.length; i++) {
-        const it = prev[i];
-        if (it.menu_item_id === ci.menu_item_id && it.variant_id === ci.variant_id) {
-          indicesToRemove.add(i);
-        }
-      }
-      const nextCart: DraftCartItem[] = [];
-      let inserted = false;
-      for (let i = 0; i < prev.length; i++) {
-        if (i === cartIdx) {
-          nextCart.push(...newLines);
-          inserted = true;
-        } else if (!indicesToRemove.has(i)) {
-          nextCart.push(prev[i]);
-        }
-      }
-      if (!inserted) {
-        nextCart.push(...newLines);
-      }
-      return nextCart.filter((it) => it.quantity > 0);
-    });
-
-    if (allocations.length > 1) {
-      const summary = allocations
-        .map((a) => `${a.qty}x ${a.isBackorder ? "[Backorder]" : `Lot #${a.batch.batch_number}`}`)
-        .join(" + ");
-      setExchangeNotice(`FIFO allocated: ${summary}`);
-    } else if (messages.length > 0) {
-      setExchangeNotice(messages.join(" "));
-    }
+    setExchangeItems((prev) =>
+      prev.map((item, i) => {
+        if (i !== cartIdx) return item;
+        return {
+          ...item,
+          item_name: isBackorder ? `${cleanName} [Oversold Backorder]` : cleanName,
+          quantity: finalQty,
+          selected_batch_id: activeBatches[0]?.id || item.selected_batch_id,
+          selected_batch_number: activeBatches[0]?.batch_number || item.selected_batch_number,
+          allow_oversell: isBackorder ? true : item.allow_oversell,
+        };
+      })
+    );
   };
 
   const handleUpdateExchangeItemQty = (index: number, newQty: number) => {
@@ -3655,108 +3584,14 @@ export function CustomerReturnsModal({
                                 <div className="flex flex-wrap items-center gap-2">
                                   <p className="font-black text-[var(--text-primary)] truncate text-base">{exItem.item_name}</p>
 
-                                  {/* Multi-batch Lot Selector & FIFO Badge */}
-                                  {originalItem?.active_batches && originalItem.active_batches.length > 1 && (
-                                    <div className="flex items-center gap-1.5 shrink-0">
-                                      {(() => {
-                                        if (exItem.allow_oversell) return null;
-                                        const bIdx = originalItem.active_batches.findIndex((b) => b.id === exItem.selected_batch_id);
-                                        const rank = bIdx >= 0 ? bIdx + 1 : 1;
-                                        const isOldest = bIdx === 0;
-                                        return (
-                                          <span
-                                            className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border whitespace-nowrap ${
-                                              isOldest
-                                                ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
-                                                : "bg-sky-500/15 text-sky-400 border-sky-500/30"
-                                            }`}
-                                            title={`FIFO Sequence Rank: #${rank} (${isOldest ? "Oldest active lot in inventory" : `Lot rank ${rank}`})`}
-                                          >
-                                            FIFO #{rank}{isOldest ? " · Oldest" : ""}
-                                          </span>
-                                        );
-                                      })()}
-                                      {exItem.allow_oversell ? (
-                                        <span
-                                          className="inline-flex items-center gap-1 text-[11px] font-mono rounded-md border border-rose-500/30 bg-rose-500/10 px-2 py-0.5 text-rose-400 font-semibold"
-                                          title="Oversold Backorder"
-                                        >
-                                          Backorder · {exItem.selected_batch_number ? `Lot #${exItem.selected_batch_number}` : "Latest Lot"}
-                                        </span>
-                                      ) : (
-                                        <select
-                                          value={exItem.selected_batch_id || (originalItem.active_batches[0]?.id ?? "")}
-                                          onChange={(e) => {
-                                            const chosenBatch = originalItem.active_batches?.find((b) => b.id === e.target.value);
-                                            if (!chosenBatch) return;
-
-                                            const factor = getUnitFactor(originalItem, exItem.selected_unit);
-                                            const baseBatchPrice = chosenBatch.retail_price != null
-                                              ? Number(chosenBatch.retail_price)
-                                              : (exItem.base_unit_price ?? exItem.unit_price);
-                                            const baseBatchMrp = chosenBatch.mrp != null
-                                              ? Number(chosenBatch.mrp)
-                                              : (exItem.base_mrp ?? exItem.mrp ?? baseBatchPrice);
-
-                                            const newPrice = factor > 0 ? baseBatchPrice / factor : baseBatchPrice;
-                                            const newMrp = factor > 0 ? Math.max(baseBatchMrp / factor, newPrice) : Math.max(baseBatchMrp, newPrice);
-
-                                            setExchangeItems((prev) =>
-                                              prev.map((item, i) => {
-                                                if (i !== idx) return item;
-                                                return {
-                                                  ...item,
-                                                  selected_batch_id: chosenBatch.id,
-                                                  selected_batch_number: chosenBatch.batch_number,
-                                                  unit_price: newPrice,
-                                                  base_unit_price: baseBatchPrice,
-                                                  mrp: newMrp,
-                                                  base_mrp: baseBatchMrp,
-                                                  allow_oversell: false,
-                                                };
-                                              })
-                                            );
-                                            const effectiveStock = Number(chosenBatch.remaining_quantity) || 0;
-                                            const avail = getUnallocatedBatchStock(chosenBatch.id, effectiveStock, exchangeItems, idx);
-                                            if (exItem.quantity > avail) {
-                                              setTimeout(() => {
-                                                handleExchangeItemQuantityChange(idx, exItem.quantity);
-                                              }, 0);
-                                            }
-                                          }}
-                                          className="text-[11px] font-mono rounded-md border border-[var(--border-strong)] bg-[var(--bg-surface)] px-1.5 py-0.5 text-[var(--text-secondary)] hover:border-emerald-500 focus:outline-none cursor-pointer"
-                                          title="Select Inventory Lot"
-                                        >
-                                          {originalItem.active_batches.map((b, optIdx) => {
-                                            const effectiveStock = Number(b.remaining_quantity) || 0;
-                                            const unallocated = getUnallocatedBatchStock(b.id, effectiveStock, exchangeItems, idx);
-                                            const factor = getUnitFactor(originalItem, exItem.selected_unit);
-                                            const bBasePrice = Number(b.retail_price ?? originalItem.price);
-                                            const bDisplayPrice = factor > 0 ? bBasePrice / factor : bBasePrice;
-                                            return (
-                                              <option key={b.id} value={b.id}>
-                                                #{optIdx + 1} · Lot: {b.batch_number} · ₹{bDisplayPrice.toFixed(2)} ({unallocated} left){b.is_oldest ? " (oldest)" : ""}
-                                              </option>
-                                            );
-                                          })}
-                                        </select>
-                                      )}
-                                    </div>
+                                  {exItem.allow_oversell && (
+                                    <span
+                                      className="inline-flex items-center gap-1 text-[11px] font-mono rounded-md border border-rose-500/30 bg-rose-500/10 px-2 py-0.5 text-rose-400 font-semibold"
+                                      title="Oversold Backorder"
+                                    >
+                                      Backorder
+                                    </span>
                                   )}
-
-                                  {/* Single-batch item indicator */}
-                                  {originalItem?.active_batches && originalItem.active_batches.length === 1 && (() => {
-                                    const singleBatch = originalItem.active_batches[0];
-                                    const effectiveStock = Number(singleBatch.remaining_quantity) || 0;
-                                    const unallocated = getUnallocatedBatchStock(singleBatch.id, effectiveStock, exchangeItems, idx);
-                                    return (
-                                      <div className="flex items-center gap-1">
-                                        <span className="text-[10px] font-mono text-[var(--text-muted)] bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] px-1.5 py-0.5 rounded">
-                                          Lot #{singleBatch.batch_number} ({unallocated} left)
-                                        </span>
-                                      </div>
-                                    );
-                                  })()}
                                 </div>
                                 <p className="font-mono text-sm text-[var(--text-secondary)] font-medium mt-0.5">
                                   ₹{exItem.unit_price.toFixed(2)} per {currentUnit}
