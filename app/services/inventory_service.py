@@ -146,7 +146,10 @@ async def process_order_auto_deduction(
     existing = await db.execute(
         select(StockLedger).where(
             StockLedger.reference_order_id == order.id,
-            StockLedger.change_type == StockChangeTypeEnum.AUTO_DEDUCTION,
+            StockLedger.change_type.in_([
+                StockChangeTypeEnum.AUTO_DEDUCTION,
+                StockChangeTypeEnum.OVERSOLD,
+            ]),
         )
     )
     if existing.scalars().first() is not None:
@@ -250,43 +253,81 @@ async def process_order_auto_deduction(
                         .order_by(StockIntake.intake_date.desc(), StockIntake.created_at.desc())
                     )
                     latest_b = latest_res.scalars().first()
-                    ov_batch_num = generate_oversold_batch_number(latest_b.batch_number if latest_b else None)
                     ref_cost = latest_b.unit_cost if latest_b else inv_item.cost_per_unit
                     ref_retail = latest_b.retail_price if latest_b else inv_item.retail_price
                     ref_mrp = latest_b.mrp if latest_b else inv_item.mrp
                     ref_wholesale = latest_b.wholesale_price if latest_b else inv_item.wholesale_price
 
-                    new_neg_batch = StockIntake(
-                        id=uuid.uuid4(),
-                        outlet_id=order.outlet_id,
-                        item_id=inv_item.id,
-                        batch_number=ov_batch_num,
-                        quantity=-needed,
-                        initial_quantity=Decimal("0.000"),
-                        remaining_quantity=-needed,
-                        unit_cost=ref_cost,
-                        retail_price=ref_retail,
-                        mrp=ref_mrp,
-                        wholesale_price=ref_wholesale,
-                        supplier_id=latest_b.supplier_id if latest_b else None,
-                        intake_date=utc_now(),
-                        expiry_date=latest_b.expiry_date if latest_b else None,
-                        notes=f"Auto-created oversold deficit from Order #{order.basket_number or str(order.id)[:8]}",
-                    )
-                    db.add(new_neg_batch)
-                    db.add(StockLedger(
-                        id=uuid.uuid4(),
-                        outlet_id=order.outlet_id,
-                        item_id=inv_item.id,
-                        intake_id=new_neg_batch.id,
-                        change_type=StockChangeTypeEnum.OVERSOLD,
-                        quantity_change=-needed,
-                        resulting_stock=inv_item.current_stock,
-                        batch_balance=new_neg_batch.remaining_quantity,
-                        reference_order_id=order.id,
-                        unit_cost_snapshot=ref_cost,
-                        notes=f"POS oversold deficit from Order #{order.basket_number or str(order.id)[:8]}",
-                    ))
+                    existing_ov_batch = None
+                    for obj in db.new:
+                        if isinstance(obj, StockIntake) and obj.item_id == inv_item.id and (obj.remaining_quantity or Decimal("0.000")) < Decimal("0.000"):
+                            existing_ov_batch = obj
+                            break
+
+                    if not existing_ov_batch:
+                        db_neg_res = await db.execute(
+                            select(StockIntake)
+                            .where(
+                                StockIntake.item_id == inv_item.id,
+                                StockIntake.outlet_id == order.outlet_id,
+                                or_(
+                                    StockIntake.remaining_quantity < Decimal("0.000"),
+                                    StockIntake.batch_number.like("BAT-OV-%"),
+                                ),
+                            )
+                            .order_by(StockIntake.created_at.desc())
+                        )
+                        existing_ov_batch = db_neg_res.scalars().first()
+
+                    if existing_ov_batch:
+                        existing_ov_batch.quantity = (existing_ov_batch.quantity or Decimal("0.000")) - needed
+                        existing_ov_batch.remaining_quantity = (existing_ov_batch.remaining_quantity or Decimal("0.000")) - needed
+                        db.add(StockLedger(
+                            id=uuid.uuid4(),
+                            outlet_id=order.outlet_id,
+                            item_id=inv_item.id,
+                            intake_id=existing_ov_batch.id,
+                            change_type=StockChangeTypeEnum.OVERSOLD,
+                            quantity_change=-needed,
+                            resulting_stock=inv_item.current_stock,
+                            batch_balance=existing_ov_batch.remaining_quantity,
+                            reference_order_id=order.id,
+                            unit_cost_snapshot=ref_cost,
+                            notes=f"POS oversold deficit from Order #{order.basket_number or str(order.id)[:8]}",
+                        ))
+                    else:
+                        ov_batch_num = generate_oversold_batch_number(latest_b.batch_number if latest_b else None)
+                        new_neg_batch = StockIntake(
+                            id=uuid.uuid4(),
+                            outlet_id=order.outlet_id,
+                            item_id=inv_item.id,
+                            batch_number=ov_batch_num,
+                            quantity=-needed,
+                            initial_quantity=Decimal("0.000"),
+                            remaining_quantity=-needed,
+                            unit_cost=ref_cost,
+                            retail_price=ref_retail,
+                            mrp=ref_mrp,
+                            wholesale_price=ref_wholesale,
+                            supplier_id=latest_b.supplier_id if latest_b else None,
+                            intake_date=utc_now(),
+                            expiry_date=latest_b.expiry_date if latest_b else None,
+                            notes=f"Auto-created oversold deficit from Order #{order.basket_number or str(order.id)[:8]}",
+                        )
+                        db.add(new_neg_batch)
+                        db.add(StockLedger(
+                            id=uuid.uuid4(),
+                            outlet_id=order.outlet_id,
+                            item_id=inv_item.id,
+                            intake_id=new_neg_batch.id,
+                            change_type=StockChangeTypeEnum.OVERSOLD,
+                            quantity_change=-needed,
+                            resulting_stock=inv_item.current_stock,
+                            batch_balance=new_neg_batch.remaining_quantity,
+                            reference_order_id=order.id,
+                            unit_cost_snapshot=ref_cost,
+                            notes=f"POS oversold deficit from Order #{order.basket_number or str(order.id)[:8]}",
+                        ))
 
                 await sync_item_prices_from_oldest_batch(db, inv_item.id, order.outlet_id)
         else:
@@ -355,6 +396,8 @@ async def process_order_auto_deduction(
                     )
                 )
                 chosen_batch = b_res.scalar_one_or_none()
+                if chosen_batch and chosen_batch.batch_number and chosen_batch.batch_number.startswith("BAT-OV-"):
+                    chosen_batch = None
                 if chosen_batch:
                     avail = max(Decimal("0.000"), chosen_batch.remaining_quantity)
                     if deduct_qty <= avail:
@@ -451,7 +494,10 @@ async def process_order_auto_deduction(
                                     .where(
                                         StockIntake.item_id == target_inv_item.id,
                                         StockIntake.outlet_id == order.outlet_id,
-                                        StockIntake.remaining_quantity < Decimal("0.000"),
+                                        or_(
+                                            StockIntake.remaining_quantity < Decimal("0.000"),
+                                            StockIntake.batch_number.like("BAT-OV-%"),
+                                        ),
                                     )
                                     .order_by(StockIntake.created_at.desc())
                                 )
@@ -576,7 +622,10 @@ async def process_order_auto_deduction(
                         .where(
                             StockIntake.item_id == target_inv_item.id,
                             StockIntake.outlet_id == order.outlet_id,
-                            StockIntake.remaining_quantity < Decimal("0.000"),
+                            or_(
+                                StockIntake.remaining_quantity < Decimal("0.000"),
+                                StockIntake.batch_number.like("BAT-OV-%"),
+                            ),
                         )
                         .order_by(StockIntake.created_at.desc())
                     )
@@ -649,12 +698,16 @@ async def process_order_cancellation_reversal(
     """
     Reverse auto-deduction if an order is cancelled or refunded after stock deduction.
     Restores deducted quantities to current_stock and appends RESTOCK ledger entries.
+    Handles both normal AUTO_DEDUCTION and OVERSOLD deficit deductions.
     """
-    # Fetch deduction entries for this order
+    # Fetch deduction entries for this order (both normal batches and oversold deficits)
     deductions_res = await db.execute(
         select(StockLedger).where(
             StockLedger.reference_order_id == order.id,
-            StockLedger.change_type == StockChangeTypeEnum.AUTO_DEDUCTION,
+            StockLedger.change_type.in_([
+                StockChangeTypeEnum.AUTO_DEDUCTION,
+                StockChangeTypeEnum.OVERSOLD,
+            ]),
         )
     )
     deductions = deductions_res.scalars().all()
@@ -684,12 +737,20 @@ async def process_order_cancellation_reversal(
         if not inv_item:
             continue
 
+        batch = None
         if entry.intake_id:
             batch = await db.get(StockIntake, entry.intake_id)
             if batch:
-                batch.remaining_quantity = batch.remaining_quantity + restore_qty
+                batch.remaining_quantity = (batch.remaining_quantity or Decimal("0.000")) + restore_qty
+                # If this was an oversold deficit batch (quantity < 0), also restore quantity
+                if batch.quantity is not None and batch.quantity < Decimal("0.000"):
+                    batch.quantity = min(Decimal("0.000"), batch.quantity + restore_qty)
+                # Cap deficit batch remaining_quantity so it never exceeds 0.000
+                if batch.batch_number and batch.batch_number.startswith("BAT-OV-"):
+                    if batch.remaining_quantity > Decimal("0.000"):
+                        batch.remaining_quantity = Decimal("0.000")
 
-        inv_item.current_stock = inv_item.current_stock + restore_qty
+        inv_item.current_stock = (inv_item.current_stock or Decimal("0.000")) + restore_qty
 
         restock_ledger = StockLedger(
             id=uuid.uuid4(),
@@ -702,12 +763,14 @@ async def process_order_cancellation_reversal(
             resulting_stock=inv_item.current_stock,
             reference_order_id=order.id,
             unit_cost_snapshot=entry.unit_cost_snapshot or inv_item.cost_per_unit,
+            notes=f"Restock from cancelled/replaced order #{order.basket_number or str(order.id)[:8]}",
         )
         db.add(restock_ledger)
 
     await db.flush()
-    for entry in deductions:
-        await reconcile_item_stock_from_batches(db, entry.item_id)
+    reconciled_item_ids = {entry.item_id for entry in deductions}
+    for item_id in reconciled_item_ids:
+        await reconcile_item_stock_from_batches(db, item_id)
 
 
 async def create_inventory_item(
@@ -2983,7 +3046,10 @@ async def restore_customer_return_to_batch(
             .where(
                 StockLedger.reference_order_id == order_id,
                 StockLedger.item_id == item_id,
-                StockLedger.change_type == StockChangeTypeEnum.AUTO_DEDUCTION,
+                StockLedger.change_type.in_([
+                    StockChangeTypeEnum.AUTO_DEDUCTION,
+                    StockChangeTypeEnum.OVERSOLD,
+                ]),
                 StockLedger.intake_id.is_not(None),
             )
             .order_by(StockLedger.created_at.desc())

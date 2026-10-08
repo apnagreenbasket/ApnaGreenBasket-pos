@@ -343,11 +343,14 @@ export function useBillingManagement({
       const itemsMapped: DraftCartItem[] = bill.items.map((it: any) => {
         const uPrice = typeof it.unit_price === "number" ? it.unit_price : parseFloat(it.unit_price) || 0;
         const uMrp = typeof it.mrp === "number" ? it.mrp : parseFloat(it.mrp) || null;
-        return {
-          menu_item_id: it.menu_item_id || "",
-          variant_id: it.variant_id || null,
-          selected_batch_id: it.selected_batch_id || null,
-          selected_batch_number: it.selected_batch_number || null,
+          const isDeficit =
+            it.selected_batch_number?.startsWith("BAT-OV-") ||
+            it.selected_batch?.batch_number?.startsWith("BAT-OV-");
+          return {
+            menu_item_id: it.menu_item_id || "",
+            variant_id: it.variant_id || null,
+            selected_batch_id: isDeficit ? null : (it.selected_batch_id || null),
+            selected_batch_number: isDeficit ? null : (it.selected_batch_number || null),
           item_name: it.item_name || it.menu_item?.name || "Item",
           unit_price: uPrice,
           mrp: uMrp,
@@ -401,11 +404,14 @@ export function useBillingManagement({
       const itemsMapped: DraftCartItem[] = bill.items.map((it: any) => {
         const uPrice = typeof it.unit_price === "number" ? it.unit_price : parseFloat(it.unit_price) || 0;
         const uMrp = typeof it.mrp === "number" ? it.mrp : parseFloat(it.mrp) || null;
+        const isDeficit =
+          it.selected_batch_number?.startsWith("BAT-OV-") ||
+          it.selected_batch?.batch_number?.startsWith("BAT-OV-");
         return {
           menu_item_id: it.menu_item_id || "",
           variant_id: it.variant_id || null,
-          selected_batch_id: it.selected_batch_id || null,
-          selected_batch_number: it.selected_batch_number || null,
+          selected_batch_id: isDeficit ? null : (it.selected_batch_id || null),
+          selected_batch_number: isDeficit ? null : (it.selected_batch_number || null),
           item_name: it.item_name || it.menu_item?.name || "Item",
           unit_price: uPrice,
           mrp: uMrp,
