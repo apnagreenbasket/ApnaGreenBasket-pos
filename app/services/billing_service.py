@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.bill_discount_approval import BillDiscountApproval
+from app.models.customer import Customer
 from app.models.customer_return import CustomerReturn
 from app.models.enums import OrderStatusEnum, RoleEnum
 from app.models.inventory_item import InventoryItem
@@ -92,9 +93,20 @@ async def create_manual_bill(
         cust_id = cust.id
 
     replaces_bill_uuid = None
+    old_order_snapshot_bal = None
     if getattr(data, "replaces_bill_id", None):
         try:
             replaces_bill_uuid = uuid.UUID(data.replaces_bill_id)
+            old_order_pre = await db.get(Order, replaces_bill_uuid)
+            if old_order_pre and cust:
+                old_impact = (
+                    (old_order_pre.credit_awarded or Decimal("0.00"))
+                    + (old_order_pre.debt_settled or Decimal("0.00"))
+                    - (old_order_pre.credit_applied or Decimal("0.00"))
+                    - (old_order_pre.debit_applied or Decimal("0.00"))
+                    - (old_order_pre.credit_cashed_out or Decimal("0.00"))
+                )
+                old_order_snapshot_bal = cust.credit_balance - old_impact
         except Exception as e:
             print(f"Invalid replaces_bill_id: {e}")
 
@@ -105,7 +117,7 @@ async def create_manual_bill(
         customer_id=cust_id,
         customer_name=data.customer_name,
         customer_phone=data.customer_phone,
-        customer_balance=cust.credit_balance if cust else None,
+        customer_balance=old_order_snapshot_bal if old_order_snapshot_bal is not None else (cust.credit_balance if cust else None),
         status=OrderStatusEnum.PENDING,
         source="manual",
         created_by_staff_id=_get_user_id(staff_user),
@@ -118,12 +130,12 @@ async def create_manual_bill(
     )
     
     # Inherit discount if replacing a bill
+    old_approval = None
     if replaces_bill_uuid:
         old_order = await db.get(Order, replaces_bill_uuid)
         if old_order and old_order.discount_status == "APPROVED" and old_order.discount_type:
             order.discount_status = "APPROVED"
             order.discount_reason = old_order.discount_reason or "Inherited from edited bill"
-            order.discount_approved_by = old_order.discount_approved_by
             if old_order.discount_type == "PERCENT" or old_order.discount_type.startswith("COMPLIMENTARY"):
                 order.discount_type = old_order.discount_type
                 order.discount_value = old_order.discount_value
@@ -134,9 +146,34 @@ async def create_manual_bill(
                 if old_sub > 0:
                     order.discount_type = "PERCENT"
                     order.discount_value = Decimal(str(round((old_val / old_sub) * 100, 2)))
+
+            # If the old bill had an approved discount record, retrieve it to carry over
+            old_approval_res = await db.execute(
+                select(BillDiscountApproval).where(
+                    BillDiscountApproval.order_id == old_order.id,
+                    BillDiscountApproval.status == "APPROVED",
+                )
+            )
+            old_approval = old_approval_res.scalars().first()
     
     db.add(order)
     await db.flush()
+
+    if old_approval:
+        new_approval = BillDiscountApproval(
+            id=uuid.uuid4(),
+            order_id=order.id,
+            requested_by_id=old_approval.requested_by_id,
+            approved_by_id=old_approval.approved_by_id,
+            status="APPROVED",
+            discount_type=order.discount_type,
+            discount_value=order.discount_value or old_approval.discount_value,
+            reason_note=order.discount_reason,
+            created_at=utc_now(),
+            resolved_at=old_approval.resolved_at or utc_now(),
+            complimentary_items=old_approval.complimentary_items,
+        )
+        db.add(new_approval)
 
     subtotal = Decimal("0.00")
     paid_subtotal = Decimal("0.00")
@@ -375,10 +412,25 @@ async def update_manual_bill(
         order.customer_id = cust.id
         order.customer_phone = cust.phone
         order.customer_name = cust.name
+
+        old_order_snapshot_bal = None
+        if order.replaces_bill_id:
+            old_order_pre = await db.get(Order, order.replaces_bill_id)
+            if old_order_pre:
+                old_impact = (
+                    (old_order_pre.credit_awarded or Decimal("0.00"))
+                    + (old_order_pre.debt_settled or Decimal("0.00"))
+                    - (old_order_pre.credit_applied or Decimal("0.00"))
+                    - (old_order_pre.debit_applied or Decimal("0.00"))
+                    - (old_order_pre.credit_cashed_out or Decimal("0.00"))
+                )
+                old_order_snapshot_bal = cust.credit_balance - old_impact
+        order.customer_balance = old_order_snapshot_bal if old_order_snapshot_bal is not None else cust.credit_balance
     elif data.customer_phone == "":
         order.customer_id = None
         order.customer_phone = None
         order.customer_name = None
+        order.customer_balance = None
     elif data.customer_name is not None:
         order.customer_name = data.customer_name
 
@@ -928,10 +980,85 @@ async def mark_bill_paid(
     if not order.finalized_at:
         order.finalized_at = utc_now()
 
+    # Deferred void, inventory restock, and customer wallet/loyalty reversal for replaced bill
+    if getattr(order, "replaces_bill_id", None):
+        try:
+            old_order_res = await db.execute(
+                select(Order).options(selectinload(Order.items)).where(
+                    Order.id == order.replaces_bill_id,
+                    Order.outlet_id == outlet_id,
+                )
+            )
+            old_order = old_order_res.scalar_one_or_none()
+            if old_order and not old_order.is_void:
+                # 1. Reverse stock deduction
+                from app.services.inventory_service import process_order_cancellation_reversal
+                await process_order_cancellation_reversal(db, old_order)
+
+                # 2. Reverse customer wallet adjustments & loyalty points from old bill
+                old_cust = None
+                if old_order.customer_id:
+                    old_cust = await db.get(Customer, old_order.customer_id)
+                elif old_order.customer_phone:
+                    res_c = await db.execute(
+                        select(Customer).where(Customer.phone == old_order.customer_phone, Customer.outlet_id == outlet_id)
+                    )
+                    old_cust = res_c.scalar_one_or_none()
+
+                if old_cust:
+                    old_cr_applied = old_order.credit_applied or Decimal("0.00")
+                    old_dr_applied = old_order.debit_applied or Decimal("0.00")
+                    old_debt_settled = old_order.debt_settled or Decimal("0.00")
+                    old_cr_awarded = old_order.credit_awarded or Decimal("0.00")
+                    old_cr_cashed_out = old_order.credit_cashed_out or Decimal("0.00")
+
+                    # Invert the net wallet balance changes caused by old_order
+                    wallet_reversal_delta = (
+                        old_cr_applied + old_dr_applied + old_cr_cashed_out
+                        - old_debt_settled - old_cr_awarded
+                    )
+
+                    if wallet_reversal_delta != Decimal("0.00"):
+                        old_cust.credit_balance += wallet_reversal_delta
+                        old_tag = f"#{old_order.basket_number}" if old_order.basket_number else f"#{str(old_order.id)[:8].upper()}"
+                        ledger_reversal = CustomerLedger(
+                            customer_id=old_cust.id,
+                            outlet_id=outlet_id,
+                            order_id=old_order.id,
+                            entry_type="DEBIT_ADDED" if wallet_reversal_delta < 0 else "CREDIT_ADDED",
+                            amount=abs(wallet_reversal_delta),
+                            balance_after=old_cust.credit_balance,
+                            note=f"Reversal of wallet adjustments from replaced bill {old_tag}",
+                            created_by_staff_id=_get_user_id(staff_user) if staff_user else None,
+                        )
+                        db.add(ledger_reversal)
+
+                    # Revert loyalty points
+                    old_earned = old_order.loyalty_points_earned or 0
+                    old_redeemed = old_order.loyalty_points_redeemed or 0
+                    loyalty_reversal_delta = old_redeemed - old_earned
+                    if loyalty_reversal_delta != 0:
+                        old_cust.loyalty_points += loyalty_reversal_delta
+                        if old_cust.loyalty_points < 0:
+                            old_cust.loyalty_points = 0
+
+                old_order.status = OrderStatusEnum.REFUNDED
+                old_order.is_void = True
+                await db.flush()
+        except HTTPException:
+            raise
+        except Exception as e:
+            import traceback
+            print(f"Failed to process deferred old bill voiding: {e}")
+            traceback.print_exc()
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to process deferred old bill voiding: {e}"
+            )
+
     res_outlet = await db.execute(select(Outlet).where(Outlet.id == outlet_id))
     outlet = res_outlet.scalar_one_or_none()
 
-    from app.models.customer import Customer
     # Loyalty Points Redemption
     discount_inr = Decimal("0.00")
     if redeem_loyalty_points > 0 and outlet and (order.customer_id or order.customer_phone):
@@ -1118,35 +1245,7 @@ async def mark_bill_paid(
             order.cash_amount = direct_payable_final - cur_u
         order.payment_reference = f"SPLIT [Cash: ₹{order.cash_amount:.2f}, UPI: ₹{order.upi_amount:.2f}]"
 
-    # 1. Deferred void & inventory restock: if this bill replaces an old one, reverse stock deduction and mark old bill void
-    if getattr(order, "replaces_bill_id", None):
-        try:
-            old_order_res = await db.execute(
-                select(Order).options(selectinload(Order.items)).where(
-                    Order.id == order.replaces_bill_id,
-                    Order.outlet_id == outlet_id,
-                )
-            )
-            old_order = old_order_res.scalar_one_or_none()
-            if old_order and not old_order.is_void:
-                from app.services.inventory_service import process_order_cancellation_reversal
-                await process_order_cancellation_reversal(db, old_order)
-                old_order.status = OrderStatusEnum.REFUNDED
-                old_order.is_void = True
-                await db.flush()
-        except HTTPException:
-            raise
-        except Exception as e:
-            import traceback
-            print(f"Failed to process deferred old bill voiding: {e}")
-            traceback.print_exc()
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to process deferred old bill voiding: {e}"
-            )
-
-
-    # 2. Trigger recipe auto-deduction for stock management
+    # Trigger recipe auto-deduction for stock management
     await process_order_auto_deduction(db, order)
 
     # OUTBOX: Queue action for cloud sync if local

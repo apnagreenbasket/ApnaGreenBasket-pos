@@ -438,6 +438,7 @@ export function CreateBillDrawer({
   );
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [highlightedProductIndex, setHighlightedProductIndex] = useState<number>(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const phoneInputRef = useRef<HTMLInputElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -875,6 +876,21 @@ export function CreateBillDrawer({
     });
   }, [menuItems, searchQuery, serverSearchItems]);
 
+  // Reset highlighted product to 0 on search query change
+  useEffect(() => {
+    setHighlightedProductIndex(0);
+  }, [searchQuery]);
+
+  // Auto-scroll highlighted product card into view
+  useEffect(() => {
+    if (searchQuery.trim() && filteredMenuItems.length > 0) {
+      const el = document.getElementById(`pos-prod-card-${highlightedProductIndex}`);
+      if (el) {
+        el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }
+    }
+  }, [highlightedProductIndex, searchQuery, filteredMenuItems.length]);
+
   const addItemToCart = useCallback((item: AdminMenuItem, v?: AdminVariant, qty: number = 1) => {
     const linkedStock = item.inventory_item_id ? inventoryStockMap.get(item.inventory_item_id) : undefined;
     const effectiveStock = linkedStock !== undefined ? linkedStock : (item.current_stock !== undefined && item.current_stock !== null ? Number(item.current_stock) : null);
@@ -1248,21 +1264,75 @@ export function CreateBillDrawer({
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyDown={async (e) => {
+                    if (e.key === "ArrowDown") {
+                      e.preventDefault();
+                      if (filteredMenuItems.length > 0) {
+                        setHighlightedProductIndex((prev) =>
+                          prev < filteredMenuItems.length - 1 ? prev + 1 : 0
+                        );
+                      }
+                      return;
+                    }
+                    if (e.key === "ArrowUp") {
+                      e.preventDefault();
+                      if (filteredMenuItems.length > 0) {
+                        setHighlightedProductIndex((prev) =>
+                          prev > 0 ? prev - 1 : filteredMenuItems.length - 1
+                        );
+                      }
+                      return;
+                    }
                     if (e.key === "Enter") {
                       e.preventDefault();
                       const query = searchQuery.trim();
                       if (!query) return;
                       
-                      if (filteredMenuItems.length === 1) {
-                        const itemVariants = variantsByItem[filteredMenuItems[0].id] || [];
-                        addItemToCart(filteredMenuItems[0], itemVariants.length === 1 ? itemVariants[0] : undefined, 1);
+                      if (
+                        filteredMenuItems.length > 0 &&
+                        highlightedProductIndex >= 0 &&
+                        highlightedProductIndex < filteredMenuItems.length
+                      ) {
+                        const selectedItem = filteredMenuItems[highlightedProductIndex];
+                        const itemVariants = variantsByItem[selectedItem.id] || [];
+
+                        const linkedStock = selectedItem.inventory_item_id
+                          ? inventoryStockMap.get(selectedItem.inventory_item_id)
+                          : undefined;
+                        const effectiveStock =
+                          linkedStock !== undefined
+                            ? linkedStock
+                            : selectedItem.current_stock !== undefined && selectedItem.current_stock !== null
+                            ? Number(selectedItem.current_stock)
+                            : null;
+                        const isOos = Boolean(
+                          selectedItem.is_out_of_stock ||
+                            (selectedItem.inventory_item_id && effectiveStock !== null && effectiveStock <= 0)
+                        );
+                        const isBlocked = Boolean(
+                          selectedItem.inventory_item_id && isOos && selectedItem.allow_oversell === false
+                        );
+
+                        if (isBlocked) {
+                          setInlineNotice(`'${selectedItem.name}' is Out of Stock. Overselling is disabled for this product.`);
+                          return;
+                        }
+
+                        if (itemVariants.length === 0) {
+                          addItemToCart(selectedItem);
+                        } else if (itemVariants.length === 1) {
+                          addItemToCart(selectedItem, itemVariants[0]);
+                        } else {
+                          addItemToCart(selectedItem, itemVariants[0]);
+                        }
                         setSearchQuery("");
+                        setHighlightedProductIndex(0);
                         setTimeout(() => searchInputRef.current?.focus(), 0);
                         return;
                       }
 
                       await handleBarcodeScan(query);
                       setSearchQuery("");
+                      setHighlightedProductIndex(0);
                       setTimeout(() => searchInputRef.current?.focus(), 0);
                     }
                   }}
@@ -1273,7 +1343,8 @@ export function CreateBillDrawer({
 
             {/* Products Grid (1 item per row so full name is clearly visible without overflowing) */}
             <div className="grid gap-2.5 grid-cols-1 content-start flex-1 min-h-0 overflow-y-auto pr-1">
-              {filteredMenuItems.map((item) => {
+              {filteredMenuItems.map((item, idx) => {
+                const isHighlighted = idx === highlightedProductIndex;
                 const itemVariants = variantsByItem[item.id] || [];
                 const oldestBatch = item.active_batches?.[0];
                 const resolved = resolveEffectiveItemPrice(item, {
@@ -1297,6 +1368,8 @@ export function CreateBillDrawer({
                 return (
                   <div
                     key={item.id}
+                    id={`pos-prod-card-${idx}`}
+                    onMouseEnter={() => setHighlightedProductIndex(idx)}
                     onClick={() => {
                       if (isBlocked) {
                         setInlineNotice(`'${item.name}' is Out of Stock. Overselling is disabled for this product.`);
@@ -1311,6 +1384,8 @@ export function CreateBillDrawer({
                     className={`group relative rounded-lg border p-3 min-h-[90px] h-auto flex flex-col justify-between transition-all duration-150 select-none ${
                       isBlocked
                         ? "cursor-not-allowed opacity-65 border-rose-500/40 bg-rose-500/5 hover:border-rose-500/60"
+                        : isHighlighted
+                        ? "cursor-pointer border-sky-500 ring-2 ring-sky-500/50 bg-sky-500/10 shadow-lg scale-[1.01]"
                         : pricingMode === "WHOLESALE" && wholesalePriceNum !== null
                         ? "cursor-pointer border-purple-500/40 bg-purple-500/5 hover:border-purple-500 shadow-xs"
                         : "cursor-pointer border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] hover:border-sky-500 hover:shadow-md"

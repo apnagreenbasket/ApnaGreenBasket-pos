@@ -414,3 +414,100 @@ async def test_supplier_spend_excludes_deficit_batches(
     assert data["total_spend"] == 500.0
     assert len(data["suppliers"]) == 1
     assert data["suppliers"][0]["total_spend"] == 500.0
+
+
+@pytest.mark.asyncio
+async def test_supplier_spend_excludes_voided_batches(
+    client: AsyncClient, db_session: AsyncSession
+):
+    outlet = await create_test_outlet(db_session, slug="audit-outlet-void-spend", name="Audit Outlet Void Spend")
+    admin = await create_test_user(
+        db_session, outlet, email="admin_audit_void@test.com", role=RoleEnum.OUTLET_ADMIN
+    )
+    supplier = Supplier(
+        outlet_id=outlet.id,
+        name="Fresh Farm Wholesale",
+        contact_person="Ramesh",
+        phone="9876543210",
+    )
+    db_session.add(supplier)
+    await db_session.flush()
+
+    cat = await create_test_category(db_session, outlet)
+    item = await create_test_menu_item(db_session, outlet, cat)
+    inv_item = InventoryItem(
+        outlet_id=outlet.id,
+        name=item.name,
+        current_stock=Decimal("30.000"),
+        unit="kg",
+        cost_per_unit=Decimal("40.00"),
+    )
+    db_session.add(inv_item)
+    await db_session.flush()
+
+    auth_headers = get_auth_headers(admin, outlet)
+    now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    # Batch 1 (Active): 10 kg @ ₹50 = ₹500
+    intake_active = StockIntake(
+        outlet_id=outlet.id,
+        supplier_id=supplier.id,
+        item_id=inv_item.id,
+        batch_number="BAT-ACTIVE-001",
+        quantity=Decimal("10.0"),
+        remaining_quantity=Decimal("10.0"),
+        unit_cost=Decimal("50.00"),
+        intake_date=now_utc,
+    )
+    # Batch 2 (To be voided): 20 kg @ ₹40 = ₹800
+    intake_void = StockIntake(
+        outlet_id=outlet.id,
+        supplier_id=supplier.id,
+        item_id=inv_item.id,
+        batch_number="BAT-VOID-002",
+        quantity=Decimal("20.0"),
+        remaining_quantity=Decimal("20.0"),
+        unit_cost=Decimal("40.00"),
+        intake_date=now_utc,
+    )
+    db_session.add_all([intake_active, intake_void])
+    await db_session.commit()
+
+    f_dt = (now_utc - timedelta(hours=1)).isoformat()
+    t_dt = (now_utc + timedelta(hours=1)).isoformat()
+
+    # Prior to voiding: total spend is ₹1300.0 (500 + 800)
+    res_before = await client.get(
+        f"/api/analytics/supplier-spend?from_date={f_dt}&to_date={t_dt}",
+        headers=auth_headers,
+    )
+    assert res_before.status_code == 200
+    assert res_before.json()["total_spend"] == 1300.0
+    assert res_before.json()["suppliers"][0]["total_intakes"] == 2
+
+    # Void Batch 2
+    res_void = await client.post(
+        f"/api/admin/inventory/batches/{intake_void.id}/adjust",
+        headers=auth_headers,
+        json={
+            "adjustment_type": "VOID_BATCH",
+            "quantity": 20.0,
+            "notes": "Accidentally added batch - cancelled",
+        },
+    )
+    assert res_void.status_code == 200
+
+    # After voiding: total spend MUST deduct the ₹800 voided batch and only be ₹500.0
+    res_after = await client.get(
+        f"/api/analytics/supplier-spend?from_date={f_dt}&to_date={t_dt}",
+        headers=auth_headers,
+    )
+    assert res_after.status_code == 200
+    data_after = res_after.json()
+    assert data_after["total_spend"] == 500.0
+    assert data_after["suppliers"][0]["total_spend"] == 500.0
+    assert data_after["suppliers"][0]["total_quantity"] == 10.0
+    assert data_after["suppliers"][0]["total_intakes"] == 1
+    # Batches breakdown should only contain the active batch
+    assert len(data_after["suppliers"][0]["batches"]) == 1
+    assert data_after["suppliers"][0]["batches"][0]["batch_number"] == "BAT-ACTIVE-001"

@@ -22,9 +22,23 @@ import type { ItemSalesResponse, ItemSalesRow } from "@/types";
 import { generateCategoryWiseSalesPdfReport, generateFlatItemSalesPdfReport } from "@/lib/pdfGenerator";
 import { SortableHeader } from "./shared";
 
-type SortField = "revenue" | "profit" | "margin" | "qty" | "name";
+type SortField = "revenue" | "profit" | "margin" | "qty" | "name" | "cogs";
 type SortDirection = "asc" | "desc";
 export type ViewMode = "category_wise" | "flat";
+
+const getItemCogs = (it: ItemSalesRow): number =>
+  it.cogs !== undefined ? it.cogs : (it.cost_per_unit || 0) * (it.quantity_sold || 0);
+
+const getItemProfit = (it: ItemSalesRow): number =>
+  it.estimated_profit !== null && it.estimated_profit !== undefined
+    ? it.estimated_profit
+    : (it.revenue || 0) - getItemCogs(it);
+
+const getItemMargin = (it: ItemSalesRow): number => {
+  if (it.margin_pct !== null && it.margin_pct !== undefined) return it.margin_pct;
+  const rev = it.revenue || 0;
+  return rev > 0 ? (getItemProfit(it) / rev) * 100 : 0;
+};
 
 export interface ItemSalesReportProps {
   data: ItemSalesResponse | null;
@@ -121,17 +135,34 @@ export function ItemSalesReport({
       return matchName || matchCategory;
     });
 
-    return [...filtered].sort((a, b) => {
+    // Deduplicate items by composite key (item_name + category_name)
+    const itemMap = new Map<string, ItemSalesRow>();
+    filtered.forEach((it) => {
+      const key = `${it.item_name}__${it.category_name || "uncategorized"}`;
+      if (!itemMap.has(key)) {
+        itemMap.set(key, it);
+      }
+    });
+    const uniqueFiltered = Array.from(itemMap.values());
+
+    return [...uniqueFiltered].sort((a, b) => {
       let comparison = 0;
       if (sortField === "revenue") {
         comparison = (a.revenue || 0) - (b.revenue || 0);
       } else if (sortField === "profit") {
-        comparison = (a.estimated_profit || 0) - (b.estimated_profit || 0);
+        comparison = getItemProfit(a) - getItemProfit(b);
       } else if (sortField === "margin") {
-        comparison = (a.margin_pct || 0) - (b.margin_pct || 0);
+        comparison = getItemMargin(a) - getItemMargin(b);
       } else if (sortField === "qty") {
         comparison = (a.quantity_sold || 0) - (b.quantity_sold || 0);
+      } else if (sortField === "cogs") {
+        comparison = getItemCogs(a) - getItemCogs(b);
       } else if (sortField === "name") {
+        comparison = a.item_name.localeCompare(b.item_name);
+      }
+
+      // Deterministic tie-breaker
+      if (comparison === 0) {
         comparison = a.item_name.localeCompare(b.item_name);
       }
 
@@ -161,27 +192,34 @@ export function ItemSalesReport({
     });
 
     const groups = Array.from(groupsMap.entries()).map(([categoryName, items]) => {
-      const sortedItems = [...items].sort((a, b) => {
+      // Deduplicate items within category by item_name
+      const itemMap = new Map<string, ItemSalesRow>();
+      items.forEach((item) => {
+        if (!itemMap.has(item.item_name)) {
+          itemMap.set(item.item_name, item);
+        }
+      });
+      const uniqueItems = Array.from(itemMap.values());
+
+      const sortedItems = [...uniqueItems].sort((a, b) => {
         let comparison = 0;
         if (sortField === "revenue") comparison = (a.revenue || 0) - (b.revenue || 0);
-        else if (sortField === "profit") comparison = (a.estimated_profit || 0) - (b.estimated_profit || 0);
-        else if (sortField === "margin") comparison = (a.margin_pct || 0) - (b.margin_pct || 0);
+        else if (sortField === "profit") comparison = getItemProfit(a) - getItemProfit(b);
+        else if (sortField === "margin") comparison = getItemMargin(a) - getItemMargin(b);
         else if (sortField === "qty") comparison = (a.quantity_sold || 0) - (b.quantity_sold || 0);
+        else if (sortField === "cogs") comparison = getItemCogs(a) - getItemCogs(b);
         else if (sortField === "name") comparison = a.item_name.localeCompare(b.item_name);
+
+        if (comparison === 0) {
+          comparison = a.item_name.localeCompare(b.item_name);
+        }
         return sortDirection === "asc" ? comparison : -comparison;
       });
 
-      const totalQty = items.reduce((acc, it) => acc + (it.quantity_sold || 0), 0);
-      const groupRevenue = items.reduce((acc, it) => acc + (it.revenue || 0), 0);
-      const groupCogs = items.reduce((acc, it) => {
-        const c = it.cogs !== undefined ? it.cogs : (it.cost_per_unit || 0) * (it.quantity_sold || 0);
-        return acc + c;
-      }, 0);
-      const groupProfit = items.reduce((acc, it) => {
-        const c = it.cogs !== undefined ? it.cogs : (it.cost_per_unit || 0) * (it.quantity_sold || 0);
-        const p = it.estimated_profit !== null && it.estimated_profit !== undefined ? it.estimated_profit : (it.revenue || 0) - c;
-        return acc + p;
-      }, 0);
+      const totalQty = uniqueItems.reduce((acc, it) => acc + (it.quantity_sold || 0), 0);
+      const groupRevenue = uniqueItems.reduce((acc, it) => acc + (it.revenue || 0), 0);
+      const groupCogs = uniqueItems.reduce((acc, it) => acc + getItemCogs(it), 0);
+      const groupProfit = uniqueItems.reduce((acc, it) => acc + getItemProfit(it), 0);
       const marginPct = groupRevenue > 0 ? (groupProfit / groupRevenue) * 100 : 0;
 
       return {
@@ -889,29 +927,23 @@ export function ItemSalesReport({
                               <SortableHeader label="Item Name" columnKey="name" sortConfig={{key: sortField, direction: sortDirection}} handleSort={(k) => toggleSort(k as SortField)} className="!py-2.5 !pl-8 !pr-3" />
                               <SortableHeader label="Qty Sold" columnKey="qty" sortConfig={{key: sortField, direction: sortDirection}} handleSort={(k) => toggleSort(k as SortField)} className="!py-2.5 !px-3 text-right" />
                               <SortableHeader label="Revenue" columnKey="revenue" sortConfig={{key: sortField, direction: sortDirection}} handleSort={(k) => toggleSort(k as SortField)} className="!py-2.5 !px-3 text-right" />
-                              <th className="py-2.5 px-3 text-right">
-                                <span>COGS (Total / Unit)</span>
-                              </th>
+                              <SortableHeader label="COGS (Total / Unit)" columnKey="cogs" sortConfig={{key: sortField, direction: sortDirection}} handleSort={(k) => toggleSort(k as SortField)} className="!py-2.5 !px-3 text-right" />
                               <SortableHeader label="Profit" columnKey="profit" sortConfig={{key: sortField, direction: sortDirection}} handleSort={(k) => toggleSort(k as SortField)} className="!py-2.5 !px-3 text-right" />
                               <SortableHeader label="Margin %" columnKey="margin" sortConfig={{key: sortField, direction: sortDirection}} handleSort={(k) => toggleSort(k as SortField)} className="!py-2.5 !pl-3 !pr-5 text-right" />
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-[var(--border-subtle)]">
-                            {group.items.map((it, idx) => {
-                              const itemCogs = it.cogs !== undefined ? it.cogs : (it.cost_per_unit || 0) * (it.quantity_sold || 0);
-                              const itemProfit = it.estimated_profit !== null && it.estimated_profit !== undefined
-                                ? it.estimated_profit
-                                : it.revenue - itemCogs;
-                              const itemMargin = it.margin_pct !== null && it.margin_pct !== undefined
-                                ? it.margin_pct
-                                : (it.revenue > 0 ? (itemProfit / it.revenue) * 100 : 0);
+                            {group.items.map((it) => {
+                              const itemCogs = getItemCogs(it);
+                              const itemProfit = getItemProfit(it);
+                              const itemMargin = getItemMargin(it);
                               const unitCost = it.cost_per_unit !== null && it.cost_per_unit !== undefined
                                 ? it.cost_per_unit
                                 : (it.quantity_sold > 0 ? itemCogs / it.quantity_sold : 0);
                               const isProfitable = itemProfit >= 0;
 
                               return (
-                                <tr key={it.menu_item_id || `${it.item_name}-${idx}`} className="hover:bg-[var(--bg-muted)]/20 transition-colors">
+                                <tr key={`cat-${group.categoryName}-${it.item_name}`} className="hover:bg-[var(--bg-muted)]/20 transition-colors">
                                   {/* Item Name */}
                                   <td className="py-3 pl-8 pr-3">
                                     <span className="font-semibold text-[var(--text-main)]">{it.item_name}</span>
@@ -1009,11 +1041,7 @@ export function ItemSalesReport({
                   <SortableHeader label="Item & Category" columnKey="name" sortConfig={{key: sortField, direction: sortDirection}} handleSort={(k) => toggleSort(k as SortField)} className="!py-3.5 !pl-5 !pr-3" />
                   <SortableHeader label="Qty Sold" columnKey="qty" sortConfig={{key: sortField, direction: sortDirection}} handleSort={(k) => toggleSort(k as SortField)} className="!py-3.5 !px-3 text-right" />
                   <SortableHeader label="Revenue" columnKey="revenue" sortConfig={{key: sortField, direction: sortDirection}} handleSort={(k) => toggleSort(k as SortField)} className="!py-3.5 !px-3 text-right" />
-                  <th className="py-3.5 px-3 text-right">
-                    <div className="flex items-center justify-end gap-1.5">
-                      <span>COGS (Total / Unit)</span>
-                    </div>
-                  </th>
+                  <SortableHeader label="COGS (Total / Unit)" columnKey="cogs" sortConfig={{key: sortField, direction: sortDirection}} handleSort={(k) => toggleSort(k as SortField)} className="!py-3.5 !px-3 text-right" />
                   <SortableHeader label="Profit" columnKey="profit" sortConfig={{key: sortField, direction: sortDirection}} handleSort={(k) => toggleSort(k as SortField)} className="!py-3.5 !px-3 text-right" />
                   <SortableHeader label="Margin %" columnKey="margin" sortConfig={{key: sortField, direction: sortDirection}} handleSort={(k) => toggleSort(k as SortField)} className="!py-3.5 !pl-3 !pr-5 text-right" />
                 </tr>
@@ -1026,14 +1054,10 @@ export function ItemSalesReport({
                     </td>
                   </tr>
                 ) : (
-                  filteredAndSortedItems.map((it, idx) => {
-                    const itemCogs = it.cogs !== undefined ? it.cogs : (it.cost_per_unit || 0) * (it.quantity_sold || 0);
-                    const itemProfit = it.estimated_profit !== null && it.estimated_profit !== undefined
-                      ? it.estimated_profit
-                      : it.revenue - itemCogs;
-                    const itemMargin = it.margin_pct !== null && it.margin_pct !== undefined
-                      ? it.margin_pct
-                      : (it.revenue > 0 ? (itemProfit / it.revenue) * 100 : 0);
+                  filteredAndSortedItems.map((it) => {
+                    const itemCogs = getItemCogs(it);
+                    const itemProfit = getItemProfit(it);
+                    const itemMargin = getItemMargin(it);
                     const unitCost = it.cost_per_unit !== null && it.cost_per_unit !== undefined
                       ? it.cost_per_unit
                       : (it.quantity_sold > 0 ? itemCogs / it.quantity_sold : 0);
@@ -1042,7 +1066,7 @@ export function ItemSalesReport({
 
                     return (
                       <tr
-                        key={it.menu_item_id || `${it.item_name}-${idx}`}
+                        key={`flat-${it.item_name}-${it.category_name || "uncategorized"}`}
                         className="group transition-colors hover:bg-[var(--bg-muted)]/30"
                       >
                         {/* Item & Category */}

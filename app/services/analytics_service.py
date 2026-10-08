@@ -1777,6 +1777,36 @@ async def get_stock_intake_report(
     item_id: str | None = None,
     supplier_id: str | None = None
 ) -> StockIntakeReportResponse:
+    from_dt_naive = ensure_naive_utc(from_dt) or from_dt
+    to_dt_naive = ensure_naive_utc(to_dt) or to_dt
+
+    void_subq = (
+        select(
+            StockLedger.intake_id.label("intake_id"),
+            func.sum(func.abs(StockLedger.quantity_change)).label("voided_qty"),
+        )
+        .where(
+            StockLedger.outlet_id == outlet_id,
+            StockLedger.change_type == StockChangeTypeEnum.VOID_BATCH,
+            StockLedger.intake_id.is_not(None),
+        )
+        .group_by(StockLedger.intake_id)
+        .subquery("void_subq")
+    )
+    is_void_note = or_(
+        StockIntake.notes.like("[VOIDED]%"),
+        StockIntake.notes.like("%[VOIDED]%"),
+    )
+    raw_void_qty = func.coalesce(
+        void_subq.c.voided_qty,
+        case((is_void_note, StockIntake.quantity), else_=0.0),
+    )
+    effective_void_qty = case(
+        (raw_void_qty > StockIntake.quantity, StockIntake.quantity),
+        else_=raw_void_qty,
+    )
+    net_batch_qty = StockIntake.quantity - effective_void_qty
+
     stmt = (
         select(
             StockIntake.id,
@@ -1784,7 +1814,7 @@ async def get_stock_intake_report(
             StockIntake.item_id,
             Supplier.name.label("supplier_name"),
             StockIntake.batch_number,
-            StockIntake.quantity,
+            net_batch_qty.label("quantity"),
             StockIntake.unit_cost,
             StockIntake.intake_date,
             StockIntake.expiry_date
@@ -1792,11 +1822,14 @@ async def get_stock_intake_report(
         .select_from(StockIntake)
         .join(InventoryItem, StockIntake.item_id == InventoryItem.id)
         .outerjoin(Supplier, StockIntake.supplier_id == Supplier.id)
+        .outerjoin(void_subq, StockIntake.id == void_subq.c.intake_id)
         .where(
             StockIntake.outlet_id == outlet_id,
-            StockIntake.intake_date >= from_dt,
-            StockIntake.intake_date <= to_dt,
+            StockIntake.intake_date >= from_dt_naive,
+            StockIntake.intake_date <= to_dt_naive,
             ~StockIntake.batch_number.like("BAT-OV-%"),
+            StockIntake.quantity > 0,
+            net_batch_qty > 0,
         )
         .order_by(StockIntake.intake_date.desc())
     )
@@ -4678,55 +4711,107 @@ async def get_supplier_spend(
     from_dt: datetime,
     to_dt: datetime,
 ) -> SupplierSpendResponse:
+    from_dt_naive = ensure_naive_utc(from_dt) or from_dt
+    to_dt_naive = ensure_naive_utc(to_dt) or to_dt
     sname_expr = func.coalesce(Supplier.name, "Unknown")
+
+    # 1. Subquery for voided batch quantities recorded in StockLedger
+    void_subq = (
+        select(
+            StockLedger.intake_id.label("intake_id"),
+            func.sum(func.abs(StockLedger.quantity_change)).label("voided_qty"),
+        )
+        .where(
+            StockLedger.outlet_id == outlet_id,
+            StockLedger.change_type == StockChangeTypeEnum.VOID_BATCH,
+            StockLedger.intake_id.is_not(None),
+        )
+        .group_by(StockLedger.intake_id)
+        .subquery("void_subq")
+    )
+
+    # Effective voided quantity per batch (from StockLedger or [VOIDED] notes fallback)
+    is_void_note = or_(
+        StockIntake.notes.like("[VOIDED]%"),
+        StockIntake.notes.like("%[VOIDED]%"),
+    )
+    raw_void_qty = func.coalesce(
+        void_subq.c.voided_qty,
+        case((is_void_note, StockIntake.quantity), else_=0.0),
+    )
+    effective_void_qty = case(
+        (raw_void_qty > StockIntake.quantity, StockIntake.quantity),
+        else_=raw_void_qty,
+    )
+    net_batch_qty = StockIntake.quantity - effective_void_qty
+    net_batch_spend = net_batch_qty * StockIntake.unit_cost
+
+    # 2. Net active batches (strictly excluding completely voided batches where net_qty <= 0)
+    batch_net = (
+        select(
+            StockIntake.id.label("id"),
+            StockIntake.supplier_id.label("supplier_id"),
+            StockIntake.batch_number.label("batch_number"),
+            StockIntake.item_id.label("item_id"),
+            StockIntake.intake_date.label("intake_date"),
+            StockIntake.expiry_date.label("expiry_date"),
+            StockIntake.created_at.label("created_at"),
+            StockIntake.unit_cost.label("unit_cost"),
+            StockIntake.remaining_quantity.label("remaining_quantity"),
+            net_batch_qty.label("net_quantity"),
+            net_batch_spend.label("net_spend"),
+        )
+        .select_from(StockIntake)
+        .outerjoin(void_subq, StockIntake.id == void_subq.c.intake_id)
+        .where(
+            StockIntake.outlet_id == outlet_id,
+            StockIntake.intake_date >= from_dt_naive,
+            StockIntake.intake_date <= to_dt_naive,
+            ~StockIntake.batch_number.like("BAT-OV-%"),
+            StockIntake.quantity > 0,
+            net_batch_qty > 0,
+        )
+        .subquery("batch_net")
+    )
+
     stmt = (
         select(
             Supplier.id.label("sid"),
             sname_expr.label("sname"),
-            func.count(StockIntake.id).label("cnt"),
-            func.sum(StockIntake.quantity).label("qty"),
-            func.sum(StockIntake.quantity * StockIntake.unit_cost).label("spend"),
-            func.avg(StockIntake.unit_cost).label("avg_uc")
+            func.count(batch_net.c.id).label("cnt"),
+            func.sum(batch_net.c.net_quantity).label("qty"),
+            func.sum(batch_net.c.net_spend).label("spend"),
+            case(
+                (func.sum(batch_net.c.net_quantity) > 0, func.sum(batch_net.c.net_spend) / func.sum(batch_net.c.net_quantity)),
+                else_=func.avg(batch_net.c.unit_cost),
+            ).label("avg_uc"),
         )
-        .select_from(StockIntake)
-        .outerjoin(Supplier, StockIntake.supplier_id == Supplier.id)
-        .where(
-            StockIntake.outlet_id == outlet_id,
-            StockIntake.intake_date >= from_dt,
-            StockIntake.intake_date <= to_dt,
-            ~StockIntake.batch_number.like("BAT-OV-%"),
-            StockIntake.quantity > 0,
-        )
+        .select_from(batch_net)
+        .outerjoin(Supplier, batch_net.c.supplier_id == Supplier.id)
         .group_by(Supplier.id, sname_expr)
-        .order_by(func.sum(StockIntake.quantity * StockIntake.unit_cost).desc())
+        .order_by(func.sum(batch_net.c.net_spend).desc())
     )
     res = await db.execute(stmt)
     rows = res.all()
 
-    # Query all detailed batches received in this date window to provide transparent breakdown
+    # Query all active non-voided batches received in this date window
     stmt_batches = (
         select(
-            StockIntake.id,
-            StockIntake.supplier_id,
-            StockIntake.batch_number,
-            StockIntake.item_id,
+            batch_net.c.id,
+            batch_net.c.supplier_id,
+            batch_net.c.batch_number,
+            batch_net.c.item_id,
             InventoryItem.name.label("item_name"),
-            StockIntake.intake_date,
-            StockIntake.expiry_date,
-            StockIntake.quantity,
-            StockIntake.remaining_quantity,
-            StockIntake.unit_cost,
+            batch_net.c.intake_date,
+            batch_net.c.expiry_date,
+            batch_net.c.net_quantity.label("quantity"),
+            batch_net.c.remaining_quantity,
+            batch_net.c.unit_cost,
+            batch_net.c.net_spend.label("total_cost"),
         )
-        .select_from(StockIntake)
-        .join(InventoryItem, StockIntake.item_id == InventoryItem.id)
-        .where(
-            StockIntake.outlet_id == outlet_id,
-            StockIntake.intake_date >= from_dt,
-            StockIntake.intake_date <= to_dt,
-            ~StockIntake.batch_number.like("BAT-OV-%"),
-            StockIntake.quantity > 0,
-        )
-        .order_by(StockIntake.intake_date.desc(), StockIntake.created_at.desc())
+        .select_from(batch_net)
+        .join(InventoryItem, batch_net.c.item_id == InventoryItem.id)
+        .order_by(batch_net.c.intake_date.desc(), batch_net.c.created_at.desc())
     )
     res_batches = await db.execute(stmt_batches)
     from collections import defaultdict
@@ -4736,6 +4821,7 @@ async def get_supplier_spend(
         b_qty = float(b.quantity or 0)
         b_rem = float(b.remaining_quantity or 0)
         b_uc = float(b.unit_cost or 0)
+        b_tc = float(b.total_cost or (b_qty * b_uc))
         supplier_batches_map[key].append(
             SupplierBatchRow(
                 intake_id=str(b.id),
@@ -4747,7 +4833,7 @@ async def get_supplier_spend(
                 quantity=round(b_qty, 3),
                 remaining_quantity=round(b_rem, 3),
                 unit_cost=round(b_uc, 2),
-                total_cost=round(b_qty * b_uc, 2),
+                total_cost=round(b_tc, 2),
             )
         )
     
@@ -5058,8 +5144,40 @@ async def get_inventory_summary_report(
 
     # 1. Gross Inward Spend: Total stock intake batches received in the period
     # Exclude auto-generated oversold deficit placeholders (BAT-OV-%) and non-positive batches
+    # Deduct voided batches so inward spend reflects actual procurement outlay
+    void_subq_inv = (
+        select(
+            StockLedger.intake_id.label("intake_id"),
+            func.sum(func.abs(StockLedger.quantity_change)).label("voided_qty"),
+        )
+        .where(
+            StockLedger.outlet_id == outlet_id,
+            StockLedger.change_type == StockChangeTypeEnum.VOID_BATCH,
+            StockLedger.intake_id.is_not(None),
+        )
+        .group_by(StockLedger.intake_id)
+        .subquery("void_subq_inv")
+    )
+    is_void_note_inv = or_(
+        StockIntake.notes.like("[VOIDED]%"),
+        StockIntake.notes.like("%[VOIDED]%"),
+    )
+    raw_void_qty_inv = func.coalesce(
+        void_subq_inv.c.voided_qty,
+        case((is_void_note_inv, StockIntake.quantity), else_=0.0),
+    )
+    effective_void_qty_inv = case(
+        (raw_void_qty_inv > StockIntake.quantity, StockIntake.quantity),
+        else_=raw_void_qty_inv,
+    )
+    net_batch_qty_inv = case(
+        (StockIntake.quantity > effective_void_qty_inv, StockIntake.quantity - effective_void_qty_inv),
+        else_=0.0,
+    )
     stmt_spend = select(
-        func.coalesce(func.sum(StockIntake.quantity * StockIntake.unit_cost), 0.0)
+        func.coalesce(func.sum(net_batch_qty_inv * StockIntake.unit_cost), 0.0)
+    ).select_from(StockIntake).outerjoin(
+        void_subq_inv, StockIntake.id == void_subq_inv.c.intake_id
     ).where(
         StockIntake.outlet_id == outlet_id,
         StockIntake.intake_date >= from_dt_naive,
@@ -5084,7 +5202,7 @@ async def get_inventory_summary_report(
     # Net Supplier Spend (actual net inward procurement outlay)
     net_supplier_spend = gross_inward_spend - purchase_returns
 
-    # 3. Wastage Cost: Spoiled, expired, damaged, theft or batch voids in period
+    # 3. Wastage Cost: Spoiled, expired, damaged, theft in period
     # Exclude clerical intake corrections and audit corrections (handled separately)
     stmt_wastage = select(
         func.coalesce(
@@ -5098,14 +5216,9 @@ async def get_inventory_summary_report(
         StockLedger.outlet_id == outlet_id,
         StockLedger.created_at >= from_dt_naive,
         StockLedger.created_at <= to_dt_naive,
-        or_(
-            and_(
-                StockLedger.change_type == StockChangeTypeEnum.MANUAL_ADJUSTMENT,
-                StockLedger.quantity_change < 0,
-                ~StockLedger.reason.in_(["AUDIT_CORRECTION", "INTAKE_CORRECTION", "OVERSOLD_RECONCILE"]),
-            ),
-            StockLedger.change_type == StockChangeTypeEnum.VOID_BATCH,
-        ),
+        StockLedger.change_type == StockChangeTypeEnum.MANUAL_ADJUSTMENT,
+        StockLedger.quantity_change < 0,
+        ~StockLedger.reason.in_(["AUDIT_CORRECTION", "INTAKE_CORRECTION", "OVERSOLD_RECONCILE"]),
     )
     wastage_res = await db.execute(stmt_wastage)
     wastage_cost = float(wastage_res.scalar() or 0.0)
