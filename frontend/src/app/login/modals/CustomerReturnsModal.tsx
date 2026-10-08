@@ -1469,7 +1469,7 @@ export function CustomerReturnsModal({
             i === cartIdx
               ? {
                   ...item,
-                  item_name: `${cleanName} [Oversold Backorder]`,
+                  item_name: cleanName,
                   quantity: newQty,
                   allow_oversell: true,
                   selected_batch_id: null,
@@ -1533,7 +1533,7 @@ export function CustomerReturnsModal({
         if (i !== cartIdx) return item;
         return {
           ...item,
-          item_name: isBackorder ? `${cleanName} [Oversold Backorder]` : cleanName,
+          item_name: cleanName,
           quantity: finalQty,
           selected_batch_id: activeBatches[0]?.id || item.selected_batch_id,
           selected_batch_number: activeBatches[0]?.batch_number || item.selected_batch_number,
@@ -1682,7 +1682,7 @@ export function CustomerReturnsModal({
 
     const isOos = Boolean(m.inventory_item_id && (activeBatches.length === 0 || activeBatches.every(b => (Number(b.remaining_quantity) || 0) <= 0)));
     const isBackorder = Boolean(m.inventory_item_id && isOos && m.allow_oversell !== false);
-    const finalItemName = isBackorder ? `${m.name} [Oversold Backorder]` : m.name;
+    const finalItemName = m.name;
 
     const baseBatchPrice = oldestBatch?.retail_price != null ? Number(oldestBatch.retail_price) : Number(m.price || 0);
     const baseBatchMrp = oldestBatch?.mrp != null ? Number(oldestBatch.mrp) : (m.mrp ? Number(m.mrp) : baseBatchPrice);
@@ -3582,14 +3582,16 @@ export function CustomerReturnsModal({
                             >
                               <div className="flex-1 min-w-0 pr-3">
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <p className="font-black text-[var(--text-primary)] truncate text-base">{exItem.item_name}</p>
+                                  <p className="font-black text-[var(--text-primary)] truncate text-base">
+                                    {(exItem.item_name || "").replace(/\[Oversold Backorder\]/gi, "").trim()}
+                                  </p>
 
                                   {exItem.allow_oversell && (
                                     <span
-                                      className="inline-flex items-center gap-1 text-[11px] font-mono rounded-md border border-rose-500/30 bg-rose-500/10 px-2 py-0.5 text-rose-400 font-semibold"
-                                      title="Oversold Backorder"
+                                      className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider rounded border border-rose-500/40 bg-rose-500/15 px-1.5 py-0.5 text-rose-400 font-mono"
+                                      title="Oversold"
                                     >
-                                      Backorder
+                                      Oversell
                                     </span>
                                   )}
                                 </div>

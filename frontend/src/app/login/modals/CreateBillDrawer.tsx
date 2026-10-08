@@ -579,7 +579,7 @@ export function CreateBillDrawer({
             i === cartIdx
               ? {
                   ...item,
-                  item_name: `${cleanName} [Oversold Backorder]`,
+                  item_name: cleanName,
                   quantity: newQty,
                   allow_oversell: true,
                   selected_batch_id: null,
@@ -655,7 +655,7 @@ export function CreateBillDrawer({
         if (i !== cartIdx) return item;
         return {
           ...item,
-          item_name: isBackorder ? `${cleanName} [Oversold Backorder]` : cleanName,
+          item_name: cleanName,
           quantity: finalQty,
           allow_oversell: isBackorder ? true : item.allow_oversell,
         };
@@ -893,9 +893,16 @@ export function CreateBillDrawer({
 
   const addItemToCart = useCallback((item: AdminMenuItem, v?: AdminVariant, qty: number = 1) => {
     const linkedStock = item.inventory_item_id ? inventoryStockMap.get(item.inventory_item_id) : undefined;
-    const effectiveStock = linkedStock !== undefined ? linkedStock : (item.current_stock !== undefined && item.current_stock !== null ? Number(item.current_stock) : null);
-    const isOos = item.is_out_of_stock || (item.inventory_item_id && effectiveStock !== null && effectiveStock <= 0);
-    if (item.inventory_item_id && isOos && item.allow_oversell === false) {
+    const batchStock = item.active_batches && item.active_batches.length > 0
+      ? item.active_batches.reduce((sum, b) => sum + (Number(b.remaining_quantity) || 0), 0)
+      : null;
+    const effectiveStock = linkedStock !== undefined 
+      ? linkedStock 
+      : (item.current_stock !== undefined && item.current_stock !== null 
+          ? Number(item.current_stock) 
+          : batchStock);
+    const isOos = Boolean(item.is_out_of_stock || (effectiveStock !== null && effectiveStock <= 0));
+    if (isOos && item.allow_oversell === false) {
       setInlineNotice(`'${item.name}' is Out of Stock. Overselling is disabled for this product.`);
       return;
     }
@@ -912,8 +919,8 @@ export function CreateBillDrawer({
     const taxRate = item.tax_rate ? parseFloat(String(item.tax_rate)) : 0;
     const baseDishName = v ? `${item.name} (${v.name})` : item.name;
 
-    const isBackorder = Boolean(item.inventory_item_id && isOos && item.allow_oversell !== false);
-    const finalItemName = isBackorder ? `${baseDishName} [Oversold Backorder]` : baseDishName;
+    const isBackorder = Boolean(isOos && item.allow_oversell !== false);
+    const finalItemName = baseDishName;
 
     setDraftCartItems((prev) => {
       const existingIdx = prev.findIndex(
@@ -947,7 +954,7 @@ export function CreateBillDrawer({
       ];
     });
     if (isBackorder) {
-      setInlineNotice(`'${item.name}' is out of stock. Added as [Oversold Backorder].`);
+      setInlineNotice(`'${item.name}' is out of stock. Added as oversell.`);
     }
   }, [eveningPriceActive, pricingMode, setDraftCartItems, inventoryStockMap]);
 
@@ -1298,18 +1305,21 @@ export function CreateBillDrawer({
                         const linkedStock = selectedItem.inventory_item_id
                           ? inventoryStockMap.get(selectedItem.inventory_item_id)
                           : undefined;
+                        const batchStock = selectedItem.active_batches && selectedItem.active_batches.length > 0
+                          ? selectedItem.active_batches.reduce((sum, b) => sum + (Number(b.remaining_quantity) || 0), 0)
+                          : null;
                         const effectiveStock =
                           linkedStock !== undefined
                             ? linkedStock
                             : selectedItem.current_stock !== undefined && selectedItem.current_stock !== null
                             ? Number(selectedItem.current_stock)
-                            : null;
+                            : batchStock;
                         const isOos = Boolean(
                           selectedItem.is_out_of_stock ||
-                            (selectedItem.inventory_item_id && effectiveStock !== null && effectiveStock <= 0)
+                            (effectiveStock !== null && effectiveStock <= 0)
                         );
                         const isBlocked = Boolean(
-                          selectedItem.inventory_item_id && isOos && selectedItem.allow_oversell === false
+                          isOos && selectedItem.allow_oversell === false
                         );
 
                         if (isBlocked) {
@@ -1359,10 +1369,17 @@ export function CreateBillDrawer({
                 const taxRate = item.tax_rate ? parseFloat(String(item.tax_rate)) : 0;
                 const cartQtyForItem = draftCartItems.filter((ci) => ci.menu_item_id === item.id).reduce((sum, ci) => sum + ci.quantity, 0);
                 const linkedStock = item.inventory_item_id ? inventoryStockMap.get(item.inventory_item_id) : undefined;
-                const effectiveStock = linkedStock !== undefined ? linkedStock : (item.current_stock !== undefined && item.current_stock !== null ? Number(item.current_stock) : null);
-                const isOos = Boolean(item.is_out_of_stock || (item.inventory_item_id && effectiveStock !== null && effectiveStock <= 0));
+                const batchStock = item.active_batches && item.active_batches.length > 0
+                  ? item.active_batches.reduce((sum, b) => sum + (Number(b.remaining_quantity) || 0), 0)
+                  : null;
+                const effectiveStock = linkedStock !== undefined 
+                  ? linkedStock 
+                  : (item.current_stock !== undefined && item.current_stock !== null 
+                      ? Number(item.current_stock) 
+                      : batchStock);
+                const isOos = Boolean(item.is_out_of_stock || (effectiveStock !== null && effectiveStock <= 0));
                 const stockNum = effectiveStock;
-                const isBlocked = Boolean(item.inventory_item_id && isOos && item.allow_oversell === false);
+                const isBlocked = Boolean(isOos && item.allow_oversell === false);
                 const wholesalePriceNum = item.wholesale_price ? parseFloat(item.wholesale_price) : null;
 
                 return (
@@ -1394,7 +1411,7 @@ export function CreateBillDrawer({
                     {/* Top Badges Row (Text only for OFF & GST, White text on In Cart) */}
                     <div className="flex items-center justify-between gap-1 text-[10px]">
                       <div className="flex items-center gap-2 font-semibold">
-                        {isOos && (
+                        {isOos ? (
                           <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
                             item.allow_oversell === false
                               ? "bg-rose-500/20 text-rose-400 border border-rose-500/40"
@@ -1403,7 +1420,11 @@ export function CreateBillDrawer({
                             {item.allow_oversell === false ? "OUT OF STOCK" : "OUT OF STOCK"}
                             {stockNum !== null && stockNum < 0 ? ` (${stockNum})` : ""}
                           </span>
-                        )}
+                        ) : effectiveStock !== null && effectiveStock > 0 ? (
+                          <span className="rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                            Qty: {effectiveStock % 1 === 0 ? effectiveStock : Number(effectiveStock.toFixed(2))} {item.unit_label || "pcs"}
+                          </span>
+                        ) : null}
                         {hasDiscount && (
                           <span className="text-[var(--text-muted)] text-[10px]">
                             {discountPercent}% OFF
@@ -1981,6 +2002,19 @@ export function CreateBillDrawer({
                   </div>
                   {draftCartItems.map((ci, idx) => {
                   const originalItem = menuItems.find(m => m.id === ci.menu_item_id);
+                  const cleanItemName = (ci.item_name || "").replace(/\[Oversold Backorder\]/gi, "").trim();
+
+                  const linkedStock = originalItem?.inventory_item_id ? inventoryStockMap.get(originalItem.inventory_item_id) : undefined;
+                  const batchStock = originalItem?.active_batches && originalItem.active_batches.length > 0
+                    ? originalItem.active_batches.reduce((sum, b) => sum + (Number(b.remaining_quantity) || 0), 0)
+                    : null;
+                  const rawStock = linkedStock !== undefined 
+                    ? linkedStock 
+                    : (originalItem?.current_stock !== undefined && originalItem?.current_stock !== null 
+                        ? Number(originalItem.current_stock) 
+                        : batchStock);
+                  const cartItemEffectiveStock = rawStock !== null ? stockInUnit(rawStock, originalItem, ci.selected_unit) : null;
+
                   const variant = ci.variant_id ? variantsByItem[originalItem?.id || ""]?.find(v => v.id === ci.variant_id) : undefined;
                   const currentBatch = originalItem?.active_batches?.find(b => b.id === ci.selected_batch_id) || originalItem?.active_batches?.[0];
 
@@ -2005,66 +2039,30 @@ export function CreateBillDrawer({
                       <div className="flex-1 min-w-0 flex flex-wrap items-center gap-x-3 gap-y-1">
                         <span 
                           onClick={() => {
-                            setSearchQuery(ci.item_name);
+                            setSearchQuery(cleanItemName);
                             setTimeout(() => searchInputRef.current?.focus(), 0);
                           }}
                           className="font-bold text-lg text-[var(--text-primary)] hover:text-sky-400 cursor-pointer transition-colors"
                           title="Click to search catalog"
                         >
-                          {ci.item_name}
+                          {cleanItemName}
                         </span>
 
-                        {/* Backorder indicator for batch items */}
-                        {originalItem?.active_batches && originalItem.active_batches.length > 0 && ci.allow_oversell && (
+                        {ci.allow_oversell ? (
                           <span
-                            className="inline-flex items-center gap-1 text-[11px] font-mono rounded-md border border-rose-500/30 bg-rose-500/10 px-2 py-0.5 text-rose-400 font-semibold"
-                            title="Oversold Backorder"
+                            className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider rounded border border-rose-500/40 bg-rose-500/15 px-1.5 py-0.5 text-rose-400 font-mono"
+                            title="Oversold"
                           >
-                            Backorder
-                          </span>
-                        )}
-
-                        {(!originalItem?.active_batches || originalItem.active_batches.length === 0) && originalItem?.inventory_item_id && (() => {
-                          const linkedStock = inventoryStockMap.get(originalItem.inventory_item_id);
-                          if (linkedStock === undefined) return null;
-                          const linkedStockInUnit = stockInUnit(linkedStock, originalItem, ci.selected_unit);
-                          return (
-                            <div className="flex items-center gap-1">
-                              {ci.allow_oversell ? (
-                                <span className="inline-flex items-center gap-1 text-[11px] font-mono rounded-md border border-rose-500/30 bg-rose-500/10 px-2 py-0.5 text-rose-400 font-semibold">
-                                  Backorder
-                                </span>
-                              ) : (
-                                <span
-                                  className={`inline-flex items-center gap-1 text-[11px] font-mono rounded-md border px-2 py-0.5 font-medium ${
-                                    linkedStockInUnit <= 0
-                                      ? "border-rose-500/30 bg-rose-500/10 text-rose-400"
-                                      : linkedStockInUnit <= 5
-                                      ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
-                                      : "border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] text-[var(--text-secondary)]"
-                                  }`}
-                                  title={`Current stock: ${linkedStockInUnit}`}
-                                >
-                                  Stock:{" "}
-                                  <span className={linkedStockInUnit <= 5 ? "font-bold text-amber-400" : "text-[var(--text-muted)]"}>
-                                    {linkedStockInUnit} left
-                                  </span>
-                                </span>
-                              )}
-                              {ci.allow_oversell && (
-                                <span className="text-[10px] font-bold text-rose-500 bg-rose-500/10 border border-rose-500/20 px-1 py-0.5 rounded">
-                                  Oversell
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })()}
-
-                        {(!originalItem?.inventory_item_id && (!originalItem?.active_batches || originalItem.active_batches.length === 0)) && ci.allow_oversell && (
-                          <span className="text-[10px] font-bold text-rose-500 bg-rose-500/10 border border-rose-500/20 px-1 py-0.5 rounded">
                             Oversell
                           </span>
-                        )}
+                        ) : cartItemEffectiveStock !== null && cartItemEffectiveStock > 0 ? (
+                          <span
+                            className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider rounded border border-emerald-500/30 bg-emerald-500/15 px-1.5 py-0.5 text-emerald-400 font-mono"
+                            title={`Current stock: ${cartItemEffectiveStock}`}
+                          >
+                            Qty: {cartItemEffectiveStock % 1 === 0 ? cartItemEffectiveStock : Number(cartItemEffectiveStock.toFixed(2))} {ci.selected_unit || originalItem?.unit_label || "pcs"}
+                          </span>
+                        ) : null}
                         <div className="flex items-center gap-2 font-mono text-[16px] pt-0.5">
                           <CartItemPriceInput
                             initialPrice={ci.unit_price}
