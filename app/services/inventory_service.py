@@ -270,10 +270,8 @@ async def process_order_auto_deduction(
                             .where(
                                 StockIntake.item_id == inv_item.id,
                                 StockIntake.outlet_id == order.outlet_id,
-                                or_(
-                                    StockIntake.remaining_quantity < Decimal("0.000"),
-                                    StockIntake.batch_number.like("BAT-OV-%"),
-                                ),
+                                StockIntake.remaining_quantity < Decimal("0.000"),
+                                ~StockIntake.notes.like("[VOIDED]%"),
                             )
                             .order_by(StockIntake.created_at.desc())
                         )
@@ -494,10 +492,8 @@ async def process_order_auto_deduction(
                                     .where(
                                         StockIntake.item_id == target_inv_item.id,
                                         StockIntake.outlet_id == order.outlet_id,
-                                        or_(
-                                            StockIntake.remaining_quantity < Decimal("0.000"),
-                                            StockIntake.batch_number.like("BAT-OV-%"),
-                                        ),
+                                        StockIntake.remaining_quantity < Decimal("0.000"),
+                                        ~StockIntake.notes.like("[VOIDED]%"),
                                     )
                                     .order_by(StockIntake.created_at.desc())
                                 )
@@ -622,10 +618,8 @@ async def process_order_auto_deduction(
                         .where(
                             StockIntake.item_id == target_inv_item.id,
                             StockIntake.outlet_id == order.outlet_id,
-                            or_(
-                                StockIntake.remaining_quantity < Decimal("0.000"),
-                                StockIntake.batch_number.like("BAT-OV-%"),
-                            ),
+                            StockIntake.remaining_quantity < Decimal("0.000"),
+                            ~StockIntake.notes.like("[VOIDED]%"),
                         )
                         .order_by(StockIntake.created_at.desc())
                     )
@@ -1305,6 +1299,7 @@ async def absorb_deficit_into_new_batch(
             StockIntake.outlet_id == outlet_id,
             StockIntake.remaining_quantity < Decimal("0.000"),
             StockIntake.id != new_batch.id,
+            ~StockIntake.notes.like("[VOIDED]%"),
         )
         .order_by(StockIntake.created_at.asc())
     )

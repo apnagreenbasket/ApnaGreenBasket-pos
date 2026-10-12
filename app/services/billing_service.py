@@ -879,7 +879,33 @@ async def mark_bill_paid(
     upi_amount: Decimal | None = None,
     staff_user: Any = None,
 ) -> Order:
-    """Record cash/UPI/SPLIT payment method, set order status to COMPLETED for POS bills, and trigger inventory auto-deduction."""
+    # Deduplicate concurrent rapid double-submissions within 3 seconds
+    from app.core.redis import get_redis
+    redis_client = await get_redis()
+    dedup_key = f"dedup:mark_paid:{outlet_id}:{order_id}"
+    acquired = True
+    if redis_client:
+        try:
+            acquired = await redis_client.set(dedup_key, "1", ex=3, nx=True)
+        except Exception:
+            acquired = True
+
+    if not acquired:
+        # Check if the order was already completed by a previous request
+        res_chk = await db.execute(
+            select(Order.status).where(Order.id == order_id, Order.outlet_id == outlet_id)
+        )
+        st = res_chk.scalar_one_or_none()
+        if st in (OrderStatusEnum.COMPLETED, OrderStatusEnum.PAID, OrderStatusEnum.PARTIALLY_REFUNDED, OrderStatusEnum.REFUNDED, OrderStatusEnum.CANCELLED):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Bill is already {st.value}."
+            )
+        raise HTTPException(
+            status_code=409,
+            detail="A payment request for this bill is already processing. Please wait a moment."
+        )
+
     res = await db.execute(
         select(Order)
         .options(selectinload(Order.items).selectinload(OrderItem.selected_batch))
@@ -887,6 +913,7 @@ async def mark_bill_paid(
             Order.id == order_id,
             Order.outlet_id == outlet_id,
         )
+        .with_for_update()
     )
     order = res.scalar_one_or_none()
     if not order:
@@ -987,7 +1014,7 @@ async def mark_bill_paid(
                 select(Order).options(selectinload(Order.items)).where(
                     Order.id == order.replaces_bill_id,
                     Order.outlet_id == outlet_id,
-                )
+                ).with_for_update()
             )
             old_order = old_order_res.scalar_one_or_none()
             if old_order and not old_order.is_void:
@@ -1270,6 +1297,12 @@ async def mark_bill_paid(
         await broadcast_catalog_updated(outlet_id, reason="BILL_PAID", item_id=str(order_id))
     except Exception as e:
         logger.warning("Failed to broadcast catalog update on bill paid: %s", e)
+    finally:
+        if redis_client and acquired:
+            try:
+                await redis_client.delete(dedup_key)
+            except Exception:
+                pass
 
     return order
 
@@ -1374,11 +1407,30 @@ async def process_customer_return(
         )
 
     order_uuid = uuid.UUID(data.order_id)
+
+    # Deduplicate concurrent rapid double-submissions within 3 seconds
+    from app.core.redis import get_redis
+    redis_client = await get_redis()
+    ret_summary_key = f"{[getattr(i, 'order_item_id', '') for i in (data.return_items or [])]}"
+    dedup_key = f"dedup:return:{outlet_id}:{order_uuid}:{hash(ret_summary_key)}"
+    acquired = True
+    if redis_client:
+        try:
+            acquired = await redis_client.set(dedup_key, "1", ex=3, nx=True)
+        except Exception:
+            acquired = True
+
+    if not acquired:
+        raise HTTPException(
+            status_code=409,
+            detail="A return request for this bill is already processing. Please wait a moment."
+        )
+
     order_res = await db.execute(
         select(Order).options(selectinload(Order.items)).where(
             Order.id == order_uuid,
             Order.outlet_id == outlet_id,
-        )
+        ).with_for_update()
     )
     order = order_res.scalar_one_or_none()
     if not order:
@@ -1859,7 +1911,7 @@ async def process_customer_return(
             outlet_obj.place_of_supply if outlet_obj else None
         )
 
-    return {
+    result = {
         "id": str(customer_return_rec.id),
         "status": "PROCESSED",
         "return_number": return_num,
@@ -1887,6 +1939,14 @@ async def process_customer_return(
         "is_interstate": is_interstate,
         "place_of_supply": place_of_supply,
     }
+
+    if redis_client and acquired:
+        try:
+            await redis_client.delete(dedup_key)
+        except Exception:
+            pass
+
+    return result
 
 
 async def list_customer_returns(

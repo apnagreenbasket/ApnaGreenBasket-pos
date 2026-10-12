@@ -106,8 +106,14 @@ export function DeleteBatchModal({
 
             <div className="flex flex-wrap gap-2 text-xs">
               <span className="inline-flex items-center gap-1 rounded-lg bg-[var(--bg-surface)] px-2.5 py-1 text-[var(--text-secondary)] border border-[var(--border-subtle)] font-mono">
-                Stock: {remQty.toFixed(2)} {batch.unit}
+                Remaining: {remQty.toFixed(2)} {batch.unit}
               </span>
+
+              {batch.initial_quantity != null && parseFloat(String(batch.initial_quantity)) > 0 && Math.abs(parseFloat(String(batch.initial_quantity)) - remQty) > 0.001 && (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-[var(--bg-surface)] px-2.5 py-1 text-[var(--text-secondary)] border border-[var(--border-subtle)] font-mono">
+                  Initial Inward: {parseFloat(String(batch.initial_quantity)).toFixed(2)} {batch.unit}
+                </span>
+              )}
 
               {batch.expiry_date && (
                 <span className="inline-flex items-center gap-1 rounded-lg bg-[var(--bg-surface)] px-2.5 py-1 text-[var(--text-secondary)] border border-[var(--border-subtle)] font-mono">
@@ -132,11 +138,7 @@ export function DeleteBatchModal({
                 Stock Impact Warning
               </p>
               <p className="text-[11px]">
-                Deleting this batch will permanently remove it and deduct{" "}
-                <strong className="text-white font-mono">
-                  {remQty.toFixed(2)} {batch.unit}
-                </strong>{" "}
-                from the overall inventory current stock count.
+                Deleting this batch will permanently void this intake batch and restore any settled backorder deficits, returning the inventory to its previous stock level.
               </p>
             </div>
           </div>

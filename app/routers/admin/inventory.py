@@ -4,14 +4,18 @@ Inventory admin routes — outlet-scoped ingredient master CRUD, stock intake, r
 
 from __future__ import annotations
 
+import asyncio
 import math
 import uuid
 from datetime import datetime
+from decimal import Decimal
 
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import func, select, literal_column, case
 from sqlalchemy.orm import selectinload
 
+from app.core.datetime_utils import ensure_naive_utc
+from app.core.redis import get_redis
 from app.dependencies import DBSession, RequireAdmin, outlet_scoped_query
 from app.models.enums import StockChangeTypeEnum
 from app.models.inventory_item import InventoryItem
@@ -237,12 +241,64 @@ async def delete_batch(
             detail="Batch not found",
         )
 
-    # Adjust parent item stock
-    deduct_qty = batch.remaining_quantity
-    if batch.item and deduct_qty > 0:
-        batch.item.current_stock = max(type(deduct_qty)("0.000"), batch.item.current_stock - deduct_qty)
-    
-    batch.remaining_quantity = type(deduct_qty)("0.000")
+    item = batch.item
+    if not item and batch.item_id:
+        item = await db.get(InventoryItem, batch.item_id)
+
+    # 1. Reverse any deficit backorders fulfilled by this batch
+    deficit_ledgers_res = await db.execute(
+        select(StockLedger).where(
+            StockLedger.outlet_id == current_user.outlet_id,
+            StockLedger.intake_id == batch.id,
+            StockLedger.change_type == StockChangeTypeEnum.AUTO_DEDUCTION,
+            StockLedger.notes.like("Fulfilled pre-sold backorder #%"),
+        )
+    )
+    deficit_ledgers = deficit_ledgers_res.scalars().all()
+
+    total_absorbed_deficit = Decimal("0.000")
+    for d_ledger in deficit_ledgers:
+        abs_qty = abs(Decimal(str(d_ledger.quantity_change)))
+        total_absorbed_deficit += abs_qty
+
+        # Extract deficit batch number from note: "Fulfilled pre-sold backorder #{def_b.batch_number}"
+        note_text = d_ledger.notes or ""
+        if "#" in note_text:
+            def_batch_num = note_text.split("#")[-1].strip()
+            def_b_res = await db.execute(
+                select(StockIntake).where(
+                    StockIntake.outlet_id == current_user.outlet_id,
+                    StockIntake.batch_number == def_batch_num,
+                )
+            )
+            def_batch = def_b_res.scalar_one_or_none()
+            if def_batch:
+                def_batch.remaining_quantity = (def_batch.remaining_quantity or Decimal("0.000")) - abs_qty
+                if def_batch.notes and batch.batch_number:
+                    def_batch.notes = def_batch.notes.replace(f" [Settled by Batch #{batch.batch_number}]", "").strip()
+
+                db.add(StockLedger(
+                    id=uuid.uuid4(),
+                    outlet_id=current_user.outlet_id,
+                    item_id=def_batch.item_id,
+                    intake_id=def_batch.id,
+                    change_type=StockChangeTypeEnum.OVERSOLD,
+                    quantity_change=-abs_qty,
+                    resulting_stock=(item.current_stock if item else Decimal("0.000")) - (max(Decimal("0.000"), batch.remaining_quantity or Decimal("0.000")) + total_absorbed_deficit),
+                    batch_balance=def_batch.remaining_quantity,
+                    created_by=current_user.user_id,
+                    unit_cost_snapshot=def_batch.unit_cost,
+                    notes=f"Reopened backorder deficit on #{def_batch.batch_number} due to voiding Batch #{batch.batch_number}",
+                ))
+
+    # 2. Adjust parent item stock (without clamping with max(0, ...))
+    rem_qty = max(Decimal("0.000"), batch.remaining_quantity or Decimal("0.000"))
+    deduct_qty = rem_qty + total_absorbed_deficit
+
+    if item and deduct_qty > Decimal("0.000"):
+        item.current_stock = item.current_stock - deduct_qty
+
+    batch.remaining_quantity = Decimal("0.000")
     batch.notes = f"[VOIDED] {batch.notes or ''}".strip()
 
     db.add(StockLedger(
@@ -250,14 +306,14 @@ async def delete_batch(
         outlet_id=current_user.outlet_id,
         item_id=batch.item_id,
         intake_id=batch.id,
-        batch_balance=type(deduct_qty)("0.000"),
+        batch_balance=Decimal("0.000"),
         change_type=StockChangeTypeEnum.VOID_BATCH,
         quantity_change=-deduct_qty,
-        resulting_stock=batch.item.current_stock if batch.item else type(deduct_qty)("0.000"),
+        resulting_stock=item.current_stock if item else Decimal("0.000"),
         created_by=current_user.user_id,
         unit_cost_snapshot=batch.unit_cost,
         reason="VOID_BATCH",
-        notes=f"Batch #{batch.batch_number or batch.id} voided by user.",
+        notes=f"Batch #{batch.batch_number or batch.id} voided by user (restored {total_absorbed_deficit} settled backorder deficit)." if total_absorbed_deficit > Decimal("0.000") else f"Batch #{batch.batch_number or batch.id} voided by user.",
     ))
     await db.flush()
 
@@ -294,6 +350,10 @@ async def list_stock_ledger(
     db: DBSession,
     item_id: uuid.UUID | None = None,
     change_type: StockChangeTypeEnum | None = None,
+    from_date: str | None = Query(None),
+    to_date: str | None = Query(None),
+    start_date: str | None = Query(None),
+    end_date: str | None = Query(None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
 ):
@@ -309,6 +369,32 @@ async def list_stock_ledger(
 
     if change_type:
         stmt = stmt.where(StockLedger.change_type == change_type)
+
+    eff_from = from_date or start_date
+    eff_to = to_date or end_date
+
+    if eff_from and eff_from.strip():
+        try:
+            s = eff_from.strip()
+            parsed = datetime.fromisoformat(s.replace("Z", "+00:00"))
+            val = ensure_naive_utc(parsed)
+            if val:
+                stmt = stmt.where(StockLedger.created_at >= val)
+        except Exception:
+            pass
+
+    if eff_to and eff_to.strip():
+        try:
+            s = eff_to.strip()
+            if len(s) == 10 and s.count("-") == 2:
+                parsed = datetime.fromisoformat(s + "T23:59:59.999999+00:00")
+            else:
+                parsed = datetime.fromisoformat(s.replace("Z", "+00:00"))
+            val = ensure_naive_utc(parsed)
+            if val:
+                stmt = stmt.where(StockLedger.created_at <= val)
+        except Exception:
+            pass
 
     # Count total
     count_stmt = select(func.count()).select_from(stmt.subquery())
@@ -516,7 +602,37 @@ async def scan_onboard_item(
 ):
     """
     First-time scan: Onboards a new item with barcode, saves initial batch & stock.
+    Includes rapid duplicate submission guard (2-second window).
     """
+    identifier = str(data.item_id) if data.item_id else (data.barcode.strip() if data.barcode and data.barcode.strip() else data.name.strip().lower())
+    dedup_key = f"dedup:scan_onboard:{current_user.outlet_id}:{identifier}:{data.initial_stock}"
+    redis_client = await get_redis()
+    acquired = True
+    if redis_client:
+        try:
+            acquired = await redis_client.set(dedup_key, "1", ex=2, nx=True)
+        except Exception:
+            acquired = True
+
+    if not acquired:
+        # Rapid duplicate detected: wait briefly for the concurrent request to flush, then return existing item
+        await asyncio.sleep(0.3)
+        item_lookup_stmt = select(InventoryItem).where(
+            InventoryItem.outlet_id == current_user.outlet_id,
+            InventoryItem.is_active == True,
+        )
+        if data.item_id:
+            item_lookup_stmt = item_lookup_stmt.where(InventoryItem.id == data.item_id)
+        elif data.barcode and data.barcode.strip():
+            item_lookup_stmt = item_lookup_stmt.where(InventoryItem.barcode == data.barcode.strip())
+        else:
+            item_lookup_stmt = item_lookup_stmt.where(InventoryItem.name.ilike(data.name.strip()))
+
+        dup_res = await db.execute(item_lookup_stmt)
+        dup_item = dup_res.scalar_one_or_none()
+        if dup_item:
+            return dup_item
+
     item, intake = await onboard_scanned_item(
         db,
         current_user.outlet_id,

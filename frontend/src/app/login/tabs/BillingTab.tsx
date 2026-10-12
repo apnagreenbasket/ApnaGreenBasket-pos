@@ -33,16 +33,18 @@ import {
   FileText,
   Loader2,
   Barcode,
+  Info,
 } from "lucide-react";
 import { generateReceiptPDF, generateBillsHistoryPdfReport } from "@/lib/pdfGenerator";
 import { generateA4InvoicePDF } from "@/lib/invoiceGenerator";
-import type { DiscountApproval, ManualBill, RolePermissions } from "@/types";
+import type { DiscountApproval, ManualBill, RolePermissions, StaffMember } from "@/types";
 import type { RestaurantProfile, AdminMenuItem } from "../adminTypes";
-import { apiRequest , parseUTCDate} from "../adminUtils";
+import { apiRequest, parseUTCDate, formatLocalDate } from "../adminUtils";
 import { useBarcodeScanner } from "@/hooks/useBarcodeScanner";
 import { CustomerReturnsModal } from "../modals/CustomerReturnsModal";
 import { ReturnSuccessModal } from "../modals/ReturnSuccessModal";
 import { DeleteBillModal } from "../modals/DeleteBillModal";
+import { BillInsightsModal } from "../modals/BillInsightsModal";
 
 type BillingTabProps = {
   restaurant: RestaurantProfile | null;
@@ -80,6 +82,7 @@ type BillingTabProps = {
   isPunchedIn?: boolean;
   onRequirePunchIn?: () => void;
   isCreateBillOpen?: boolean;
+  staffList?: StaffMember[];
 };
 
 const MAIN_STATUS_TABS = ["ALL", "DRAFT", "PAID / COMPLETED", "VOIDED"] as const;
@@ -125,10 +128,12 @@ export function BillingTab({
   isPunchedIn = true,
   onRequirePunchIn,
   isCreateBillOpen = false,
+  staffList = [],
 }: BillingTabProps) {
   const [returnsModalOpen, setReturnsModalOpen] = useState(false);
   const [returnsInitialTab, setReturnsInitialTab] = useState<"USER_HISTORY" | "INVOICE_NO" | "RETURN_HISTORY">("USER_HISTORY");
   const [billToDelete, setBillToDelete] = useState<ManualBill | null>(null);
+  const [insightBill, setInsightBill] = useState<ManualBill | null>(null);
   const [successReturnData, setSuccessReturnData] = useState<any | null>(null);
   const [showReturnSuccessModal, setShowReturnSuccessModal] = useState(false);
   const [showDenomWidget, setShowDenomWidget] = useState(false);
@@ -194,8 +199,14 @@ export function BillingTab({
     const timer = setTimeout(async () => {
       setIsSearchingServerBills(true);
       try {
+        const today = new Date();
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(today.getDate() - 30);
+        const sDate = formatLocalDate(thirtyDaysAgo);
+        const eDate = formatLocalDate(today);
+
         const results = await apiRequest<ManualBill[]>(
-          `/api/billing/bills?search=${encodeURIComponent(clean)}&limit=25`
+          `/api/billing/bills?search=${encodeURIComponent(clean)}&start_date=${sDate}&end_date=${eDate}&limit=50`
         );
         if (Array.isArray(results)) {
           setServerSearchedBills(results);
@@ -527,7 +538,10 @@ export function BillingTab({
     }
   };
 
+  const returnSubmittingRef = useRef(false);
   const handleProcessCustomerReturn = async (returnData: any) => {
+    if (returnSubmittingRef.current) return;
+    returnSubmittingRef.current = true;
     try {
       const res = await apiRequest<any>("/api/billing/returns", {
         method: "POST",
@@ -542,6 +556,8 @@ export function BillingTab({
     } catch (err: any) {
       setError(err instanceof Error ? err.message : "Failed to process return.");
       throw err;
+    } finally {
+      returnSubmittingRef.current = false;
     }
   };
 
@@ -1381,6 +1397,20 @@ export function BillingTab({
                                     <FileText className="h-4 w-4 text-purple-500 shrink-0" />
                                     <span>Download Invoice</span>
                                   </button>
+
+                                  {/* Bill Insights */}
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setActiveDropdownBillId(null);
+                                      setInsightBill(b);
+                                    }}
+                                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-surface-elevated)] transition text-left cursor-pointer"
+                                  >
+                                    <Info className="h-4 w-4 text-sky-500 shrink-0" />
+                                    <span>Bill Insights</span>
+                                  </button>
                                 </div>
 
                                 {b.status !== "PAID" && b.status !== "COMPLETED" && b.status !== "PARTIALLY_REFUNDED" && b.status !== "REFUNDED" && (
@@ -1453,6 +1483,14 @@ export function BillingTab({
         restaurantName={restaurant?.name || "ApnaGreen Basket"}
         restaurant={restaurant}
         menuItemsMap={menuItemsMap}
+      />
+
+      {/* Bill Insights Modal */}
+      <BillInsightsModal
+        isOpen={!!insightBill}
+        onClose={() => setInsightBill(null)}
+        bill={insightBill}
+        staffList={staffList}
       />
 
       {/* Delete Bill Modal */}

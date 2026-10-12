@@ -133,6 +133,7 @@ export function BarcodeRegisterModal({
   const [wholesaleMarginPct, setWholesaleMarginPct] = useState("");
   const [supplierId, setSupplierId] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submittingRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
   // Shortcut navigation refs
@@ -204,46 +205,11 @@ export function BarcodeRegisterModal({
     const mType = (itm.margin_type as "MARKUP" | "MARGIN") || "MARKUP";
     setMarginType(mType);
 
-    const costNum = itm.cost_per_unit != null ? parseFloat(String(itm.cost_per_unit)) : 0;
-
-    // Retain Retail Margin %
-    if (itm.retail_margin_pct != null && String(itm.retail_margin_pct).trim() !== "") {
-      setRetailMarginPct(String(itm.retail_margin_pct));
-    } else if (costNum > 0 && effectiveRetail != null) {
-      const rNum = parseFloat(String(effectiveRetail));
-      if (rNum > 0) {
-        const calc = mType === "MARKUP"
-          ? ((rNum - costNum) / costNum) * 100
-          : ((rNum - costNum) / rNum) * 100;
-        if (calc > 0) setRetailMarginPct(calc.toFixed(1).replace(/\.0$/, ""));
-      }
-    }
-
-    // Retain MRP Margin %
-    if (itm.mrp_margin_pct != null && String(itm.mrp_margin_pct).trim() !== "") {
-      setMrpMarginPct(String(itm.mrp_margin_pct));
-    } else if (costNum > 0 && itm.mrp != null) {
-      const mNum = parseFloat(String(itm.mrp));
-      if (mNum > 0) {
-        const calc = mType === "MARKUP"
-          ? ((mNum - costNum) / costNum) * 100
-          : ((mNum - costNum) / mNum) * 100;
-        if (calc > 0) setMrpMarginPct(calc.toFixed(1).replace(/\.0$/, ""));
-      }
-    }
-
-    // Retain Wholesale Margin %
-    if (itm.wholesale_margin_pct != null && String(itm.wholesale_margin_pct).trim() !== "") {
-      setWholesaleMarginPct(String(itm.wholesale_margin_pct));
-    } else if (costNum > 0 && itm.wholesale_price != null) {
-      const wNum = parseFloat(String(itm.wholesale_price));
-      if (wNum > 0) {
-        const calc = mType === "MARKUP"
-          ? ((wNum - costNum) / costNum) * 100
-          : ((wNum - costNum) / wNum) * 100;
-        if (calc > 0) setWholesaleMarginPct(calc.toFixed(1).replace(/\.0$/, ""));
-      }
-    }
+    // Do NOT auto-populate active margin inputs when loading an existing item so that
+    // entering inward quantity and invoice cost will never overwrite the existing MRP and retail prices.
+    setRetailMarginPct("");
+    setMrpMarginPct("");
+    setWholesaleMarginPct("");
 
     if (itm.tax_category) setTaxCategory(itm.tax_category);
     if (itm.tax_rate != null) setTaxRate(String(itm.tax_rate));
@@ -322,6 +288,7 @@ export function BarcodeRegisterModal({
       setShelfLifeValue("");
       setShelfLifeUnit("DAYS");
       setError(null);
+      submittingRef.current = false;
       setTimeout(() => {
         nameRef.current?.focus();
         nameRef.current?.select();
@@ -456,6 +423,9 @@ export function BarcodeRegisterModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submittingRef.current || isSubmitting) {
+      return;
+    }
     if (!name.trim()) {
       setError("Please enter a product name");
       return;
@@ -519,6 +489,7 @@ export function BarcodeRegisterModal({
     }
 
     try {
+      submittingRef.current = true;
       setIsSubmitting(true);
       setError(null);
 
@@ -540,9 +511,36 @@ export function BarcodeRegisterModal({
         mrp: mrp.trim() ? parseFloat(mrp) : undefined,
         wholesale_price: wholesalePrice.trim() ? parseFloat(wholesalePrice) : undefined,
         margin_type: marginType,
-        retail_margin_pct: retailMarginPct.trim() ? parseFloat(retailMarginPct) : undefined,
-        mrp_margin_pct: mrpMarginPct.trim() ? parseFloat(mrpMarginPct) : undefined,
-        wholesale_margin_pct: wholesaleMarginPct.trim() ? parseFloat(wholesaleMarginPct) : undefined,
+        retail_margin_pct: retailMarginPct.trim()
+          ? parseFloat(retailMarginPct)
+          : (!isNaN(sellPriceNum) && finalCost > 0)
+            ? parseFloat(
+                (marginType === "MARKUP"
+                  ? ((sellPriceNum - finalCost) / finalCost) * 100
+                  : ((sellPriceNum - finalCost) / sellPriceNum) * 100
+                ).toFixed(2)
+              )
+            : undefined,
+        mrp_margin_pct: mrpMarginPct.trim()
+          ? parseFloat(mrpMarginPct)
+          : (!isNaN(mrpNum) && finalCost > 0)
+            ? parseFloat(
+                (marginType === "MARKUP"
+                  ? ((mrpNum - finalCost) / finalCost) * 100
+                  : ((mrpNum - finalCost) / mrpNum) * 100
+                ).toFixed(2)
+              )
+            : undefined,
+        wholesale_margin_pct: wholesaleMarginPct.trim()
+          ? parseFloat(wholesaleMarginPct)
+          : (wholesalePrice.trim() && parseFloat(wholesalePrice) > 0 && finalCost > 0)
+            ? parseFloat(
+                (marginType === "MARKUP"
+                  ? ((parseFloat(wholesalePrice) - finalCost) / finalCost) * 100
+                  : ((parseFloat(wholesalePrice) - finalCost) / parseFloat(wholesalePrice)) * 100
+                ).toFixed(2)
+              )
+            : undefined,
         tax_category: taxCategory === "Custom" ? `GST ${finalTaxRate}%` : taxCategory,
         tax_rate: finalTaxRate,
         hsn_code: hsnCode.trim() || undefined,
@@ -565,6 +563,7 @@ export function BarcodeRegisterModal({
       setError(err?.message || "Failed to register product");
     } finally {
       setIsSubmitting(false);
+      submittingRef.current = false;
     }
   };
 
@@ -685,6 +684,7 @@ export function BarcodeRegisterModal({
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
+                if (submittingRef.current || isSubmitting) return;
                 nameRef.current?.focus();
                 nameRef.current?.select();
               }
@@ -720,6 +720,7 @@ export function BarcodeRegisterModal({
         )}
 
         <form ref={formRef} onSubmit={handleSubmit} className="space-y-3.5">
+          <fieldset disabled={isSubmitting} className="space-y-3.5 border-0 p-0 m-0 disabled:opacity-75 disabled:pointer-events-none">
           {/* Product Name with Existing Item Auto-Suggest */}
           <div className="relative">
             <label className="block text-xs font-semibold text-[var(--text-primary)] mb-1 flex items-center justify-between">
@@ -775,6 +776,7 @@ export function BarcodeRegisterModal({
                 }
                 if (e.key === "Enter") {
                   e.preventDefault();
+                  if (submittingRef.current || isSubmitting) return;
 
                   // 1. If an item was already selected: advance to quantity
                   if (selectedItemId) {
@@ -1138,6 +1140,7 @@ export function BarcodeRegisterModal({
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
+                      if (submittingRef.current || isSubmitting) return;
                       mrpRef.current?.focus();
                       mrpRef.current?.select();
                     }
@@ -1160,6 +1163,7 @@ export function BarcodeRegisterModal({
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
+                      if (submittingRef.current || isSubmitting) return;
                       mrpRef.current?.focus();
                       mrpRef.current?.select();
                     }
@@ -1182,6 +1186,7 @@ export function BarcodeRegisterModal({
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
+                      if (submittingRef.current || isSubmitting) return;
                       mrpRef.current?.focus();
                       mrpRef.current?.select();
                     }
@@ -1239,6 +1244,7 @@ export function BarcodeRegisterModal({
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
+                      if (submittingRef.current || isSubmitting) return;
                       mrpRef.current?.focus();
                       mrpRef.current?.select();
                     }
@@ -1296,6 +1302,7 @@ export function BarcodeRegisterModal({
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault();
+                    if (submittingRef.current || isSubmitting) return;
                     if (formRef.current) {
                       if (typeof formRef.current.requestSubmit === "function") {
                         formRef.current.requestSubmit();
@@ -1333,6 +1340,7 @@ export function BarcodeRegisterModal({
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault();
+                    if (submittingRef.current || isSubmitting) return;
                     if (formRef.current) {
                       if (typeof formRef.current.requestSubmit === "function") {
                         formRef.current.requestSubmit();
@@ -1566,19 +1574,22 @@ export function BarcodeRegisterModal({
             </div>
           </div>
 
+          </fieldset>
+
           {/* Actions */}
           <div className="flex items-center justify-end gap-3 pt-2">
             <button
               type="button"
               onClick={onClose}
-              className="rounded-xl border border-[var(--border-strong)] px-4 py-2 text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--bg-surface-elevated)] transition"
+              disabled={isSubmitting}
+              className="rounded-xl border border-[var(--border-strong)] px-4 py-2 text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--bg-surface-elevated)] transition disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="flex items-center gap-2 rounded-xl bg-[var(--accent-brand)] px-5 py-2 text-xs font-bold text-[var(--text-on-accent)] hover:opacity-90 transition disabled:opacity-50 shadow-md"
+              className="flex items-center gap-2 rounded-xl bg-[var(--accent-brand)] px-5 py-2 text-xs font-bold text-[var(--text-on-accent)] hover:opacity-90 transition disabled:opacity-50 shadow-md cursor-pointer disabled:cursor-not-allowed"
             >
               {isSubmitting ? (
                 "Saving..."

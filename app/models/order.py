@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from app.models.customer import Customer
     from app.models.order_item import OrderItem
     from app.models.outlet import Outlet
+    from app.models.user import User
 
 
 class Order(Base, TimestampMixin):
@@ -179,4 +180,7 @@ class Order(Base, TimestampMixin):
     )
     items: Mapped[list[OrderItem]] = relationship(
         "OrderItem", back_populates="order", cascade="all, delete-orphan"
+    )
+    created_by_staff: Mapped[User | None] = relationship(
+        "User", foreign_keys=[created_by_staff_id]
     )

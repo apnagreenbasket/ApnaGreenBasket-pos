@@ -300,6 +300,8 @@ export type ManualBill = Omit<components["schemas"]["BillResponse"], "items"> & 
   customer_gstin?: string | null;
   customer_legal_name?: string | null;
   replaces_bill_id?: string | null;
+  created_by_staff_name?: string | null;
+  created_by_staff_role?: string | null;
 };
 
 

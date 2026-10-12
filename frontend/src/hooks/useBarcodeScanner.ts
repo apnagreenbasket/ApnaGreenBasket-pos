@@ -9,13 +9,31 @@ interface UseBarcodeScannerOptions {
   enabled?: boolean;
 }
 
+function isEditableElement(el: Element | null): el is HTMLInputElement | HTMLTextAreaElement {
+  if (!el) return false;
+  if (el instanceof HTMLInputElement) {
+    const type = (el.type || "").toLowerCase();
+    return !["button", "checkbox", "radio", "submit", "reset", "file", "image"].includes(type);
+  }
+  if (el instanceof HTMLTextAreaElement) return true;
+  if ((el as HTMLElement).isContentEditable) return true;
+  return false;
+}
+
 /**
  * useBarcodeScanner — Listens for hardware USB / Bluetooth keyboard wedge barcode scanners.
- * Hardware scanners rapidly emit individual characters (< 50ms per key) followed by Enter.
+ * Hardware scanners rapidly emit individual characters (< 35ms per key) followed by Enter.
+ *
+ * Typing safety:
+ * - When user is typing inside an editable text input (Customer Name, Phone, Search, Notes, etc.),
+ *   printable keystrokes are NEVER suppressed with preventDefault() and NEVER reverted mid-word.
+ *   This guarantees that fast human typing is 100% responsive with zero dropped characters.
+ * - If a real hardware scanner fires into an active text field, the burst completes with Enter
+ *   at ultra-high speed (< 40ms avg), whereupon the field is cleanly restored and the barcode is processed.
  */
 export function useBarcodeScanner({
   onScan,
-  maxKeyIntervalMs = 70, // Hardware scanners emit keystrokes at 10-40ms; human typing is > 100ms
+  maxKeyIntervalMs = 45, // Hardware scanners emit keystrokes at 10-25ms; human typing is > 45ms avg
   minBarcodeLength = 3,
   enabled = true,
 }: UseBarcodeScannerOptions) {
@@ -26,6 +44,7 @@ export function useBarcodeScanner({
 
   const bufferRef = useRef<string>("");
   const lastKeyTimeRef = useRef<number>(0);
+  const scanStartTimeRef = useRef<number>(0);
   const isScanningRef = useRef<boolean>(false);
   const targetInputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
   const initialInputValueRef = useRef<string>("");
@@ -64,7 +83,7 @@ export function useBarcodeScanner({
 
       const key = e.key;
 
-      // Ignore lone modifier keys from interfering with scanner buffer timing or input suppression
+      // Ignore lone modifier keys from interfering with scanner buffer timing
       if (key === "Shift" || key === "Control" || key === "Alt" || key === "Meta" || key === "CapsLock") {
         return;
       }
@@ -73,21 +92,39 @@ export function useBarcodeScanner({
       const timeDiff = now - lastKeyTimeRef.current;
       lastKeyTimeRef.current = now;
 
+      const activeEl = document.activeElement;
+      const inEditableInput = isEditableElement(activeEl);
+
       // Handle Enter (end of barcode scan)
       if (key === "Enter") {
-        if (isScanningRef.current && (bufferRef.current?.length || 0) >= minBarcodeLength) {
-          const scannedCode = bufferRef.current;
-          bufferRef.current = "";
-          isScanningRef.current = false;
+        const buf = bufferRef.current;
+        const totalDuration = now - scanStartTimeRef.current;
+        const avgInterval = buf.length > 1 ? totalDuration / (buf.length - 1) : timeDiff;
+
+        // A true hardware barcode scan:
+        // 1. Buffer has >= minBarcodeLength characters
+        // 2. Was flagged as a fast scanning burst
+        // 3. The Enter key itself arrived rapidly after the last character (<= 60ms)
+        // 4. The overall average key interval was within barcode scanner speed (<= maxKeyIntervalMs)
+        const isVerifiedBarcodeScan =
+          isScanningRef.current &&
+          buf.length >= minBarcodeLength &&
+          timeDiff <= Math.max(60, maxKeyIntervalMs) &&
+          avgInterval <= Math.max(50, maxKeyIntervalMs);
+
+        if (isVerifiedBarcodeScan) {
           e.preventDefault();
           e.stopPropagation();
 
-          // Ensure active input was restored
+          // Restore active input if it was an ordinary text input that caught the scan
           revertTargetInput();
           targetInputRef.current = null;
+          bufferRef.current = "";
+          isScanningRef.current = false;
 
-          onScanRef.current(scannedCode);
+          onScanRef.current(buf);
         } else {
+          // Normal human Enter or invalid sequence — simply reset scanner state
           bufferRef.current = "";
           isScanningRef.current = false;
           targetInputRef.current = null;
@@ -97,42 +134,52 @@ export function useBarcodeScanner({
 
       // Printable single character handling
       if (key.length === 1) {
-        if (timeDiff > 250) {
-          // Starting a brand new key sequence after idle time
+        if (timeDiff > 150) {
+          // Starting a brand new sequence after idle time (> 150ms)
           bufferRef.current = key;
+          scanStartTimeRef.current = now;
           isScanningRef.current = false;
 
-          if (document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLTextAreaElement) {
-            targetInputRef.current = document.activeElement;
-            initialInputValueRef.current = document.activeElement.value;
+          if (inEditableInput) {
+            targetInputRef.current = activeEl;
+            initialInputValueRef.current = activeEl.value;
           } else {
             targetInputRef.current = null;
             initialInputValueRef.current = "";
           }
         } else if (timeDiff <= maxKeyIntervalMs) {
-          // Rapid keystroke (< 70ms) — definitive hardware barcode scanner burst!
+          // Rapid keystroke (<= 45ms) — hardware barcode scanner speed
           isScanningRef.current = true;
           bufferRef.current += key;
 
-          // Suppress printing into the active element
-          e.preventDefault();
-          e.stopPropagation();
-
-          // Clean up the 1st character that might have leaked into the input before rapid detection
-          revertTargetInput();
-        } else if (isScanningRef.current && timeDiff <= 160) {
-          // Mid-scan burst with minor main-thread frame jitter
+          if (!inEditableInput) {
+            // When NOT in an editable input, suppress keys to avoid triggering page shortcuts
+            e.preventDefault();
+            e.stopPropagation();
+          }
+          // Note: When inside an editable input, we NEVER call e.preventDefault() or revertTargetInput() mid-stream!
+          // This allows human typing to proceed with 100% native fluidity and 0 dropped keys.
+          // If this turns out to be a barcode scan, revertTargetInput() cleanly restores the input on Enter.
+        } else if (isScanningRef.current && timeDiff <= 80) {
+          // Mid-scan burst with minor USB polling frame jitter
           bufferRef.current += key;
-          e.preventDefault();
-          e.stopPropagation();
-          revertTargetInput();
+
+          if (!inEditableInput) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
         } else {
-          // Human typing speed (> 70ms and not in an active scan burst)
+          // Human typing interval (> 45ms and not in an active scanner burst)
           bufferRef.current = key;
+          scanStartTimeRef.current = now;
           isScanningRef.current = false;
-          if (document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLTextAreaElement) {
-            targetInputRef.current = document.activeElement;
-            initialInputValueRef.current = document.activeElement.value;
+
+          if (inEditableInput) {
+            targetInputRef.current = activeEl;
+            initialInputValueRef.current = activeEl.value;
+          } else {
+            targetInputRef.current = null;
+            initialInputValueRef.current = "";
           }
         }
       }

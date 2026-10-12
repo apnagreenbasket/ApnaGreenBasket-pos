@@ -206,6 +206,8 @@ class BillResponse(BaseResponse):
     loyalty_points_redeemed: int = 0
     loyalty_discount_inr: float = Field(default=0.0)
     created_by_staff_id: str | None = None
+    created_by_staff_name: str | None = None
+    created_by_staff_role: str | None = None
     replaces_bill_id: str | None = None
     created_at: str
     finalized_at: str | None = None

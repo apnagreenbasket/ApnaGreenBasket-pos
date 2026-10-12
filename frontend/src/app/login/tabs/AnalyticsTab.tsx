@@ -543,14 +543,28 @@ export function AnalyticsTab(props: AnalyticsTabProps) {
               {props.activeInventorySubTab === "master_view" && (
                 <div className="space-y-8">
                   <InventorySummaryReport data={props.inventorySummaryData} isLoading={props.isLoading} />
-                  <StockMovementReport data={props.stockMovementData} isLoading={props.isLoading} />
+                  <StockMovementReport
+                    data={props.stockMovementData}
+                    isLoading={props.isLoading}
+                    datePreset={props.datePreset}
+                    customFromDate={props.customFromDate}
+                    customToDate={props.customToDate}
+                  />
                   <StockIntakeReport data={props.stockIntakeData} isLoading={props.isLoading} />
                   <WastageReport data={props.wastageData} isLoading={props.isLoading} />
                   <PurchaseReturnReport data={props.purchaseReturnData} isLoading={props.isLoading} />
                   <SupplierSpendReport data={props.supplierSpendData} isLoading={props.isLoading} />
                 </div>
               )}
-              {props.activeInventorySubTab === "stock_movement" && <StockMovementReport data={props.stockMovementData} isLoading={props.isLoading} />}
+              {props.activeInventorySubTab === "stock_movement" && (
+                <StockMovementReport
+                  data={props.stockMovementData}
+                  isLoading={props.isLoading}
+                  datePreset={props.datePreset}
+                  customFromDate={props.customFromDate}
+                  customToDate={props.customToDate}
+                />
+              )}
               {props.activeInventorySubTab === "intake" && <StockIntakeReport data={props.stockIntakeData} isLoading={props.isLoading} />}
               {props.activeInventorySubTab === "wastage" && <WastageReport data={props.wastageData} isLoading={props.isLoading} />}
               {props.activeInventorySubTab === "purchase_returns" && <PurchaseReturnReport data={props.purchaseReturnData} isLoading={props.isLoading} />}

@@ -106,8 +106,16 @@ export function PaymentModal({
   const [paymentEditMode, setPaymentEditMode] = useState<"ADJUST" | "FULL">("ADJUST");
   const [activeTappingMode, setActiveTappingMode] = useState<"INTAKE" | "RETURN">("INTAKE");
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const submittingRef = React.useRef<boolean>(false);
 
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) {
+      submittingRef.current = false;
+      setIsSubmitting(false);
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (error) {
@@ -630,8 +638,12 @@ export function PaymentModal({
 
     // When settling debit, the customer pays extra cash to clear their debt.
     // The backend uses debt_settled to increase their balance back up to zero.
-    if (settleDebit && effectiveBal !== undefined && effectiveBal < 0) {
-      debtSettled += Math.abs(effectiveBal);
+    if (settleDebit) {
+      if (effectiveBal !== undefined && effectiveBal < 0) {
+        debtSettled += Math.abs(effectiveBal);
+      } else if (editingCompletedBill?.debt_settled) {
+        debtSettled += Number(editingCompletedBill.debt_settled);
+      }
     }
     
     // Validation: Cannot process Udhaar or Store Credit without linking a customer
@@ -641,7 +653,7 @@ export function PaymentModal({
         return;
     }
 
-    if (isSubmitting) return;
+    if (submittingRef.current || isSubmitting) return;
 
     // Sanitize denominations: do not send zero-count dictionaries that pollute the cash ledger
     const cleanFinalCash: Record<string, number> = {};
@@ -670,6 +682,7 @@ export function PaymentModal({
       finalCashAmount = 0;
     }
 
+    submittingRef.current = true;
     setIsSubmitting(true);
     try {
       await handleMarkPaid(
@@ -693,6 +706,7 @@ export function PaymentModal({
       setError(err instanceof Error ? err.message : "Failed to settle bill.");
     } finally {
       setIsSubmitting(false);
+      submittingRef.current = false;
     }
   };
 
@@ -754,7 +768,7 @@ export function PaymentModal({
 
       if (e.key === "Enter") {
         e.preventDefault();
-        if (h.isPaymentValid && !h.isSubmitting) {
+        if (h.isPaymentValid && !h.isSubmitting && !submittingRef.current) {
           void h.onSettlePayment();
         }
         return;
@@ -1211,6 +1225,16 @@ export function PaymentModal({
                         bal -= creditToApply;
                       }
 
+                      const debitRecorded = parseFloat(recordDebitAmount) || 0;
+                      if (debitRecorded > 0) {
+                        bal -= debitRecorded;
+                      }
+
+                      const creditRecorded = parseFloat(recordCreditAmount) || 0;
+                      if (creditRecorded > 0) {
+                        bal += creditRecorded;
+                      }
+
                       if (selectedPaymentMethod === "CASH") {
                         if (changeRequired > changeDenomTotal && autoConvertCredit) {
                           bal += (changeRequired - changeDenomTotal);
@@ -1243,57 +1267,154 @@ export function PaymentModal({
                   )}
                 </div>
                 {customerAnalytics && displayWalletBalance !== undefined ? (
-                  <div className="flex-1 flex flex-col justify-center space-y-2">
-                    {displayWalletBalance > 0 ? (
-                      <div className="flex items-center gap-1.5 mt-auto mb-auto">
-                        <input
-                          type="number"
-                          min={0}
-                          max={displayWalletBalance}
-                          value={applyCreditAmount}
-                          onChange={(e) => {
-                            const val = parseFloat(e.target.value) || 0;
-                            setApplyCreditAmount(Math.min(val, displayWalletBalance!).toString());
-                          }}
-                          placeholder="Apply Cr."
-                          className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] py-1.5 px-2 text-xs font-mono font-bold focus:border-sky-500 outline-none"
-                        />
-                        <div className="flex gap-1.5 flex-1">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setApplyCreditAmount(Math.min(grandTotalBeforeCredit, displayWalletBalance!).toString());
-                            }}
-                            className="flex-1 rounded-lg bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--border-strong)] text-[10px] font-bold hover:border-sky-500 transition whitespace-nowrap"
-                          >
-                            Max
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setApplyCreditAmount(displayWalletBalance!.toString());
-                              setActiveTappingMode("RETURN");
-                            }}
-                            className="flex-1 rounded-lg bg-orange-500/10 text-orange-400 border border-orange-500/30 text-[10px] font-bold hover:bg-orange-500 hover:text-white transition whitespace-nowrap"
-                          >
-                            Cash Out
-                          </button>
-                        </div>
+                  <div className="flex-1 flex flex-col justify-start space-y-1.5 overflow-y-auto max-h-[140px] pr-0.5">
+                    {/* 1. CREDIT USAGE (Checkbox + optional custom amount / Cash Out) */}
+                    {(displayWalletBalance > 0 || Boolean(parseFloat(applyCreditAmount) > 0)) && (
+                      <div className="flex flex-col gap-1 p-1.5 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)]">
+                        <label className="flex items-center justify-between cursor-pointer">
+                          <div className="flex items-center gap-1.5">
+                            <input 
+                              type="checkbox" 
+                              checked={Boolean(parseFloat(applyCreditAmount) > 0)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  const avail = displayWalletBalance && displayWalletBalance > 0 
+                                    ? displayWalletBalance 
+                                    : (parseFloat(applyCreditAmount) || (editingCompletedBill?.credit_applied || 0));
+                                  const maxCredit = Math.min(grandTotalBeforeCredit, avail);
+                                  setApplyCreditAmount(maxCredit > 0 ? maxCredit.toString() : (avail > 0 ? avail.toString() : ""));
+                                } else {
+                                  setApplyCreditAmount("");
+                                }
+                              }}
+                              className="rounded border-[var(--border-strong)] bg-[var(--bg-surface)] text-sky-500 focus:ring-sky-500/30 w-3.5 h-3.5"
+                            />
+                            <span className="text-xs font-bold text-[var(--text-primary)]">Use Credit</span>
+                          </div>
+                          <span className="text-xs font-mono font-bold text-emerald-600">
+                            ₹{parseFloat(applyCreditAmount) > 0 
+                              ? (parseFloat(applyCreditAmount) || 0).toFixed(2) 
+                              : ((displayWalletBalance && displayWalletBalance > 0) ? Math.min(grandTotalBeforeCredit, displayWalletBalance).toFixed(2) : "0.00")}
+                          </span>
+                        </label>
+
+                        {Boolean(parseFloat(applyCreditAmount) > 0) && (
+                          <div className="flex items-center gap-1 pt-1 border-t border-[var(--border-subtle)]">
+                            <input
+                              type="number"
+                              min={0}
+                              max={displayWalletBalance && displayWalletBalance > 0 ? displayWalletBalance : undefined}
+                              value={applyCreditAmount}
+                              onChange={(e) => {
+                                const val = parseFloat(e.target.value) || 0;
+                                const maxVal = displayWalletBalance && displayWalletBalance > 0 ? displayWalletBalance : val;
+                                setApplyCreditAmount(Math.min(val, maxVal).toString());
+                              }}
+                              placeholder="Amount"
+                              className="w-full rounded border border-[var(--border-strong)] bg-[var(--bg-surface)] py-0.5 px-1.5 text-[11px] font-mono font-bold focus:border-sky-500 outline-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const maxCredit = Math.min(grandTotalBeforeCredit, displayWalletBalance && displayWalletBalance > 0 ? displayWalletBalance : (parseFloat(applyCreditAmount) || 0));
+                                setApplyCreditAmount(maxCredit.toString());
+                              }}
+                              className="px-1.5 py-0.5 rounded bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--border-strong)] text-[10px] font-bold hover:border-sky-500 transition whitespace-nowrap"
+                            >
+                              Max
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (displayWalletBalance && displayWalletBalance > 0) {
+                                  setApplyCreditAmount(displayWalletBalance.toString());
+                                  setActiveTappingMode("RETURN");
+                                }
+                              }}
+                              className="px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-400 border border-orange-500/30 text-[10px] font-bold hover:bg-orange-500 hover:text-white transition whitespace-nowrap"
+                            >
+                              Cash Out
+                            </button>
+                          </div>
+                        )}
                       </div>
-                    ) : displayWalletBalance < 0 ? (
-                      <label className="flex items-center justify-between bg-[var(--bg-surface)] px-2 py-1.5 rounded-lg cursor-pointer border border-[var(--border-strong)] hover:border-sky-500/50 transition mt-auto mb-auto">
-                        <span className="text-xs font-bold text-[var(--text-primary)]">Settle Debt</span>
-                        <input 
-                          type="checkbox" 
-                          checked={settleDebit}
-                          onChange={(e) => setSettleDebit(e.target.checked)}
-                          className="rounded border-[var(--border-strong)] bg-[var(--bg-surface)] text-sky-500 focus:ring-sky-500/30 w-3.5 h-3.5"
-                        />
+                    )}
+
+                    {/* 2. SETTLE DEBT (When customer has negative balance or debt was settled) */}
+                    {(displayWalletBalance < 0 || settleDebit) && (
+                      <label className="flex items-center justify-between bg-[var(--bg-surface)] p-1.5 rounded-lg cursor-pointer border border-[var(--border-strong)] hover:border-sky-500/50 transition">
+                        <div className="flex items-center gap-1.5">
+                          <input 
+                            type="checkbox" 
+                            checked={settleDebit}
+                            onChange={(e) => setSettleDebit(e.target.checked)}
+                            className="rounded border-[var(--border-strong)] bg-[var(--bg-surface)] text-sky-500 focus:ring-sky-500/30 w-3.5 h-3.5"
+                          />
+                          <span className="text-xs font-bold text-[var(--text-primary)]">Settle Debt</span>
+                        </div>
+                        <span className="text-xs font-mono font-bold text-rose-500">
+                          +₹{Math.abs(displayWalletBalance && displayWalletBalance < 0 ? displayWalletBalance : (editingCompletedBill?.debt_settled || 0)).toFixed(2)}
+                        </span>
                       </label>
-                    ) : (
-                       <div className="flex-1 flex items-center justify-center text-[10px] text-[var(--text-muted)] text-center opacity-70">
-                         No balance
-                       </div>
+                    )}
+
+                    {/* 3. UDHAAR / DEBIT (When bill had shortfall/debit recorded) */}
+                    {(Boolean(editingCompletedBill?.debit_applied && editingCompletedBill.debit_applied > 0) || Boolean(parseFloat(recordDebitAmount) > 0)) && (
+                      <label className="flex items-center justify-between bg-rose-500/10 p-1.5 rounded-lg cursor-pointer border border-rose-500/30 hover:border-rose-500/50 transition">
+                        <div className="flex items-center gap-1.5">
+                          <input 
+                            type="checkbox" 
+                            checked={Boolean(parseFloat(recordDebitAmount) > 0)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setRecordDebitAmount(editingCompletedBill?.debit_applied ? String(editingCompletedBill.debit_applied) : "0");
+                              } else {
+                                setRecordDebitAmount("");
+                              }
+                            }}
+                            className="rounded border-rose-400 bg-white text-rose-500 focus:ring-rose-500/30 w-3.5 h-3.5"
+                          />
+                          <span className="text-xs font-bold text-rose-600 dark:text-rose-400">Keep Udhaar (Debit)</span>
+                        </div>
+                        <span className="text-xs font-mono font-bold text-rose-600">
+                          ₹{(parseFloat(recordDebitAmount) || editingCompletedBill?.debit_applied || 0).toFixed(2)}
+                        </span>
+                      </label>
+                    )}
+
+                    {/* 4. STORE CREDIT KEPT (When change/surplus was saved as store credit) */}
+                    {(Boolean(editingCompletedBill?.credit_awarded && editingCompletedBill.credit_awarded > 0) || Boolean(parseFloat(recordCreditAmount) > 0)) && (
+                      <label className="flex items-center justify-between bg-amber-500/10 p-1.5 rounded-lg cursor-pointer border border-amber-500/30 hover:border-amber-500/50 transition">
+                        <div className="flex items-center gap-1.5">
+                          <input 
+                            type="checkbox" 
+                            checked={Boolean(parseFloat(recordCreditAmount) > 0)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setRecordCreditAmount(editingCompletedBill?.credit_awarded ? String(editingCompletedBill.credit_awarded) : "0");
+                              } else {
+                                setRecordCreditAmount("");
+                              }
+                            }}
+                            className="rounded border-amber-400 bg-white text-amber-500 focus:ring-amber-500/30 w-3.5 h-3.5"
+                          />
+                          <span className="text-xs font-bold text-amber-600 dark:text-amber-400">Store Credit Kept</span>
+                        </div>
+                        <span className="text-xs font-mono font-bold text-amber-600">
+                          ₹{(parseFloat(recordCreditAmount) || editingCompletedBill?.credit_awarded || 0).toFixed(2)}
+                        </span>
+                      </label>
+                    )}
+
+                    {/* Empty state when no options are relevant */}
+                    {displayWalletBalance === 0 && 
+                     !Boolean(parseFloat(applyCreditAmount) > 0) && 
+                     !settleDebit && 
+                     !Boolean(parseFloat(recordDebitAmount) > 0) && 
+                     !Boolean(parseFloat(recordCreditAmount) > 0) && (
+                      <div className="flex-1 flex items-center justify-center text-[10px] text-[var(--text-muted)] text-center opacity-70">
+                        No balance
+                      </div>
                     )}
                   </div>
                 ) : (
@@ -2020,7 +2141,11 @@ export function PaymentModal({
                 <button
                   type="button"
                   disabled={!isPaymentValid || isSubmitting}
-                  onClick={() => void onSettlePayment()}
+                  onClick={() => {
+                    if (!submittingRef.current && !isSubmitting) {
+                      void onSettlePayment();
+                    }
+                  }}
 
                   className="flex items-center gap-2 rounded-xl bg-[var(--accent-brand)] px-6 py-3 font-bold text-[var(--text-on-accent)] shadow-md hover:opacity-90 disabled:opacity-50 transition cursor-pointer disabled:cursor-not-allowed"
                 >

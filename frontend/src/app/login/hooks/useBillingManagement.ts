@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useState, useMemo, useRef } from "react";
 import type {
   DiscountApproval,
   ManualBill,
@@ -37,6 +37,9 @@ export function useBillingManagement({
   const [dateRangeMode, setDateRangeMode] = useState<BillingDateRangeMode>("today");
   const [customStartDate, setCustomStartDate] = useState<string>(formatLocalDate());
   const [customEndDate, setCustomEndDate] = useState<string>(formatLocalDate());
+
+  const createBillSubmittingRef = useRef(false);
+  const markPaidSubmittingRef = useRef(false);
 
   const { computedStartDate, computedEndDate } = useMemo(() => {
     const today = new Date();
@@ -232,6 +235,7 @@ export function useBillingManagement({
   }, [authHeaders, loadBillingData, enabled]);
 
   const handleCreateBill = async (proceedToPayment = false) => {
+    if (createBillSubmittingRef.current) return;
     if (!draftCartItems.length) {
       setError("Please add at least one menu item to the bill.");
       return;
@@ -253,6 +257,8 @@ export function useBillingManagement({
         }
       }
     }
+
+    createBillSubmittingRef.current = true;
     try {
       const payload = {
         basket_number: selectedTable || "WALK-IN",
@@ -311,6 +317,8 @@ export function useBillingManagement({
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save bill.");
+    } finally {
+      createBillSubmittingRef.current = false;
     }
   };
 
@@ -515,6 +523,8 @@ export function useBillingManagement({
     upiAmount?: number
   ) => {
     if (!paymentTargetBill) return;
+    if (markPaidSubmittingRef.current) return;
+    markPaidSubmittingRef.current = true;
     try {
       const isSplit = (cashAmount !== undefined && upiAmount !== undefined && cashAmount > 0 && upiAmount > 0);
       const pm = isSplit ? "SPLIT" : selectedPaymentMethod;
@@ -546,6 +556,8 @@ export function useBillingManagement({
       onBillSettled?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to mark bill paid.");
+    } finally {
+      markPaidSubmittingRef.current = false;
     }
   };
 

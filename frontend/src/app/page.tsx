@@ -648,6 +648,7 @@ export default function AdminDashboardPage() {
             onEditCompletedBill={billingState.handleEditCompletedBill}
             onDeleteBill={billingState.handleDeleteBill}
             onBillSettled={refreshCatalogAndInventory}
+            staffList={staffState.staffList}
           />
         )}
 

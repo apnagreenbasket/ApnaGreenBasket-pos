@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { ArrowRightLeft, PackageOpen, X, Loader2 } from "lucide-react";
+import { ArrowRightLeft, PackageOpen, X, Loader2, ChevronLeft, ChevronRight, Calendar } from "lucide-react";
 import { useAdminAuth } from "../../hooks/useAdminAuth";
 import { useTableSortAndSearch } from "../../hooks/useTableSortAndSearch";
 import { SortableHeader, TableSearchBar } from "./shared";
@@ -9,6 +9,9 @@ import { StockMovementResponse } from "@/types";
 type Props = {
   data: StockMovementResponse | null;
   isLoading: boolean;
+  datePreset?: string;
+  customFromDate?: string;
+  customToDate?: string;
 };
 
 interface StockLedgerResponse {
@@ -23,14 +26,84 @@ interface StockLedgerResponse {
 
 interface StockLedgerPageResponse {
   items: StockLedgerResponse[];
+  total?: number;
+  page?: number;
+  page_size?: number;
+  total_pages?: number;
 }
 
-export function StockMovementReport({ data, isLoading }: Props) {
+function computeLedgerDateRange(
+  preset?: string,
+  customFrom?: string,
+  customTo?: string
+): { fromStr: string; toStr: string; label: string } {
+  const now = new Date();
+  let fromStr = "";
+  let toStr = "";
+  let label = "Today";
+
+  if (!preset || preset === "today") {
+    const from = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+    const to = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    fromStr = from.toISOString();
+    toStr = to.toISOString();
+    label = "Today";
+  } else if (preset === "yesterday") {
+    const from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0);
+    const to = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59, 999);
+    fromStr = from.toISOString();
+    toStr = to.toISOString();
+    label = "Yesterday";
+  } else if (preset === "last_7") {
+    const from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    fromStr = from.toISOString();
+    toStr = now.toISOString();
+    label = "Last 7 Days";
+  } else if (preset === "last_30") {
+    const from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    fromStr = from.toISOString();
+    toStr = now.toISOString();
+    label = "Last 30 Days";
+  } else if (preset === "this_month") {
+    const from = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
+    fromStr = from.toISOString();
+    toStr = now.toISOString();
+    label = "This Month";
+  } else if (preset === "last_month") {
+    const from = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0);
+    const to = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+    fromStr = from.toISOString();
+    toStr = to.toISOString();
+    label = "Last Month";
+  } else if (preset === "custom" && customFrom && customTo) {
+    const [fYear, fMonth, fDay] = customFrom.split("-").map(Number);
+    fromStr = new Date(fYear, fMonth - 1, fDay, 0, 0, 0).toISOString();
+
+    const [tYear, tMonth, tDay] = customTo.split("-").map(Number);
+    toStr = new Date(tYear, tMonth - 1, tDay, 23, 59, 59, 999).toISOString();
+    label = `${customFrom} to ${customTo}`;
+  }
+
+  return { fromStr, toStr, label };
+}
+
+export function StockMovementReport({ data, isLoading, datePreset, customFromDate, customToDate }: Props) {
   const { apiRequest } = useAdminAuth();
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [selectedItemName, setSelectedItemName] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState<number>(1);
   const [ledgerData, setLedgerData] = useState<StockLedgerPageResponse | null>(null);
   const [isLoadingLedger, setIsLoadingLedger] = useState(false);
+
+  const { fromStr, toStr, label: dateRangeLabel } = useMemo(
+    () => computeLedgerDateRange(datePreset, customFromDate, customToDate),
+    [datePreset, customFromDate, customToDate]
+  );
+
+  // Reset page when date filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [datePreset, customFromDate, customToDate]);
 
   useEffect(() => {
     if (!selectedItemId) {
@@ -40,8 +113,15 @@ export function StockMovementReport({ data, isLoading }: Props) {
     const fetchLedger = async () => {
       setIsLoadingLedger(true);
       try {
+        const params = new URLSearchParams();
+        params.append("item_id", selectedItemId);
+        params.append("page", String(currentPage));
+        params.append("page_size", "20");
+        if (fromStr) params.append("from_date", fromStr);
+        if (toStr) params.append("to_date", toStr);
+
         const res = await apiRequest<StockLedgerPageResponse>(
-          `/api/admin/inventory/ledger?item_id=${selectedItemId}&page_size=100`
+          `/api/admin/inventory/ledger?${params.toString()}`
         );
         setLedgerData(res);
       } catch (err) {
@@ -51,7 +131,7 @@ export function StockMovementReport({ data, isLoading }: Props) {
       }
     };
     fetchLedger();
-  }, [selectedItemId, apiRequest]);
+  }, [selectedItemId, currentPage, fromStr, toStr, apiRequest]);
 
   const rawItems = data?.items || [];
 
@@ -70,6 +150,12 @@ export function StockMovementReport({ data, isLoading }: Props) {
     handleSort,
     sortedAndFilteredData,
   } = useTableSortAndSearch(enrichedItems, ["item_name"]);
+
+  const totalEntries = ledgerData?.total ?? (ledgerData?.items?.length || 0);
+  const totalPages = ledgerData?.total_pages ?? Math.max(1, Math.ceil(totalEntries / 20));
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+  const startEntry = totalEntries === 0 ? 0 : (safeCurrentPage - 1) * 20 + 1;
+  const endEntry = Math.min(safeCurrentPage * 20, totalEntries);
 
   if (isLoading) {
     return (
@@ -138,6 +224,7 @@ export function StockMovementReport({ data, isLoading }: Props) {
                     onClick={() => {
                       setSelectedItemId(item.item_id);
                       setSelectedItemName(item.item_name);
+                      setCurrentPage(1);
                     }}
                   >
                     <td className="px-6 py-4">
@@ -167,34 +254,46 @@ export function StockMovementReport({ data, isLoading }: Props) {
       {selectedItemId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="bg-[var(--bg-card)] rounded-2xl shadow-xl w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden border border-[var(--border-subtle)]">
+            {/* Modal Header */}
             <div className="flex items-center justify-between p-5 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]">
               <div>
-                <h3 className="text-lg font-bold text-[var(--text-primary)]">
-                  {selectedItemName} Ledger
-                </h3>
-                <p className="text-sm text-[var(--text-secondary)]">Recent stock movements</p>
+                <div className="flex items-center gap-2.5">
+                  <h3 className="text-lg font-bold text-[var(--text-primary)]">
+                    {selectedItemName} Ledger
+                  </h3>
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-sky-500/10 text-sky-500 border border-sky-500/20">
+                    <Calendar className="h-3 w-3" />
+                    <span>{dateRangeLabel}</span>
+                  </span>
+                </div>
+                <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                  Stock movements filtered by selected date range
+                </p>
               </div>
               <button
+                type="button"
                 onClick={() => setSelectedItemId(null)}
-                className="p-2 rounded-full hover:bg-[var(--border-subtle)] text-[var(--text-secondary)] transition-colors"
+                className="p-2 rounded-full hover:bg-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
             
+            {/* Modal Body */}
             <div className="flex-1 overflow-y-auto p-0">
               {isLoadingLedger ? (
                 <div className="flex flex-col items-center justify-center p-12 text-[var(--text-secondary)]">
                   <Loader2 className="h-8 w-8 animate-spin mb-4 text-[var(--accent-brand)]" />
                   <p>Loading ledger entries...</p>
                 </div>
-              ) : ledgerData?.items.length === 0 ? (
+              ) : !ledgerData?.items || ledgerData.items.length === 0 ? (
                 <div className="p-12 text-center text-[var(--text-secondary)]">
-                  No recent ledger entries found.
+                  <PackageOpen className="mx-auto h-8 w-8 mb-3 opacity-20" />
+                  <p>No stock movement entries found for {dateRangeLabel.toLowerCase()}.</p>
                 </div>
               ) : (
                 <table className="w-full text-left text-sm">
-                  <thead className="bg-[var(--bg-surface)] sticky top-0 border-b border-[var(--border-subtle)]">
+                  <thead className="bg-[var(--bg-surface)] sticky top-0 border-b border-[var(--border-subtle)] z-10">
                     <tr>
                       <th className="px-6 py-3 font-semibold text-[var(--text-secondary)]">Date & Time</th>
                       <th className="px-6 py-3 font-semibold text-[var(--text-secondary)]">Type</th>
@@ -204,10 +303,13 @@ export function StockMovementReport({ data, isLoading }: Props) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--border-subtle)]">
-                    {ledgerData?.items.map((row) => (
+                    {ledgerData.items.map((row) => (
                       <tr key={row.id} className="hover:bg-[var(--bg-surface)]/50">
                         <td className="px-6 py-3">
-                          {formatLocalDate(parseUTCDate(row.created_at))} <span className="text-xs text-[var(--text-muted)]">{parseUTCDate(row.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                          {formatLocalDate(parseUTCDate(row.created_at))}{" "}
+                          <span className="text-xs text-[var(--text-muted)]">
+                            {parseUTCDate(row.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                          </span>
                         </td>
                         <td className="px-6 py-3">
                           <span className="inline-block px-2 py-1 rounded text-xs font-medium bg-[var(--border-subtle)] text-[var(--text-primary)]">
@@ -229,6 +331,43 @@ export function StockMovementReport({ data, isLoading }: Props) {
                 </table>
               )}
             </div>
+
+            {/* Modal Footer (Pagination) */}
+            {totalEntries > 0 && (
+              <div className="border-t border-[var(--border-subtle)] bg-[var(--bg-surface)] px-5 py-3 flex items-center justify-between shrink-0">
+                <span className="text-xs text-[var(--text-secondary)]">
+                  Showing <span className="font-semibold text-[var(--text-primary)]">{startEntry}–{endEntry}</span> of{" "}
+                  <span className="font-semibold text-[var(--text-primary)]">{totalEntries}</span> movement{totalEntries === 1 ? "" : "s"}
+                </span>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={safeCurrentPage <= 1 || isLoadingLedger}
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] text-xs font-semibold text-[var(--text-primary)] hover:border-sky-500 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                    Previous
+                  </button>
+
+                  <span className="text-xs font-mono px-2 text-[var(--text-secondary)]">
+                    Page <span className="font-bold text-[var(--text-primary)]">{safeCurrentPage}</span> of{" "}
+                    <span className="font-bold text-[var(--text-primary)]">{totalPages}</span>
+                  </span>
+
+                  <button
+                    type="button"
+                    disabled={safeCurrentPage >= totalPages || isLoadingLedger}
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] text-xs font-semibold text-[var(--text-primary)] hover:border-sky-500 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
+                  >
+                    Next
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

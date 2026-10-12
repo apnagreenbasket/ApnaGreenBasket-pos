@@ -190,6 +190,8 @@ def _format_bill_response(order: Order) -> BillResponse:
         loyalty_points_redeemed=order.loyalty_points_redeemed,
         loyalty_discount_inr=float(order.loyalty_discount_inr) if getattr(order, "loyalty_discount_inr", None) is not None else 0.0,
         created_by_staff_id=str(order.created_by_staff_id) if order.created_by_staff_id else None,
+        created_by_staff_name=order.created_by_staff.name if getattr(order, "created_by_staff", None) else None,
+        created_by_staff_role=order.created_by_staff.role.value if (getattr(order, "created_by_staff", None) and hasattr(order.created_by_staff.role, "value")) else (str(order.created_by_staff.role) if getattr(order, "created_by_staff", None) else None),
         replaces_bill_id=str(order.replaces_bill_id) if getattr(order, "replaces_bill_id", None) else None,
         created_at=order.created_at.isoformat() if hasattr(order.created_at, "isoformat") else str(order.created_at),
         finalized_at=order.finalized_at.isoformat() if order.finalized_at and hasattr(order.finalized_at, "isoformat") else None,
@@ -398,6 +400,7 @@ async def list_bills_endpoint(
             selectinload(Order.items).selectinload(OrderItem.menu_item).selectinload(MenuItem.inventory_item),
             selectinload(Order.items).selectinload(OrderItem.selected_batch),
             selectinload(Order.customer),
+            selectinload(Order.created_by_staff),
         )
         .where(Order.outlet_id == current_user.outlet_id)
     )
@@ -671,6 +674,7 @@ async def get_bill_endpoint(
             selectinload(Order.items).selectinload(OrderItem.menu_item).selectinload(MenuItem.inventory_item),
             selectinload(Order.items).selectinload(OrderItem.selected_batch),
             selectinload(Order.customer),
+            selectinload(Order.created_by_staff),
         )
         .where(
             Order.id == bill_id,

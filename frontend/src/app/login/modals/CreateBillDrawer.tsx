@@ -442,6 +442,7 @@ export function CreateBillDrawer({
   const searchInputRef = useRef<HTMLInputElement>(null);
   const phoneInputRef = useRef<HTMLInputElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
+  const submittingRef = useRef(false);
   const phoneSearchTimerRef = useRef<NodeJS.Timeout | null>(null);
   const scannedItemsCacheRef = useRef<Map<string, AdminMenuItem>>(new Map());
   const [pricingMode, setPricingMode] = useState<"RETAIL" | "WHOLESALE">("RETAIL");
@@ -664,10 +665,14 @@ export function CreateBillDrawer({
   };
 
   const handleProceedAsWalkIn = () => {
+    if (submittingRef.current) return;
     setIsWalkIn?.(true);
     setPhoneHasError(false);
     setShowPhoneRequiredModal(false);
-    void handleCreateBill(true);
+    submittingRef.current = true;
+    Promise.resolve(handleCreateBill(true)).finally(() => {
+      submittingRef.current = false;
+    });
   };
 
   const handleFocusPhoneInput = () => {
@@ -679,6 +684,7 @@ export function CreateBillDrawer({
   };
 
   const validateBeforeCreateBill = (proceedToPayment: boolean) => {
+    if (submittingRef.current) return;
     for (let i = 0; i < draftCartItems.length; i++) {
       const ci = draftCartItems[i];
       const orig = menuItems.find((m) => m.id === ci.menu_item_id);
@@ -708,7 +714,10 @@ export function CreateBillDrawer({
       }
     }
 
-    void handleCreateBill(proceedToPayment);
+    submittingRef.current = true;
+    Promise.resolve(handleCreateBill(proceedToPayment)).finally(() => {
+      submittingRef.current = false;
+    });
   };
 
   useEffect(() => {
@@ -756,7 +765,7 @@ export function CreateBillDrawer({
         }
         
         e.preventDefault();
-        if (draftCartItems.length > 0) {
+        if (draftCartItems.length > 0 && !submittingRef.current) {
           validateBeforeCreateBill(true);
         }
       }
@@ -1421,7 +1430,7 @@ export function CreateBillDrawer({
                             {stockNum !== null && stockNum < 0 ? ` (${stockNum})` : ""}
                           </span>
                         ) : effectiveStock !== null && effectiveStock > 0 ? (
-                          <span className="rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                          <span className="rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-amber-500/20 text-amber-400 border border-amber-500/40">
                             Qty: {effectiveStock % 1 === 0 ? effectiveStock : Number(effectiveStock.toFixed(2))} {item.unit_label || "pcs"}
                           </span>
                         ) : null}
@@ -2057,7 +2066,7 @@ export function CreateBillDrawer({
                           </span>
                         ) : cartItemEffectiveStock !== null && cartItemEffectiveStock > 0 ? (
                           <span
-                            className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider rounded border border-emerald-500/30 bg-emerald-500/15 px-1.5 py-0.5 text-emerald-400 font-mono"
+                            className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider rounded border border-amber-500/40 bg-amber-500/20 px-1.5 py-0.5 text-amber-400 font-mono"
                             title={`Current stock: ${cartItemEffectiveStock}`}
                           >
                             Qty: {cartItemEffectiveStock % 1 === 0 ? cartItemEffectiveStock : Number(cartItemEffectiveStock.toFixed(2))} {ci.selected_unit || originalItem?.unit_label || "pcs"}

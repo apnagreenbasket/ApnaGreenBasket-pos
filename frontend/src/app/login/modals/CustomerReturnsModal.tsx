@@ -332,6 +332,7 @@ export function CustomerReturnsModal({
   // Active Cash Deck for Numpad Tapping & Spacebar Switching
   const [activeCashDeck, setActiveCashDeck] = useState<"OUTWARD" | "INWARD">("OUTWARD");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submittingRef = useRef(false);
   const outwardDeckRef = useRef<HTMLDivElement>(null);
   const inwardDeckRef = useRef<HTMLDivElement>(null);
   const rightScrollRef = useRef<HTMLDivElement>(null);
@@ -1773,7 +1774,7 @@ export function CustomerReturnsModal({
   };
 
   const handleSubmitReturn = async () => {
-    if (isSubmitting) return;
+    if (submittingRef.current || isSubmitting) return;
 
     // Validate return items selection first
     if (returnMode === "BILL_REFERENCED") {
@@ -1912,6 +1913,7 @@ export function CustomerReturnsModal({
       credit_cashed_out: finalCreditCashedOut,
     };
 
+    submittingRef.current = true;
     setIsSubmitting(true);
     setError(null);
 
@@ -2041,6 +2043,7 @@ export function CustomerReturnsModal({
     } catch (err: any) {
       setError(err instanceof Error ? err.message : "Failed to process return.");
     } finally {
+      submittingRef.current = false;
       setIsSubmitting(false);
     }
   };
@@ -2116,7 +2119,7 @@ export function CustomerReturnsModal({
       }
 
       if (e.key === "Enter") {
-        if (h.returnCreditTotal > 0 && !h.isSubmitting) {
+        if (h.returnCreditTotal > 0 && !h.isSubmitting && !submittingRef.current) {
           e.preventDefault();
           void h.handleSubmitReturn();
         }
@@ -4591,6 +4594,7 @@ export function CustomerReturnsModal({
                 type="button"
                 disabled={returnCreditTotal <= 0 || isSubmitting || (!isAdminRole && !isPunchedIn)}
                 onClick={() => {
+                  if (submittingRef.current || isSubmitting) return;
                   if (!isAdminRole && !isPunchedIn) {
                     onRequirePunchIn?.();
                     return;
