@@ -110,7 +110,21 @@ export async function apiRequest<T>(url: string, options: RequestInit = {}): Pro
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
   }
-  const response = await fetch(url, { ...options, headers });
+
+  let response: Response;
+  try {
+    response = await fetch(url, { ...options, headers });
+  } catch (err: any) {
+    // Auto-retry once for transient network hiccups or backend cold-start wake-up
+    try {
+      await new Promise((r) => setTimeout(r, 1200));
+      response = await fetch(url, { ...options, headers });
+    } catch (retryErr: any) {
+      console.error("Network fetch error on", url, retryErr);
+      throw new Error("Connection failed. Server is waking up or network was interrupted. Please try again.");
+    }
+  }
+
   return parseApiResponse<T>(response);
 }
 
