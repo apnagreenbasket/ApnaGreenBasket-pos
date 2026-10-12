@@ -106,9 +106,11 @@ export function useAdminAuth() {
         });
 
         if (!response.ok) {
-          window.localStorage.removeItem(ACCESS_TOKEN_KEY);
-          window.localStorage.removeItem(REFRESH_TOKEN_KEY);
-          setAccessToken(null);
+          if (response.status === 401 || response.status === 400 || response.status === 403) {
+            window.localStorage.removeItem(ACCESS_TOKEN_KEY);
+            window.localStorage.removeItem(REFRESH_TOKEN_KEY);
+            setAccessToken(null);
+          }
           return null;
         }
 
@@ -118,9 +120,7 @@ export function useAdminAuth() {
         window.localStorage.setItem(REFRESH_TOKEN_KEY, data.refresh_token);
         return data.access_token;
       } catch {
-        window.localStorage.removeItem(ACCESS_TOKEN_KEY);
-        window.localStorage.removeItem(REFRESH_TOKEN_KEY);
-        setAccessToken(null);
+        // Network blip during refresh - do not erase tokens immediately
         return null;
       } finally {
         refreshTokenPromiseRef.current = null;
@@ -135,52 +135,104 @@ export function useAdminAuth() {
       if (!authHeaders) throw new Error("Please sign in first.");
 
       const apiBase = getApiBaseUrl();
-      let response = await fetch(`${apiBase}${path}`, {
-        ...options,
-        headers: {
-          ...authHeaders,
-          ...(options?.headers || {}),
-        },
-      });
+      const primaryUrl = path.startsWith("http://") || path.startsWith("https://")
+        ? path
+        : `${apiBase}${path}`;
+      const fallbackUrl = (!path.startsWith("http://") && !path.startsWith("https://") && apiBase)
+        ? path
+        : null;
 
-      if (response.status === 401) {
-        if (path.includes("/pin-switch") || path.includes("/pin-login") || path.includes("/login")) {
-          return parseApiResponse<T>(response);
+      let currentHeaders: Record<string, string> = {
+        ...authHeaders,
+        ...((options?.headers as Record<string, string>) || {}),
+      };
+
+      const MAX_ATTEMPTS = 3;
+      let lastError: any = null;
+      let lastResponse: Response | null = null;
+
+      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+        if (attempt > 0) {
+          await new Promise((resolve) => setTimeout(resolve, attempt === 1 ? 1000 : 2000));
         }
 
-        const newAccessToken = await tryRefreshToken();
-        if (newAccessToken) {
-          response = await fetch(`${apiBase}${path}`, {
+        const requestUrl = (attempt > 0 && fallbackUrl) ? fallbackUrl : primaryUrl;
+
+        let response: Response;
+        try {
+          response = await fetch(requestUrl, {
             ...options,
-            headers: {
+            headers: currentHeaders,
+          });
+        } catch (fetchErr: any) {
+          lastError = fetchErr;
+          console.warn(`[useAdminAuth.apiRequest] Attempt ${attempt + 1}/${MAX_ATTEMPTS} failed for ${requestUrl}:`, fetchErr?.message || fetchErr);
+          if (attempt === 0 && fallbackUrl && fallbackUrl !== requestUrl) {
+            try {
+              response = await fetch(fallbackUrl, {
+                ...options,
+                headers: currentHeaders,
+              });
+            } catch (fallbackErr: any) {
+              lastError = fallbackErr;
+              continue;
+            }
+          } else {
+            continue;
+          }
+        }
+
+        // Handle 401 Unauthorized (token refresh)
+        if (response.status === 401) {
+          if (path.includes("/pin-switch") || path.includes("/pin-login") || path.includes("/login")) {
+            return parseApiResponse<T>(response);
+          }
+
+          const newAccessToken = await tryRefreshToken();
+          if (newAccessToken) {
+            currentHeaders = {
               "Content-Type": "application/json",
               Authorization: `Bearer ${newAccessToken}`,
-              ...(options?.headers || {}),
-            },
-          });
-        } else {
-          setAccessToken(null);
-          if (typeof window !== "undefined") {
-            window.localStorage.removeItem(ACCESS_TOKEN_KEY);
-            window.localStorage.removeItem(REFRESH_TOKEN_KEY);
+              ...((options?.headers as Record<string, string>) || {}),
+            };
+            try {
+              response = await fetch(primaryUrl, {
+                ...options,
+                headers: currentHeaders,
+              });
+            } catch (retryFetchErr: any) {
+              lastError = retryFetchErr;
+              continue;
+            }
+          } else {
+            setAccessToken(null);
+            if (typeof window !== "undefined") {
+              window.localStorage.removeItem(ACCESS_TOKEN_KEY);
+              window.localStorage.removeItem(REFRESH_TOKEN_KEY);
+            }
+            throw new Error("Please sign in first.");
           }
-          throw new Error("Please sign in first.");
         }
+
+        // If 502, 503, or 504 (server waking up on Render or gateway timeout), retry
+        if (response.status >= 502 && response.status <= 504 && attempt < MAX_ATTEMPTS - 1) {
+          lastResponse = response;
+          console.warn(`[useAdminAuth.apiRequest] Gateway ${response.status} on attempt ${attempt + 1}/${MAX_ATTEMPTS} for ${requestUrl}, retrying...`);
+          continue;
+        }
+
+        return parseApiResponse<T>(response);
       }
 
-      // Transient retry for GET requests (e.g. during dev server reload)
-      if ((!options?.method || options.method.toUpperCase() === "GET") && response.status >= 500 && response.status <= 504) {
-        await new Promise((resolve) => setTimeout(resolve, 350));
-        response = await fetch(`${apiBase}${path}`, {
-          ...options,
-          headers: {
-            ...authHeaders,
-            ...(options?.headers || {}),
-          },
-        });
+      if (lastResponse) {
+        return parseApiResponse<T>(lastResponse);
       }
 
-      return parseApiResponse<T>(response);
+      throw new Error(
+        lastError?.message?.includes("Failed to fetch") || lastError?.message?.includes("Network")
+          ? "Unable to connect to server. The server may be waking up or your internet was interrupted. Please try again."
+          : (lastError?.message || "Server connection failed after multiple attempts.")
+      );
     },
     [authHeaders, tryRefreshToken]
   );

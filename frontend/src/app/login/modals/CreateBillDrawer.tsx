@@ -6,7 +6,7 @@ import type { AdminMenuItem, AdminVariant } from "../adminTypes";
 import { useAdminAuth } from "../hooks/useAdminAuth";
 import { useBarcodeScanner } from "@/hooks/useBarcodeScanner";
 
-import { apiRequest } from "../adminUtils";
+import { apiRequest, warmUpBackend } from "../adminUtils";
 import { CustomerInsightsModal, CustomerAnalytics } from "./CustomerInsightsModal";
 import { OversellBatchModal, type BatchAllocation } from "./OversellBatchModal";
 import type { ItemBatchSummary } from "@/types";
@@ -745,6 +745,7 @@ export function CreateBillDrawer({
       submittingRef.current = false;
       setIsSubmitting(false);
     } else {
+      warmUpBackend();
       // Auto-focus phone input when drawer opens
       setTimeout(() => {
         phoneInputRef.current?.focus();

@@ -8,7 +8,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Bookmark, Check, CheckCircle2, CreditCard, DollarSign, Loader2, Pencil, Percent, QrCode, X } from "lucide-react";
-import { apiRequest } from "../adminUtils";
+import { apiRequest, warmUpBackend } from "../adminUtils";
 import React from "react";
 import type { ManualBill } from "@/types";
 import type { RestaurantProfile } from "../adminTypes";
@@ -114,6 +114,8 @@ export function PaymentModal({
     if (!isOpen) {
       submittingRef.current = false;
       setIsSubmitting(false);
+    } else {
+      warmUpBackend();
     }
   }, [isOpen]);
 

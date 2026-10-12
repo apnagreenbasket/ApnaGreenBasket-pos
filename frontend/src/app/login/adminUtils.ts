@@ -2,8 +2,8 @@
  * Admin dashboard utility functions — extracted from page.tsx
  */
 
-import { parseUTCDate, formatLocalDate } from "@/lib/api";
-export { parseUTCDate, formatLocalDate };
+import { parseUTCDate, formatLocalDate, getApiBaseUrl } from "@/lib/api";
+export { parseUTCDate, formatLocalDate, getApiBaseUrl };
 
 // ── Currency formatting ─────────────────────────────────────────────────
 
@@ -101,6 +101,15 @@ export async function parseApiResponse<T>(response: Response): Promise<T> {
   return payload as T;
 }
 
+/**
+ * Wake/warm-up the backend. Call proactively when opening billing pages
+ * so the Render instance is ready before the user clicks Settle.
+ */
+export function warmUpBackend() {
+  if (typeof window === "undefined") return;
+  fetch("/api/health", { method: "GET" }).catch(() => {});
+}
+
 export async function apiRequest<T>(url: string, options: RequestInit = {}): Promise<T> {
   const token = typeof window !== "undefined" ? window.localStorage.getItem("agb_access_token") : null;
   const headers: Record<string, string> = {
@@ -111,21 +120,59 @@ export async function apiRequest<T>(url: string, options: RequestInit = {}): Pro
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  let response: Response;
-  try {
-    response = await fetch(url, { ...options, headers });
-  } catch (err: any) {
-    // Auto-retry once for transient network hiccups or backend cold-start wake-up
-    try {
-      await new Promise((r) => setTimeout(r, 1200));
-      response = await fetch(url, { ...options, headers });
-    } catch (retryErr: any) {
-      console.error("Network fetch error on", url, retryErr);
-      throw new Error("Connection failed. Server is waking up or network was interrupted. Please try again.");
+  const apiBase = getApiBaseUrl();
+  const primaryUrl = url.startsWith("http://") || url.startsWith("https://")
+    ? url
+    : `${apiBase}${url.startsWith("/") ? "" : "/"}${url}`;
+  const fallbackUrl = (!url.startsWith("http://") && !url.startsWith("https://") && apiBase)
+    ? (url.startsWith("/") ? url : `/${url}`)
+    : null;
+
+  const MAX_RETRIES = 3;
+  let lastError: any = null;
+  let lastResponse: Response | null = null;
+
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    if (attempt > 0) {
+      await new Promise((r) => setTimeout(r, attempt === 1 ? 1000 : 2000));
     }
+
+    const requestUrl = (attempt > 0 && fallbackUrl) ? fallbackUrl : primaryUrl;
+
+    let response: Response;
+    try {
+      response = await fetch(requestUrl, { ...options, headers });
+    } catch (err: any) {
+      lastError = err;
+      console.warn(`[adminUtils.apiRequest] Attempt ${attempt + 1}/${MAX_RETRIES} failed for ${requestUrl}:`, err?.message || err);
+      if (attempt === 0 && fallbackUrl && fallbackUrl !== requestUrl) {
+        try {
+          response = await fetch(fallbackUrl, { ...options, headers });
+        } catch (fallbackErr: any) {
+          lastError = fallbackErr;
+          continue;
+        }
+      } else {
+        continue;
+      }
+    }
+
+    // If 502, 503, or 504 (server waking up on Render or gateway timeout), retry
+    if (response.status >= 502 && response.status <= 504 && attempt < MAX_RETRIES - 1) {
+      lastResponse = response;
+      console.warn(`[adminUtils.apiRequest] Gateway ${response.status} on attempt ${attempt + 1}/${MAX_RETRIES} for ${requestUrl}, retrying...`);
+      continue;
+    }
+
+    return await parseApiResponse<T>(response);
   }
 
-  return parseApiResponse<T>(response);
+  if (lastResponse) {
+    return await parseApiResponse<T>(lastResponse);
+  }
+
+  console.error("All retry attempts failed for", url, lastError);
+  throw new Error("Unable to connect to server. The server may be waking up or your internet connection was interrupted. Please try again.");
 }
 
 export async function uploadImageFile(file: File): Promise<string> {
