@@ -56,7 +56,7 @@ from app.services.staff_punch_service import get_active_punch_session, is_role_e
 router = APIRouter(prefix="/api/billing", tags=["billing"])
 
 
-def _format_bill_response(order: Order) -> BillResponse:
+def _format_bill_response(order: Order, staff_user: Any = None) -> BillResponse:
     items_out = []
     for item in order.items:
         qty = float(item.quantity) if item.quantity is not None else 1.0
@@ -150,6 +150,19 @@ def _format_bill_response(order: Order) -> BillResponse:
     elif cust_obj and getattr(cust_obj, "loyalty_points", None) is not None:
         cust_loyalty = int(cust_obj.loyalty_points)
 
+    # Safely resolve staff without triggering async lazy-loading IO
+    staff_obj = order.__dict__.get("created_by_staff")
+    staff_name = None
+    staff_role = None
+    if staff_obj:
+        staff_name = getattr(staff_obj, "name", None)
+        raw_role = getattr(staff_obj, "role", None)
+        staff_role = raw_role.value if hasattr(raw_role, "value") else (str(raw_role) if raw_role is not None else None)
+    elif staff_user:
+        staff_name = getattr(staff_user, "name", None) or getattr(staff_user, "email", None)
+        raw_role = getattr(staff_user, "role", None)
+        staff_role = raw_role.value if hasattr(raw_role, "value") else (str(raw_role) if raw_role is not None else None)
+
     return BillResponse(
         id=str(order.id),
         outlet_id=str(order.outlet_id),
@@ -190,8 +203,8 @@ def _format_bill_response(order: Order) -> BillResponse:
         loyalty_points_redeemed=order.loyalty_points_redeemed,
         loyalty_discount_inr=float(order.loyalty_discount_inr) if getattr(order, "loyalty_discount_inr", None) is not None else 0.0,
         created_by_staff_id=str(order.created_by_staff_id) if order.created_by_staff_id else None,
-        created_by_staff_name=order.created_by_staff.name if getattr(order, "created_by_staff", None) else None,
-        created_by_staff_role=order.created_by_staff.role.value if (getattr(order, "created_by_staff", None) and hasattr(order.created_by_staff.role, "value")) else (str(order.created_by_staff.role) if getattr(order, "created_by_staff", None) else None),
+        created_by_staff_name=staff_name,
+        created_by_staff_role=staff_role,
         replaces_bill_id=str(order.replaces_bill_id) if getattr(order, "replaces_bill_id", None) else None,
         created_at=order.created_at.isoformat() if hasattr(order.created_at, "isoformat") else str(order.created_at),
         finalized_at=order.finalized_at.isoformat() if order.finalized_at and hasattr(order.finalized_at, "isoformat") else None,
@@ -220,7 +233,7 @@ async def create_bill_endpoint(
             )
 
     order = await create_manual_bill(db, current_user.outlet_id, current_user, data)
-    return _format_bill_response(order)
+    return _format_bill_response(order, staff_user=current_user)
 
 
 @router.put("/bills/{bill_id}", response_model=BillResponse)
@@ -234,7 +247,7 @@ async def update_bill_endpoint(
     if not current_user.outlet_id:
         raise HTTPException(status_code=400, detail="outlet_id required")
     order = await update_manual_bill(db, bill_id, current_user.outlet_id, data)
-    return _format_bill_response(order)
+    return _format_bill_response(order, staff_user=current_user)
 
 
 @router.delete("/bills/{bill_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -262,7 +275,7 @@ async def apply_discount_endpoint(
     if not current_user.outlet_id:
         raise HTTPException(status_code=400, detail="outlet_id required")
     order = await apply_discount(db, bill_id, current_user.outlet_id, current_user, data)
-    return _format_bill_response(order)
+    return _format_bill_response(order, staff_user=current_user)
 
 
 @router.post("/approvals/{approval_id}/resolve")
@@ -289,7 +302,7 @@ async def finalize_bill_endpoint(
     if not current_user.outlet_id:
         raise HTTPException(status_code=400, detail="outlet_id required")
     order = await finalize_bill(db, bill_id, current_user.outlet_id)
-    return _format_bill_response(order)
+    return _format_bill_response(order, staff_user=current_user)
 
 
 @router.post("/bills/{bill_id}/mark-paid", response_model=BillResponse)
@@ -321,7 +334,7 @@ async def mark_paid_endpoint(
         upi_amount=data.upi_amount,
         staff_user=current_user,
     )
-    return _format_bill_response(order)
+    return _format_bill_response(order, staff_user=current_user)
 
 
 @router.get("/pending-approvals-count")

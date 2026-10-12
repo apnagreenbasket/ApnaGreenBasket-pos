@@ -343,7 +343,13 @@ async def create_manual_bill(
 
     await db.flush()
     res_final = await db.execute(
-        select(Order).where(Order.id == order.id).options(selectinload(Order.items).selectinload(OrderItem.selected_batch))
+        select(Order)
+        .where(Order.id == order.id)
+        .options(
+            selectinload(Order.items).selectinload(OrderItem.selected_batch),
+            selectinload(Order.customer),
+            selectinload(Order.created_by_staff),
+        )
     )
     final_order = res_final.scalar_one()
 
@@ -370,7 +376,11 @@ async def update_manual_bill(
     """Update line items or basket info on a draft bill."""
     res = await db.execute(
         select(Order)
-        .options(selectinload(Order.items))
+        .options(
+            selectinload(Order.items).selectinload(OrderItem.selected_batch),
+            selectinload(Order.customer),
+            selectinload(Order.created_by_staff),
+        )
         .where(
             Order.id == order_id,
             Order.outlet_id == outlet_id,
@@ -908,7 +918,11 @@ async def mark_bill_paid(
 
     res = await db.execute(
         select(Order)
-        .options(selectinload(Order.items).selectinload(OrderItem.selected_batch))
+        .options(
+            selectinload(Order.items).selectinload(OrderItem.selected_batch),
+            selectinload(Order.customer),
+            selectinload(Order.created_by_staff),
+        )
         .where(
             Order.id == order_id,
             Order.outlet_id == outlet_id,
