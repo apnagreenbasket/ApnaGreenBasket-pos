@@ -377,7 +377,8 @@ async def process_order_auto_deduction(
                 menu_item=menu_item_obj,
             )
             deduct_qty = Decimal(str(item.quantity)) * unit_multiplier
-            if not getattr(target_inv_item, "allow_oversell", True) and (target_inv_item.current_stock < deduct_qty):
+            oversell_blocked = not getattr(target_inv_item, "allow_oversell", True) and not getattr(menu_item_obj, "allow_oversell", True)
+            if oversell_blocked and (target_inv_item.current_stock < deduct_qty):
                 raise HTTPException(
                     status_code=400,
                     detail=f"Item '{target_inv_item.name}' does not allow overselling and has only {max(Decimal('0'), target_inv_item.current_stock)} in stock."

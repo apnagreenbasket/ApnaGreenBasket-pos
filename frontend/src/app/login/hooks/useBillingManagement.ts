@@ -234,36 +234,43 @@ export function useBillingManagement({
     }
   }, [authHeaders, loadBillingData, enabled]);
 
-  const handleCreateBill = async (proceedToPayment = false) => {
+  const handleCreateBill = async (proceedToPayment = false, walkInOverride?: boolean) => {
     if (createBillSubmittingRef.current) return;
     if (!draftCartItems.length) {
-      setError("Please add at least one menu item to the bill.");
-      return;
+      const msg = "Please add at least one menu item to the bill.";
+      setError(msg);
+      throw new Error(msg);
     }
+    const effectiveWalkIn = walkInOverride !== undefined ? walkInOverride : isWalkIn;
     if (proceedToPayment) {
-      if (!isWalkIn) {
+      if (!effectiveWalkIn) {
         const cleanPhone = customerPhone.replace(/\D/g, "");
         if (!cleanPhone || cleanPhone.length < 10) {
-          setError("Customer phone number must be at least 10 digits, or check 'Walk in'.");
-          return;
+          const msg = "Customer phone number must be at least 10 digits, or check 'Walk in'.";
+          setError(msg);
+          throw new Error(msg);
         }
       }
     } else {
-      if (customerPhone.trim()) {
+      if (customerPhone.trim() && !effectiveWalkIn) {
         const cleanPhone = customerPhone.replace(/\D/g, "");
-        if (cleanPhone.length > 0 && cleanPhone.length < 10 && !isWalkIn) {
-          setError("Customer phone number must be at least 10 digits");
-          return;
+        if (cleanPhone.length > 0 && cleanPhone.length < 10) {
+          const msg = "Customer phone number must be at least 10 digits";
+          setError(msg);
+          throw new Error(msg);
         }
       }
     }
 
     createBillSubmittingRef.current = true;
     try {
+      const cleanPhoneDigits = customerPhone.replace(/\D/g, "");
+      const payloadPhone = effectiveWalkIn && cleanPhoneDigits.length < 10 ? null : (customerPhone.trim() || null);
+
       const payload = {
         basket_number: selectedTable || "WALK-IN",
         customer_name: customerName || null,
-        customer_phone: customerPhone || null,
+        customer_phone: payloadPhone,
         customer_extra_detail: customerExtraDetail || null,
         is_interstate: isInterstate,
         place_of_supply: placeOfSupply || null,
@@ -315,8 +322,11 @@ export function useBillingManagement({
         resetCreateBillForm();
         setNotice(editingDraftBillId ? "Draft bill updated!" : "Manual bill created successfully!");
       }
+      return billResult;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save bill.");
+      const msg = err instanceof Error ? err.message : "Failed to save bill.";
+      setError(msg);
+      throw err;
     } finally {
       createBillSubmittingRef.current = false;
     }

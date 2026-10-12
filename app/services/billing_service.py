@@ -214,7 +214,7 @@ async def create_manual_bill(
         if target_inv and not getattr(target_inv, "allow_oversell", True):
             item_allows_oversell = False
 
-        if not item_allows_oversell:
+        if not item_allows_oversell and not getattr(item_in, "allow_oversell", False):
             needed_inv_qty = Decimal(str(item_in.quantity)) * unit_multiplier
             current_avail = target_inv.current_stock if target_inv else Decimal("0.000")
             if current_avail < needed_inv_qty:
@@ -475,7 +475,7 @@ async def update_manual_bill(
             if target_inv and not getattr(target_inv, "allow_oversell", True):
                 item_allows_oversell = False
 
-            if not item_allows_oversell:
+            if not item_allows_oversell and not getattr(item_in, "allow_oversell", False):
                 needed_inv_qty = Decimal(str(item_in.quantity)) * unit_multiplier
                 current_avail = target_inv.current_stock if target_inv else Decimal("0.000")
                 if current_avail < needed_inv_qty:

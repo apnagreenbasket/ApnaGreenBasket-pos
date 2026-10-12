@@ -229,7 +229,7 @@ type CreateBillDrawerProps = {
   setCustomerGstin?: (v: string) => void;
   customerLegalName?: string;
   setCustomerLegalName?: (v: string) => void;
-  handleCreateBill: (instantPayment: boolean) => Promise<void>;
+  handleCreateBill: (instantPayment: boolean, walkInOverride?: boolean) => Promise<any>;
   eveningPriceActive?: boolean;
   restaurant?: import("../adminTypes").RestaurantProfile | null;
   onQuickEditOffer?: (itemId: string, updates: Partial<AdminMenuItem>) => Promise<void>;
@@ -443,6 +443,7 @@ export function CreateBillDrawer({
   const phoneInputRef = useRef<HTMLInputElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const submittingRef = useRef(false);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const phoneSearchTimerRef = useRef<NodeJS.Timeout | null>(null);
   const scannedItemsCacheRef = useRef<Map<string, AdminMenuItem>>(new Map());
   const [pricingMode, setPricingMode] = useState<"RETAIL" | "WHOLESALE">("RETAIL");
@@ -664,15 +665,21 @@ export function CreateBillDrawer({
     );
   };
 
-  const handleProceedAsWalkIn = () => {
-    if (submittingRef.current) return;
+  const handleProceedAsWalkIn = async () => {
+    if (submittingRef.current || isSubmitting) return;
     setIsWalkIn?.(true);
     setPhoneHasError(false);
     setShowPhoneRequiredModal(false);
     submittingRef.current = true;
-    Promise.resolve(handleCreateBill(true)).finally(() => {
+    setIsSubmitting(true);
+    try {
+      await handleCreateBill(true, true);
+    } catch (err: any) {
+      setInlineNotice(err?.message || "Failed to proceed to payment.");
+    } finally {
       submittingRef.current = false;
-    });
+      setIsSubmitting(false);
+    }
   };
 
   const handleFocusPhoneInput = () => {
@@ -683,8 +690,8 @@ export function CreateBillDrawer({
     }, 100);
   };
 
-  const validateBeforeCreateBill = (proceedToPayment: boolean) => {
-    if (submittingRef.current) return;
+  const validateBeforeCreateBill = async (proceedToPayment: boolean) => {
+    if (submittingRef.current || isSubmitting) return;
     for (let i = 0; i < draftCartItems.length; i++) {
       const ci = draftCartItems[i];
       const orig = menuItems.find((m) => m.id === ci.menu_item_id);
@@ -715,9 +722,15 @@ export function CreateBillDrawer({
     }
 
     submittingRef.current = true;
-    Promise.resolve(handleCreateBill(proceedToPayment)).finally(() => {
+    setIsSubmitting(true);
+    try {
+      await handleCreateBill(proceedToPayment);
+    } catch (err: any) {
+      setInlineNotice(err?.message || "Failed to process bill.");
+    } finally {
       submittingRef.current = false;
-    });
+      setIsSubmitting(false);
+    }
   };
 
   useEffect(() => {
@@ -729,6 +742,8 @@ export function CreateBillDrawer({
       setSearchQuery("");
       setShowPhoneRequiredModal(false);
       setPhoneHasError(false);
+      submittingRef.current = false;
+      setIsSubmitting(false);
     } else {
       // Auto-focus phone input when drawer opens
       setTimeout(() => {
@@ -765,8 +780,8 @@ export function CreateBillDrawer({
         }
         
         e.preventDefault();
-        if (draftCartItems.length > 0 && !submittingRef.current) {
-          validateBeforeCreateBill(true);
+        if (draftCartItems.length > 0 && !submittingRef.current && !isSubmitting) {
+          void validateBeforeCreateBill(true);
         }
       }
     };
@@ -2223,21 +2238,21 @@ export function CreateBillDrawer({
                 {!editingCompletedBill && (
                   <button
                     type="button"
-                    disabled={draftCartItems.length === 0}
-                    onClick={() => validateBeforeCreateBill(false)}
-                    className="rounded-xl border border-black bg-black py-3 text-base font-bold text-white hover:bg-neutral-800 transition disabled:opacity-50 shadow-sm"
+                    disabled={draftCartItems.length === 0 || isSubmitting}
+                    onClick={() => void validateBeforeCreateBill(false)}
+                    className="rounded-xl border border-black bg-black py-3 text-base font-bold text-white hover:bg-neutral-800 transition disabled:opacity-50 shadow-sm cursor-pointer disabled:cursor-not-allowed"
                   >
-                    Save as Draft
+                    {isSubmitting ? "Saving..." : "Save as Draft"}
                   </button>
                 )}
                 <button
                   type="button"
-                  disabled={draftCartItems.length === 0}
-                  onClick={() => validateBeforeCreateBill(true)}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[var(--accent-brand)] py-3 text-base font-bold text-[var(--text-on-accent)] shadow-md hover:opacity-90 transition disabled:opacity-50"
+                  disabled={draftCartItems.length === 0 || isSubmitting}
+                  onClick={() => void validateBeforeCreateBill(true)}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[var(--accent-brand)] py-3 text-base font-bold text-[var(--text-on-accent)] shadow-md hover:opacity-90 transition disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
                 >
                   <CreditCard className="h-5 w-5" />
-                  {editingCompletedBill ? "Proceed to Settlement" : "Settle & Collect"} <span className="ml-1 opacity-70 font-mono text-xs bg-black/20 px-1.5 rounded">↵</span>
+                  {isSubmitting ? "Processing..." : (editingCompletedBill ? "Proceed to Settlement" : "Settle & Collect")} {!isSubmitting && <span className="ml-1 opacity-70 font-mono text-xs bg-black/20 px-1.5 rounded">↵</span>}
                 </button>
               </div>
 
