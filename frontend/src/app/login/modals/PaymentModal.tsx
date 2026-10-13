@@ -308,10 +308,18 @@ export function PaymentModal({
       base = Math.max(0, base - debitToRecord);
     }
 
-    return base;
-  }, [grandTotalBeforeCredit, applyCreditAmount, recordDebitAmount, settleDebit, effectiveCreditBalance, customerAnalytics]);
+    // Record Credit (Store Credit Kept - cash retained in customer wallet)
+    const creditToRecord = parseFloat(recordCreditAmount) || 0;
+    if (creditToRecord > 0) {
+      base = base + creditToRecord;
+    }
 
-  const adjustOldTotal = editingCompletedBill ? (editingCompletedBill.total_amount || 0) : 0;
+    return base;
+  }, [grandTotalBeforeCredit, applyCreditAmount, recordDebitAmount, recordCreditAmount, settleDebit, effectiveCreditBalance, customerAnalytics]);
+
+  const adjustOldTotal = editingCompletedBill 
+    ? ((editingCompletedBill.total_amount || 0) + (editingCompletedBill.credit_awarded || 0)) 
+    : 0;
   
   const effectiveGrandTotalForCollection = useMemo(() => {
     if (paymentEditMode === "ADJUST" && editingCompletedBill) {
@@ -388,7 +396,7 @@ export function PaymentModal({
     });
 
     return highlighted;
-  }, [remainingNeededAmt, denomTotal, grandTotal]);
+  }, [remainingNeededAmt, denomTotal, grandTotal, effectiveGrandTotalForCollection]);
 
   const smallestSingleNoteForGrandTotal = useMemo(() => {
     return [...DENOMINATIONS].reverse().find((d) => d >= effectiveGrandTotalForCollection) || null;
