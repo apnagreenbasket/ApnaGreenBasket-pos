@@ -4,6 +4,7 @@ import { parseUTCDate } from "./api";
 import { OrderResponse } from "@/types";
 import QRCode from "qrcode";
 import JsBarcode from "jsbarcode";
+import { buildUpiPaymentUri, generateUpiQrDataUrl, getOutletUpiId } from "./upiQr";
 
 // Safe 1D Barcode Renderer for Thermal Receipts (Code 128)
 function drawBarcodeImage(
@@ -107,6 +108,77 @@ export interface ReceiptPdfData {
   };
 }
 
+function calculateOrderPayable(order: any, storeDetails: any): number {
+  const getOutletField = (field: string) => {
+    return storeDetails?.[field] || order?.restaurant?.[field] || order?.outlet?.[field];
+  };
+
+  let totalSellingSubtotal = 0;
+  (order?.items || []).forEach((it: any) => {
+    const qty = parseFloat(String(it.quantity || "1"));
+    const price = parseFloat(String(it.unit_price || "0"));
+    totalSellingSubtotal += price * qty;
+  });
+
+  const discType = order?.discount_type;
+  const discVal = order?.discount_value ? parseFloat(String(order.discount_value)) : 0;
+  let extraDiscountRupees = 0;
+  if (discType === "PERCENT" && discVal > 0) {
+    extraDiscountRupees = totalSellingSubtotal * (discVal / 100);
+  } else if (discType === "FLAT" && discVal > 0) {
+    extraDiscountRupees = discVal;
+  } else if (discType === "COMPLIMENTARY_ITEMS" && discVal > 0) {
+    extraDiscountRupees = discVal;
+  } else if (discType === "COMPLIMENTARY") {
+    extraDiscountRupees = totalSellingSubtotal;
+  }
+
+  const pointsRedeemed = order?.loyalty_points_redeemed || 0;
+  let loyaltyDiscountRupees = 0;
+  if (pointsRedeemed > 0) {
+    const rest = getOutletField("loyalty_redemption_tiers") ? {
+      loyalty_redemption_tiers: getOutletField("loyalty_redemption_tiers"),
+      loyalty_max_bill_percentage: getOutletField("loyalty_max_bill_percentage"),
+    } : (storeDetails || order?.restaurant || {});
+    const currentBalance = order?.customer?.loyalty_points || pointsRedeemed;
+    const tiers: any[] = rest?.loyalty_redemption_tiers || [];
+    const sortedTiers = [...tiers].sort((a: any, b: any) => b.min_points - a.min_points);
+    const applicableTier = sortedTiers.find((t: any) => currentBalance >= t.min_points);
+    const pointValue = applicableTier ? (applicableTier.discount_percentage / 100) : 0;
+    const maxBillPercentage = parseFloat(String(rest?.loyalty_max_bill_percentage || "100.00"));
+    loyaltyDiscountRupees = Math.min(pointsRedeemed * pointValue, (maxBillPercentage / 100) * totalSellingSubtotal);
+  }
+
+  const amountPayable = Math.max(0, totalSellingSubtotal - extraDiscountRupees);
+  const deliveryCharge = parseFloat(String(order?.delivery_charge || 0));
+  const handlingCharge = parseFloat(String(order?.handling_charge || 0));
+  const totalBeforeRound = amountPayable + deliveryCharge + handlingCharge;
+  const netTotal = Math.round(totalBeforeRound);
+
+  let netPaid = netTotal;
+  const creditApplied = parseFloat(String(order?.credit_applied || 0)) || 0;
+  const debitApplied = parseFloat(String(order?.debit_applied || 0)) || 0;
+  const debtSettled = parseFloat(String(order?.debt_settled || 0)) || 0;
+  const creditAwarded = parseFloat(String(order?.credit_awarded || 0)) || 0;
+  const creditCashedOut = parseFloat(String(order?.credit_cashed_out || 0)) || 0;
+
+  if (loyaltyDiscountRupees > 0) netPaid -= loyaltyDiscountRupees;
+  if (creditApplied > 0) netPaid -= creditApplied;
+  if (debitApplied > 0) netPaid -= debitApplied;
+  if (debtSettled > 0) netPaid += debtSettled;
+  if (creditAwarded > 0) netPaid += creditAwarded;
+  if (creditCashedOut > 0) netPaid -= creditCashedOut;
+
+  if (netPaid <= 0 && order?.total_amount) {
+    const rawTotal = parseFloat(String(order.total_amount)) || 0;
+    if (rawTotal > 0 && creditApplied === 0) {
+      netPaid = Math.round(rawTotal);
+    }
+  }
+
+  return netPaid > 0 ? netPaid : (netTotal > 0 ? netTotal : 0);
+}
+
 export async function generateReceiptPDF(
   order: OrderResponse | ReceiptPdfData,
   restaurantName: string = "Outlet Receipt",
@@ -131,10 +203,30 @@ export async function generateReceiptPDF(
 
   const logoUrl = getOutletField("logo_url");
   const billQrUrlRaw = getOutletField("bill_qr_url");
+  const directUpiId = getOutletField("direct_upi_id") || getOutletField("upi_id") || getOutletUpiId(storeDetails) || getOutletUpiId((order as any).restaurant) || getOutletUpiId((order as any).outlet);
+  const rawUpiPayload = getOutletField("raw_upi_payload");
+  const storeName = getOutletField("name") || restaurantName || "ApnaGreen Basket";
   const invoiceNo = (order as any).invoice_no || (order as any).id?.slice(0, 8).toUpperCase() || "RECEIPT";
 
+  // Pre-calculate exact net payable amount
+  const payableAmount = calculateOrderPayable(order, storeDetails);
+
+  // Build standard NPCI dynamic UPI payment deep link
+  const upiUri = buildUpiPaymentUri({
+    upiId: directUpiId,
+    rawPayload: rawUpiPayload,
+    payeeName: storeName,
+    amount: payableAmount,
+    billNo: invoiceNo,
+  });
+
+  // Check if additional charges (delivery or handling) were filled for this bill
+  const rawDelCharge = parseFloat(String((order as any).delivery_charge || 0)) || 0;
+  const rawHandCharge = parseFloat(String((order as any).handling_charge || 0)) || 0;
+  const hasAdditionalCharges = rawDelCharge > 0 || rawHandCharge > 0;
+
   // Pre-load all assets asynchronously once in parallel for instant synchronous rendering
-  const [logoBase64, qrDataUrl, playStoreBase64, appStoreBase64] = await Promise.all([
+  const [logoBase64, qrDataUrl, upiQrDataUrl, playStoreBase64, appStoreBase64] = await Promise.all([
     logoUrl
       ? Promise.race([
         fetchImageAsBase64(logoUrl),
@@ -143,6 +235,9 @@ export async function generateReceiptPDF(
       : Promise.resolve(null),
     billQrUrlRaw
       ? QRCode.toDataURL(billQrUrlRaw, { margin: 1, width: 80 }).catch(() => null)
+      : Promise.resolve(null),
+    upiUri && payableAmount > 0 && hasAdditionalCharges
+      ? generateUpiQrDataUrl(upiUri, { width: 220, margin: 1 }).catch(() => null)
       : Promise.resolve(null),
     Promise.race([
       fetchImageAsBase64("/images/google-play.png"),
@@ -364,6 +459,19 @@ export async function generateReceiptPDF(
     } else if (isInterstate) {
       y += 3.5;
       doc.text(`Supply Type    : Inter-State (IGST)`, margin, y);
+    }
+
+    const custAddress =
+      (order as any).customer_address ||
+      (order as any).customer_extra_detail ||
+      (order as any).customer?.address ||
+      (order as any).customer?.extra_detail;
+    if (hasAdditionalCharges && custAddress && String(custAddress).trim()) {
+      const addrLines = doc.splitTextToSize(`Address : ${String(custAddress).trim()}`, contentWidth);
+      for (const line of addrLines) {
+        y += 3.5;
+        doc.text(line, margin, y);
+      }
     }
 
     y += 2.5;
@@ -890,75 +998,119 @@ export async function generateReceiptPDF(
       drawDashedLine(summaryY);
     }
 
-    // 5. FOOTER & QR CODE + APP STORE BADGES (Side-by-side: QR Code on Left, Google Play & App Store stacked on Right)
-    summaryY += 4;
+    // 5. DYNAMIC UPI PAYMENT QR CODE (For instant customer UPI scan & pay — printed only when additional charges are filled)
+    if (upiQrDataUrl && payableAmount > 0 && hasAdditionalCharges) {
+      summaryY += 2;
+      drawDashedLine(summaryY);
+      summaryY += 4.5;
 
-    const qrSize = 22;
-    const badgeWidth = 28;
-    const badgeHeight = 9.5;
-    const badgeGapY = 2;
-    const qrBadgeGapX = 4.5;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8.5);
+      doc.text("SCAN & PAY VIA UPI", pageWidth / 2, summaryY, { align: "center" });
+      summaryY += 3.5;
 
-    const hasQr = Boolean(billQrUrlRaw);
-    const totalBlockWidth = hasQr ? (qrSize + qrBadgeGapX + badgeWidth) : badgeWidth;
-    const blockStartX = (pageWidth - totalBlockWidth) / 2;
-    const qrX = blockStartX;
-    const badgesX = hasQr ? (blockStartX + qrSize + qrBadgeGapX) : blockStartX;
-
-    const googlePlayY = summaryY + 0.5;
-    const appStoreY = googlePlayY + badgeHeight + badgeGapY;
-
-    // Draw QR Code on the Left
-    if (hasQr && qrDataUrl) {
+      const upiQrSize = 26;
+      const upiQrX = (pageWidth - upiQrSize) / 2;
       try {
-        doc.addImage(qrDataUrl, "PNG", qrX, summaryY, qrSize, qrSize);
+        doc.addImage(upiQrDataUrl, "PNG", upiQrX, summaryY, upiQrSize, upiQrSize);
       } catch (e) {
-        console.warn("Failed to draw QR code", e);
+        console.warn("Failed to render UPI QR code", e);
       }
+      summaryY += upiQrSize + 3;
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8.5);
+      doc.text(`Scan to Pay: INR ${payableAmount.toFixed(2)}`, pageWidth / 2, summaryY, { align: "center" });
+      summaryY += 3.2;
+
+      const displayUpiId = directUpiId || "Merchant UPI";
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6.5);
+      doc.text(`UPI ID: ${displayUpiId}`, pageWidth / 2, summaryY, { align: "center" });
+      summaryY += 2.8;
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(5.5);
+      doc.setTextColor(90, 90, 90);
+      doc.text("GPay • PhonePe • Paytm • BHIM • Any UPI", pageWidth / 2, summaryY, { align: "center" });
+      doc.setTextColor(0, 0, 0);
+
+      summaryY += 3.5;
+      drawDashedLine(summaryY);
+      summaryY += 3;
     }
 
-    // Draw Google Play on top and App Store below it on the Right
-    const drawBadge = (x: number, yPos: number, width: number, height: number, text: string) => {
-      doc.setFillColor(0, 0, 0);
-      doc.roundedRect(x, yPos, width, height, 1.5, 1.5, "F");
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(6.5);
-      doc.setFont("helvetica", "bold");
-      doc.text(text, x + width / 2, yPos + height / 2 + 1, { align: "center" });
-      doc.setTextColor(0, 0, 0);
-    };
+    // 6. APP STORE & WEBSITE BADGES (If configured)
+    const showAppOrWeb = Boolean(billQrUrlRaw && qrDataUrl && !upiQrDataUrl) || Boolean(playStoreBase64) || Boolean(appStoreBase64);
+    if (showAppOrWeb) {
+      const qrSize = 20;
+      const badgeWidth = 26;
+      const badgeHeight = 9;
+      const badgeGapY = 2;
+      const qrBadgeGapX = 4;
 
-    if (playStoreBase64) {
-      try {
-        doc.addImage(playStoreBase64, badgesX, googlePlayY, badgeWidth, badgeHeight);
-      } catch {
+      const hasQr = Boolean(billQrUrlRaw && qrDataUrl && !upiQrDataUrl);
+      const totalBlockWidth = hasQr ? (qrSize + qrBadgeGapX + badgeWidth) : badgeWidth;
+      const blockStartX = (pageWidth - totalBlockWidth) / 2;
+      const qrX = blockStartX;
+      const badgesX = hasQr ? (blockStartX + qrSize + qrBadgeGapX) : blockStartX;
+
+      const googlePlayY = summaryY + 0.5;
+      const appStoreY = googlePlayY + badgeHeight + badgeGapY;
+
+      // Draw Website QR Code on Left if not using UPI QR
+      if (hasQr && qrDataUrl) {
+        try {
+          doc.addImage(qrDataUrl, "PNG", qrX, summaryY, qrSize, qrSize);
+        } catch (e) {
+          console.warn("Failed to draw website QR code", e);
+        }
+      }
+
+      const drawBadge = (x: number, yPos: number, width: number, height: number, text: string) => {
+        doc.setFillColor(0, 0, 0);
+        doc.roundedRect(x, yPos, width, height, 1.5, 1.5, "F");
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(6.5);
+        doc.setFont("helvetica", "bold");
+        doc.text(text, x + width / 2, yPos + height / 2 + 1, { align: "center" });
+        doc.setTextColor(0, 0, 0);
+      };
+
+      if (playStoreBase64) {
+        try {
+          doc.addImage(playStoreBase64, badgesX, googlePlayY, badgeWidth, badgeHeight);
+        } catch {
+          drawBadge(badgesX, googlePlayY, badgeWidth, badgeHeight, "Google Play");
+        }
+      } else {
         drawBadge(badgesX, googlePlayY, badgeWidth, badgeHeight, "Google Play");
       }
-    } else {
-      drawBadge(badgesX, googlePlayY, badgeWidth, badgeHeight, "Google Play");
-    }
 
-    if (appStoreBase64) {
-      try {
-        doc.addImage(appStoreBase64, badgesX, appStoreY, badgeWidth, badgeHeight);
-      } catch {
+      if (appStoreBase64) {
+        try {
+          doc.addImage(appStoreBase64, badgesX, appStoreY, badgeWidth, badgeHeight);
+        } catch {
+          drawBadge(badgesX, appStoreY, badgeWidth, badgeHeight, "App Store");
+        }
+      } else {
         drawBadge(badgesX, appStoreY, badgeWidth, badgeHeight, "App Store");
       }
-    } else {
-      drawBadge(badgesX, appStoreY, badgeWidth, badgeHeight, "App Store");
+
+      doc.link(badgesX, googlePlayY, badgeWidth, badgeHeight, { url: "https://play.google.com/store/apps/details?id=com.apnagreenbasket" });
+      doc.link(badgesX, appStoreY, badgeWidth, badgeHeight, { url: "https://www.apple.com/app-store/" });
+
+      const blockHeight = hasQr ? Math.max(qrSize, badgeHeight * 2 + badgeGapY + 1) : (badgeHeight * 2 + badgeGapY);
+      summaryY += blockHeight + 4;
     }
 
-    // Interactive links for digital receipt viewing
-    doc.link(badgesX, googlePlayY, badgeWidth, badgeHeight, { url: "https://play.google.com/store/apps/details?id=com.apnagreenbasket" });
-    doc.link(badgesX, appStoreY, badgeWidth, badgeHeight, { url: "https://www.apple.com/app-store/" });
-
-    const blockHeight = hasQr ? Math.max(qrSize, badgeHeight * 2 + badgeGapY + 1) : (badgeHeight * 2 + badgeGapY);
-    summaryY += blockHeight + 5;
-
-    // 6. PAYMENT STATUS STAMP & FOOTER BLOCK
+    // 7. PAYMENT STATUS STAMP & FOOTER BLOCK
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8);
-    doc.text("STATUS: PAID & SETTLED", pageWidth / 2, summaryY, { align: "center" });
+    const orderStatus = (order as any).status;
+    const isSettled = orderStatus === "COMPLETED" || orderStatus === "PAID" || orderStatus === "SETTLED" || (order as any).is_paid;
+    const statusText = isSettled ? "STATUS: PAID & SETTLED" : "STATUS: PAYMENT PENDING";
+    doc.text(statusText, pageWidth / 2, summaryY, { align: "center" });
 
     summaryY += 4.5;
     doc.setFont("helvetica", "bold");

@@ -34,6 +34,7 @@ class CreateManualBillRequest(StrictSchema):
     basket_number: str = "WALK-IN"
     customer_name: str | None = None
     customer_phone: str | None = None
+    customer_address: str | None = Field(None, max_length=500)
     customer_extra_detail: str | None = Field(None, max_length=1000)
     customer_gstin: str | None = Field(None, max_length=15)
     customer_legal_name: str | None = Field(None, max_length=255)
@@ -47,6 +48,7 @@ class UpdateManualBillRequest(StrictSchema):
     basket_number: str | None = None
     customer_name: str | None = None
     customer_phone: str | None = None
+    customer_address: str | None = Field(None, max_length=500)
     customer_extra_detail: str | None = Field(None, max_length=1000)
     customer_gstin: str | None = Field(None, max_length=15)
     customer_legal_name: str | None = Field(None, max_length=255)
@@ -174,6 +176,8 @@ class BillResponse(BaseResponse):
     customer_phone: str | None = None
     customer_gstin: str | None = None
     customer_legal_name: str | None = None
+    customer_address: str | None = None
+    customer_extra_detail: str | None = None
     status: str
     is_void: bool = False
     source: str

@@ -3,6 +3,7 @@ import autoTable from "jspdf-autotable";
 import { parseUTCDate } from "./api";
 import { OrderResponse } from "@/types";
 import { ReceiptPdfData } from "./pdfGenerator";
+import { buildUpiPaymentUri, generateUpiQrDataUrl, getOutletUpiId } from "./upiQr";
 
 // Helper to safely fetch an image and convert it to Base64 (bypassing canvas CORS issues for relative paths)
 async function fetchImageAsBase64(url: string): Promise<string> {
@@ -162,6 +163,10 @@ export async function generateA4InvoicePDF(
   const posVal = (order as any).place_of_supply || (order as any).customer?.state_code || placeOfSupply || "";
   const isInterstateBill = Boolean((order as any).is_interstate);
 
+  const rawDelCharge = parseFloat(String((order as any).delivery_charge || 0)) || 0;
+  const rawHandCharge = parseFloat(String((order as any).handling_charge || 0)) || 0;
+  const hasAdditionalCharges = rawDelCharge > 0 || rawHandCharge > 0;
+
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
   doc.text("Billed To:", margin, currentY + 4);
@@ -182,6 +187,18 @@ export async function generateA4InvoicePDF(
     doc.text(`Customer GSTIN: ${cGstin}`, margin, billedY); billedY += 4.5;
     doc.setFont("helvetica", "normal");
   }
+
+  const cAddress =
+    (order as any).customer_address ||
+    (order as any).customer_extra_detail ||
+    (order as any).customer?.address ||
+    (order as any).customer?.extra_detail;
+  if (hasAdditionalCharges && cAddress && String(cAddress).trim()) {
+    const splitAddr = doc.splitTextToSize(`Address: ${String(cAddress).trim()}`, pageWidth / 2 - margin);
+    doc.text(splitAddr, margin, billedY);
+    billedY += splitAddr.length * 4.5;
+  }
+
   if (posVal) {
     doc.text(`Place of Supply: ${posVal}`, margin, billedY); billedY += 4.5;
   }
@@ -555,6 +572,69 @@ export async function generateA4InvoicePDF(
     doc.text(splitRef, margin, pY);
     pY += splitRef.length * 4;
     doc.setTextColor(0, 0, 0);
+  }
+
+  // Dynamic UPI Payment QR Code Card on A4 Invoice
+  const directUpiId = getOutletField("direct_upi_id") || getOutletField("upi_id") || getOutletUpiId(storeDetails) || getOutletUpiId((order as any).restaurant) || getOutletUpiId((order as any).outlet);
+  const rawUpiPayload = getOutletField("raw_upi_payload") || storeDetails?.raw_upi_payload;
+  const payableAmount = netPaid > 0 ? netPaid : (finalNetTotal > 0 ? finalNetTotal : 0);
+
+  const upiUri = buildUpiPaymentUri({
+    upiId: directUpiId,
+    rawPayload: rawUpiPayload,
+    payeeName: rName,
+    amount: payableAmount,
+    billNo: invoiceNo,
+  });
+
+  const upiQrDataUrl = (upiUri && payableAmount > 0 && hasAdditionalCharges)
+    ? await generateUpiQrDataUrl(upiUri, { width: 220, margin: 1 })
+    : null;
+
+  if (upiQrDataUrl && payableAmount > 0 && hasAdditionalCharges) {
+    pY += 3;
+    const cardWidth = 88;
+    const cardHeight = 31;
+    const qrBoxSize = 25;
+
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(203, 213, 225);
+    doc.roundedRect(margin, pY, cardWidth, cardHeight, 2, 2, "FD");
+
+    try {
+      doc.addImage(upiQrDataUrl, "PNG", margin + 3, pY + 3, qrBoxSize, qrBoxSize);
+    } catch (e) {
+      console.warn("Failed to render invoice UPI QR", e);
+    }
+
+    const textX = margin + qrBoxSize + 6;
+    let tLineY = pY + 6.5;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.setTextColor(15, 23, 42);
+    doc.text("SCAN & PAY VIA UPI", textX, tLineY);
+    tLineY += 4.5;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(14, 116, 144);
+    doc.text(`Amount: Rs. ${payableAmount.toFixed(2)}`, textX, tLineY);
+    tLineY += 4;
+
+    const displayUpi = directUpiId || "Merchant UPI";
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(51, 65, 85);
+    doc.text(`UPI: ${displayUpi}`, textX, tLineY);
+    tLineY += 3.5;
+
+    doc.setFontSize(6);
+    doc.setTextColor(100, 116, 139);
+    doc.text("GPay • PhonePe • Paytm • BHIM", textX, tLineY);
+
+    doc.setTextColor(0, 0, 0);
+    pY += cardHeight + 4;
   }
 
   // 5. STATUTORY GST BREAKUP TABLE (RULE 46 COMPLIANT)

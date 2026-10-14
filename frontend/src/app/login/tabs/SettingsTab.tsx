@@ -231,6 +231,20 @@ export function SettingsTab({
                 </label>
               )}
 
+              <label className="block space-y-1">
+                <span className="text-xs uppercase tracking-wide text-[var(--text-muted)] font-semibold">Store Direct UPI ID (For Scan &amp; Pay Bill QR)</span>
+                <input
+                  type="text"
+                  value={restaurantForm.direct_upi_id}
+                  onChange={(event) => setRestaurantForm((current) => ({ ...current, direct_upi_id: event.target.value }))}
+                  className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3 py-2 font-mono text-sm"
+                  placeholder="e.g. apnagreenbasket@icici or 9876543210@paytm"
+                />
+                <span className="text-[10px] text-[var(--text-muted)] block">
+                  Encodes the exact net payable bill amount into dynamic QR codes on printed receipts, A4 invoices, and POS screens for instant customer UPI payment.
+                </span>
+              </label>
+
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block space-y-1">
                   <span className="text-xs uppercase tracking-wide text-[var(--text-muted)] font-semibold">GSTIN</span>

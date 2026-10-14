@@ -13,6 +13,7 @@ import React from "react";
 import type { ManualBill } from "@/types";
 import type { RestaurantProfile } from "../adminTypes";
 import type { CustomerAnalytics } from "./CustomerInsightsModal";
+import { buildUpiPaymentUri, generateUpiQrDataUrl, getOutletUpiId } from "@/lib/upiQr";
 
 type PaymentModalProps = {
   isOpen: boolean;
@@ -91,6 +92,8 @@ export function PaymentModal({
   const [isCustomUpiEditing, setIsCustomUpiEditing] = useState<boolean>(false);
   const [directUpiCustomAmount, setDirectUpiCustomAmount] = useState<string>("");
   const [isDirectUpiEditing, setIsDirectUpiEditing] = useState<boolean>(false);
+  const [screenUpiQrUrl, setScreenUpiQrUrl] = useState<string | null>(null);
+  const [isGeneratingScreenQr, setIsGeneratingScreenQr] = useState<boolean>(false);
   const [customerAnalytics, setCustomerAnalytics] = useState<CustomerAnalytics | null>(null);
   const [redeemPoints, setRedeemPoints] = useState<number>(0);
   const [deliveryCharge, setDeliveryCharge] = useState<number>(0);
@@ -355,6 +358,44 @@ export function PaymentModal({
 
   const directUpiShortfall = Math.max(0, effectiveGrandTotalForCollection - effectiveDirectUpiAmount);
   const directUpiSurplus = Math.max(0, effectiveDirectUpiAmount - effectiveGrandTotalForCollection);
+
+  const outletDirectUpiId = useMemo(() => {
+    return getOutletUpiId(restaurant);
+  }, [restaurant]);
+
+  useEffect(() => {
+    if (!isOpen || selectedPaymentMethod !== "UPI") {
+      setScreenUpiQrUrl(null);
+      return;
+    }
+
+    const billNo = (paymentTargetBill as any)?.invoice_no || paymentTargetBill?.basket_number || paymentTargetBill?.id?.slice(0, 8).toUpperCase() || "BILL";
+    const upiUri = buildUpiPaymentUri({
+      upiId: outletDirectUpiId,
+      rawPayload: restaurant?.raw_upi_payload,
+      payeeName: restaurant?.name || "ApnaGreen Basket",
+      amount: effectiveDirectUpiAmount,
+      billNo: billNo,
+    });
+
+    if (!upiUri || effectiveDirectUpiAmount <= 0) {
+      setScreenUpiQrUrl(null);
+      return;
+    }
+
+    setIsGeneratingScreenQr(true);
+    generateUpiQrDataUrl(upiUri, { width: 260, margin: 1 })
+      .then((url) => {
+        setScreenUpiQrUrl(url);
+      })
+      .catch((err) => {
+        console.error("Failed to generate screen UPI QR", err);
+        setScreenUpiQrUrl(null);
+      })
+      .finally(() => {
+        setIsGeneratingScreenQr(false);
+      });
+  }, [isOpen, selectedPaymentMethod, effectiveDirectUpiAmount, outletDirectUpiId, restaurant?.raw_upi_payload, restaurant?.name, (paymentTargetBill as any)?.invoice_no, paymentTargetBill?.basket_number, paymentTargetBill?.id]);
 
   const creditCashedOut = useMemo(() => {
     const creditToApply = parseFloat(applyCreditAmount) || 0;
@@ -1962,14 +2003,64 @@ export function PaymentModal({
               </div>
             ) : (
               <div className="flex-1 flex flex-col justify-between p-4 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] space-y-3 overflow-y-auto">
-                <div className="flex-1 flex flex-col items-center justify-center text-center p-6 rounded-xl border border-sky-500/20 bg-sky-500/5 space-y-3">
-                  <div className="w-14 h-14 rounded-2xl bg-sky-500/10 border border-sky-500/30 flex items-center justify-center text-sky-400">
-                    <QrCode className="h-7 w-7" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-[var(--text-primary)]">Direct QR Code Payment</p>
-                    <p className="text-xs text-[var(--text-muted)]">Scan QR on customer screen or EDC device</p>
-                  </div>
+                <div className="flex-1 flex flex-col items-center justify-center text-center p-4 rounded-xl border border-sky-500/20 bg-sky-500/5 space-y-2.5">
+                  {outletDirectUpiId || restaurant?.raw_upi_payload ? (
+                    <div className="flex flex-col items-center space-y-2">
+                      <div className="p-2.5 bg-white rounded-2xl shadow-sm border border-neutral-200 flex flex-col items-center">
+                        {isGeneratingScreenQr ? (
+                          <div className="w-40 h-40 flex flex-col items-center justify-center">
+                            <Loader2 className="w-7 h-7 text-sky-500 animate-spin" />
+                            <span className="text-[10px] text-neutral-500 font-medium mt-1.5">Generating QR...</span>
+                          </div>
+                        ) : screenUpiQrUrl ? (
+                          <>
+                            <img
+                              src={screenUpiQrUrl}
+                              alt="Scan & Pay via UPI"
+                              className="w-40 h-40 object-contain rounded-lg"
+                            />
+                            <div className="flex items-center gap-1.5 mt-1 text-[10px] font-bold text-neutral-800 tracking-tight">
+                              <span>GPay</span>
+                              <span>•</span>
+                              <span>PhonePe</span>
+                              <span>•</span>
+                              <span>Paytm</span>
+                              <span>•</span>
+                              <span>BHIM</span>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="w-40 h-40 flex flex-col items-center justify-center text-neutral-400">
+                            <QrCode className="w-10 h-10" />
+                            <span className="text-[10px] mt-1">Unable to generate QR</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="space-y-0.5">
+                        <p className="text-xs font-bold text-[var(--text-primary)]">
+                          {restaurant?.name || "ApnaGreen Basket"}
+                        </p>
+                        <p className="text-[11px] font-mono font-semibold text-sky-400">
+                          {outletDirectUpiId || "Merchant UPI"}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center space-y-2 py-2">
+                      <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                        <QrCode className="h-6 w-6" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-[var(--text-primary)]">Direct QR Code Payment</p>
+                        <p className="text-xs text-amber-400 font-medium mt-0.5">
+                          No Store UPI ID configured
+                        </p>
+                        <p className="text-[10px] text-[var(--text-muted)] mt-0.5 max-w-xs">
+                          Configure your Direct UPI ID in Outlet Settings &gt; Billing &amp; Taxes to display dynamic QR codes.
+                        </p>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Amount display with Edit Pencil */}
                   <div className="flex items-center gap-2 bg-[var(--bg-surface)] border border-[var(--border-strong)] px-3.5 py-2 rounded-xl shadow-xs">

@@ -81,12 +81,14 @@ async def create_manual_bill(
     cust = None
     if data.customer_phone and data.customer_phone.strip():
         from app.services.customer_service import create_customer
+        addr_val = getattr(data, "customer_address", None) or getattr(data, "customer_extra_detail", None)
         cust = await create_customer(
             db,
             outlet_id,
             name=data.customer_name or "POS Customer",
             phone=data.customer_phone,
-            extra_detail=data.customer_extra_detail,
+            extra_detail=addr_val,
+            address=addr_val,
             gstin=getattr(data, "customer_gstin", None),
             legal_name=getattr(data, "customer_legal_name", None),
         )
@@ -409,13 +411,14 @@ async def update_manual_bill(
 
     if data.customer_phone and data.customer_phone.strip():
 
-        from app.services.customer_service import create_customer
+        addr_val = getattr(data, "customer_address", None) or getattr(data, "customer_extra_detail", None)
         cust = await create_customer(
             db,
             outlet_id,
             name=data.customer_name or order.customer_name or "POS Customer",
             phone=data.customer_phone,
-            extra_detail=getattr(data, "customer_extra_detail", None),
+            extra_detail=addr_val,
+            address=addr_val,
             gstin=getattr(data, "customer_gstin", None),
             legal_name=getattr(data, "customer_legal_name", None),
         )

@@ -27,7 +27,6 @@ export function EditCustomerModal({
 }: EditCustomerModalProps) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [extraDetail, setExtraDetail] = useState("");
   const [address, setAddress] = useState("");
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
@@ -38,8 +37,7 @@ export function EditCustomerModal({
     if (customer) {
       setName(customer.name || "");
       setPhone(customer.phone || "");
-      setExtraDetail(customer.extra_detail || "");
-      setAddress(customer.address || "");
+      setAddress(customer.address || customer.extra_detail || "");
       setCity(customer.city || "");
       setState(customer.state || "");
     }
@@ -57,12 +55,13 @@ export function EditCustomerModal({
     try {
       setIsSubmitting(true);
       setError(null);
+      const cleanAddr = address.trim() || undefined;
       await onEditCustomer(
         customer.id,
         name.trim(),
         phone.trim(),
-        extraDetail.trim(),
-        address.trim() || undefined,
+        cleanAddr || "",
+        cleanAddr,
         city.trim() || undefined,
         state.trim() || undefined
       );
@@ -174,19 +173,6 @@ export function EditCustomerModal({
                 className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3 py-2.5 text-xs text-[var(--text-primary)] focus:border-purple-500 focus:outline-none"
               />
             </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-[var(--text-primary)] mb-1">
-              Extra Detail / Notes
-            </label>
-            <textarea
-              placeholder="e.g. Delivery instructions, notes"
-              value={extraDetail}
-              onChange={(e) => setExtraDetail(e.target.value)}
-              rows={2}
-              className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3 py-2.5 text-xs text-[var(--text-primary)] focus:border-purple-500 focus:outline-none resize-none"
-            />
           </div>
 
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-[var(--border-subtle)]">

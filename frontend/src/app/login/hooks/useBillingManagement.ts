@@ -271,6 +271,7 @@ export function useBillingManagement({
         basket_number: selectedTable || "WALK-IN",
         customer_name: customerName || null,
         customer_phone: payloadPhone,
+        customer_address: customerExtraDetail || null,
         customer_extra_detail: customerExtraDetail || null,
         is_interstate: isInterstate,
         place_of_supply: placeOfSupply || null,

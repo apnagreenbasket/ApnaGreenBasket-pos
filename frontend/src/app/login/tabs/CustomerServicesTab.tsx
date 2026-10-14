@@ -6,6 +6,7 @@ import {
   Building2,
   Calendar,
   IndianRupee,
+  MapPin,
   Phone,
   Plus,
   QrCode,
@@ -323,7 +324,7 @@ export function CustomerServicesTab({
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-[var(--text-muted)]" />
               <input
                 type="text"
-                placeholder="Search customer name or phone number..."
+                placeholder="Search customer name, phone, or address..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] py-2 pl-9 pr-3 text-xs text-[var(--text-primary)] focus:border-purple-500 focus:outline-none"
@@ -359,6 +360,7 @@ export function CustomerServicesTab({
                   <tr>
                     <th className="py-3 px-4">Customer Name</th>
                     <th className="py-3 px-4">Phone Number</th>
+                    <th className="py-3 px-4">Address</th>
                     <th className="py-3 px-4 text-right">Orders</th>
                     <th className="py-3 px-4 text-right">Spent</th>
                     <th className="py-3 px-4 text-right">Balance</th>
@@ -370,13 +372,13 @@ export function CustomerServicesTab({
                 <tbody className="divide-y divide-[var(--border-subtle)]">
                   {isLoading ? (
                     <tr>
-                      <td colSpan={7} className="py-12 text-center text-[var(--text-muted)]">
+                      <td colSpan={9} className="py-12 text-center text-[var(--text-muted)]">
                         Loading customer records...
                       </td>
                     </tr>
                   ) : customers.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-12 text-center">
+                      <td colSpan={9} className="py-12 text-center">
                         <div className="flex flex-col items-center justify-center gap-3">
                           <Users className="h-10 w-10 text-purple-400/40" />
                           <p className="text-sm font-medium text-[var(--text-muted)]">
@@ -407,21 +409,40 @@ export function CustomerServicesTab({
                             <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20 font-bold shrink-0">
                               {c.name.charAt(0).toUpperCase()}
                             </span>
-                            <div>
-                              <div>{c.name}</div>
-                              {(c.city || c.state) && (
-                                <div className="text-[10px] font-normal text-[var(--text-muted)]">
-                                  {[c.city, c.state].filter(Boolean).join(", ")}
-                                </div>
-                              )}
-                            </div>
+                            <span className="font-semibold text-sm text-[var(--text-primary)]">{c.name}</span>
                           </span>
                         </td>
-                        <td className="py-3 px-4 font-mono text-[var(--text-secondary)]">
+                        <td className="py-3 px-4 font-mono text-[var(--text-secondary)] whitespace-nowrap">
                           <span className="inline-flex items-center gap-1">
                             <Phone className="h-3 w-3 text-[var(--text-muted)]" />
                             {c.phone}
                           </span>
+                        </td>
+                        <td className="py-3 px-4 text-[var(--text-secondary)] max-w-xs">
+                          {(() => {
+                            const fullAddr = c.address || c.extra_detail;
+                            const cityState = [c.city, c.state].filter(Boolean).join(", ");
+                            if (!fullAddr && !cityState) {
+                              return <span className="text-[var(--text-muted)] italic text-xs">—</span>;
+                            }
+                            return (
+                              <div className="flex items-start gap-1.5 text-xs">
+                                <MapPin className="h-3.5 w-3.5 text-purple-400 shrink-0 mt-0.5" />
+                                <div className="min-w-0">
+                                  {fullAddr && (
+                                    <p className="font-medium text-[var(--text-primary)] break-words leading-snug">
+                                      {fullAddr}
+                                    </p>
+                                  )}
+                                  {cityState && (
+                                    <p className="text-[11px] text-[var(--text-muted)] leading-snug">
+                                      {cityState}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td className="py-3 px-4 text-center font-mono font-bold text-blue-400">
                           {c.total_orders || 0}

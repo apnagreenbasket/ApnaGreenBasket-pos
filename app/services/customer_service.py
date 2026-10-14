@@ -33,7 +33,7 @@ async def list_customers(
     if search and search.strip():
         q = f"%{search.strip()}%"
         stmt = stmt.where(
-            (Customer.name.ilike(q)) | (Customer.phone.ilike(q))
+            (Customer.name.ilike(q)) | (Customer.phone.ilike(q)) | (Customer.address.ilike(q)) | (Customer.extra_detail.ilike(q))
         )
     stmt = stmt.order_by(Customer.created_at.desc())
 
@@ -111,7 +111,7 @@ async def list_customers(
         if search and search.strip():
             q = f"%{search.strip()}%"
             all_matching_stmt = all_matching_stmt.where(
-                (Customer.name.ilike(q)) | (Customer.phone.ilike(q))
+                (Customer.name.ilike(q)) | (Customer.phone.ilike(q)) | (Customer.address.ilike(q)) | (Customer.extra_detail.ilike(q))
             )
         all_matching_res = await db.execute(all_matching_stmt)
         all_matching_rows = all_matching_res.all()
@@ -151,6 +151,15 @@ async def create_customer(
     clean_phone = phone.strip()
     clean_name = name.strip()
 
+    clean_extra = extra_detail.strip() if extra_detail is not None else None
+    clean_addr = address.strip() if address is not None else None
+
+    # Mirroring: sync address and extra_detail if only one is provided
+    if clean_extra and not clean_addr:
+        clean_addr = clean_extra[:500]
+    elif clean_addr and not clean_extra:
+        clean_extra = clean_addr
+
     existing = await db.execute(
         select(Customer).where(
             Customer.outlet_id == outlet_id,
@@ -160,16 +169,16 @@ async def create_customer(
     cust = existing.scalar_one_or_none()
     if cust:
         cust.name = clean_name
-        if extra_detail is not None:
-            cust.extra_detail = extra_detail
+        if clean_extra is not None:
+            cust.extra_detail = clean_extra
+        if clean_addr is not None:
+            cust.address = clean_addr
         if gstin is not None:
             cust.gstin = gstin.strip().upper() if gstin else None
         if legal_name is not None:
             cust.legal_name = legal_name.strip() if legal_name else None
         if state_code is not None:
             cust.state_code = state_code.strip() if state_code else None
-        if address is not None:
-            cust.address = address.strip() if address else None
         if city is not None:
             cust.city = city.strip() if city else None
         if state is not None:
@@ -183,11 +192,11 @@ async def create_customer(
         outlet_id=outlet_id,
         name=clean_name,
         phone=clean_phone,
-        extra_detail=extra_detail,
+        extra_detail=clean_extra,
         gstin=gstin.strip().upper() if gstin else None,
         legal_name=legal_name.strip() if legal_name else None,
         state_code=state_code.strip() if state_code else None,
-        address=address.strip() if address else None,
+        address=clean_addr,
         city=city.strip() if city else None,
         state=state.strip() if state else None,
     )
@@ -224,16 +233,35 @@ async def update_customer(
 
     if name is not None:
         cust.name = name
-    if extra_detail is not None:
-        cust.extra_detail = extra_detail
+
+    clean_extra = extra_detail.strip() if extra_detail is not None else None
+    clean_addr = address.strip() if address is not None else None
+
+    # Mirroring: sync address and extra_detail if only one is updated or provided
+    if extra_detail is not None and address is None:
+        cust.extra_detail = clean_extra
+        if clean_extra:
+            cust.address = clean_extra[:500]
+    elif address is not None and extra_detail is None:
+        cust.address = clean_addr
+        if clean_addr:
+            cust.extra_detail = clean_addr
+    else:
+        if extra_detail is not None:
+            cust.extra_detail = clean_extra
+            if clean_extra and not clean_addr:
+                cust.address = clean_extra[:500]
+        if address is not None:
+            cust.address = clean_addr
+            if clean_addr and not clean_extra:
+                cust.extra_detail = clean_addr
+
     if gstin is not None:
         cust.gstin = gstin.strip().upper() if gstin else None
     if legal_name is not None:
         cust.legal_name = legal_name.strip() if legal_name else None
     if state_code is not None:
         cust.state_code = state_code.strip() if state_code else None
-    if address is not None:
-        cust.address = address.strip() if address else None
     if city is not None:
         cust.city = city.strip() if city else None
     if state is not None:
@@ -309,7 +337,8 @@ async def get_customer_analytics(
     cust_name = cust.name if cust else "Walk-In Customer"
     loyalty_points = cust.loyalty_points if cust else 0
     credit_balance = float(cust.credit_balance) if cust else 0.0
-    extra_detail = cust.extra_detail if cust else None
+    extra_detail = (cust.extra_detail or cust.address) if cust else None
+    address_val = (cust.address or cust.extra_detail) if cust else None
 
     # Base query for paid, completed, or partially refunded orders
     order_stmt = select(Order.id, Order.total_amount, Order.created_at).where(
@@ -453,6 +482,7 @@ async def get_customer_analytics(
         "loyalty_points": loyalty_points,
         "credit_balance": credit_balance,
         "extra_detail": extra_detail,
+        "address": address_val,
         "best_categories": best_categories,
         "best_items": best_items,
     }

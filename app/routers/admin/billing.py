@@ -127,6 +127,8 @@ def _format_bill_response(order: Order, staff_user: Any = None) -> BillResponse:
     cust_obj = order.__dict__.get("customer")
     cust_gstin = getattr(cust_obj, "gstin", None) if cust_obj else None
     cust_legal = getattr(cust_obj, "legal_name", None) if cust_obj else None
+    cust_addr = getattr(cust_obj, "address", None) or getattr(cust_obj, "extra_detail", None) if cust_obj else None
+    cust_extra = getattr(cust_obj, "extra_detail", None) or getattr(cust_obj, "address", None) if cust_obj else None
 
     tot_amt = float(order.total_amount) if order.total_amount is not None else 0.0
     total_refunded = round(
@@ -171,6 +173,8 @@ def _format_bill_response(order: Order, staff_user: Any = None) -> BillResponse:
         customer_phone=order.customer_phone,
         customer_gstin=cust_gstin,
         customer_legal_name=cust_legal,
+        customer_address=cust_addr,
+        customer_extra_detail=cust_extra,
         status=order.status.value if hasattr(order.status, "value") else str(order.status),
         is_void=getattr(order, "is_void", False),
         source=order.source or "manual",

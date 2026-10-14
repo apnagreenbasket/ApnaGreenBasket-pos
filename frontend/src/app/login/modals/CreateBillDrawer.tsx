@@ -468,7 +468,9 @@ export function CreateBillDrawer({
   }, [restaurant?.interstate_mode, setIsInterstate, isInterstate]);
 
   // Customer Auto-suggest & Analytics state
-  const [customerSuggestions, setCustomerSuggestions] = useState<{ name: string; phone: string; gstin?: string; legal_name?: string; state_code?: string }[]>([]);
+  const [customerSuggestions, setCustomerSuggestions] = useState<
+    { name: string; phone: string; gstin?: string; legal_name?: string; state_code?: string; extra_detail?: string; address?: string }[]
+  >([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [highlightedSuggestionIndex, setHighlightedSuggestionIndex] = useState(-1);
   const [customerAnalytics, setCustomerAnalytics] = useState<CustomerAnalytics | null>(null);
@@ -806,8 +808,9 @@ export function CreateBillDrawer({
       if (data.customer_name && data.customer_name !== "Walk-In Customer") {
         setCustomerName(data.customer_name);
       }
-      if (data.extra_detail) {
-        setCustomerExtraDetail(data.extra_detail);
+      const savedAddress = data.extra_detail || (data as any).address;
+      if (savedAddress) {
+        setCustomerExtraDetail(savedAddress);
       } else {
         setCustomerExtraDetail("");
       }
@@ -1712,6 +1715,7 @@ export function CreateBillDrawer({
                             if (s.gstin && setCustomerGstin) setCustomerGstin(s.gstin);
                             if (s.legal_name && setCustomerLegalName) setCustomerLegalName(s.legal_name);
                             if (s.state_code && setPlaceOfSupply) setPlaceOfSupply(s.state_code);
+                            if (s.extra_detail || s.address) setCustomerExtraDetail(s.extra_detail || s.address || "");
                             setShowSuggestions(false);
                             setHighlightedSuggestionIndex(-1);
                             setPhoneHasError(false);
@@ -1731,6 +1735,7 @@ export function CreateBillDrawer({
                             if (exact.gstin && setCustomerGstin) setCustomerGstin(exact.gstin);
                             if (exact.legal_name && setCustomerLegalName) setCustomerLegalName(exact.legal_name);
                             if (exact.state_code && setPlaceOfSupply) setPlaceOfSupply(exact.state_code);
+                            if (exact.extra_detail || exact.address) setCustomerExtraDetail(exact.extra_detail || exact.address || "");
                             setShowSuggestions(false);
                             setHighlightedSuggestionIndex(-1);
                             setPhoneHasError(false);
@@ -1788,6 +1793,7 @@ export function CreateBillDrawer({
                               if (s.gstin && setCustomerGstin) setCustomerGstin(s.gstin);
                               if (s.legal_name && setCustomerLegalName) setCustomerLegalName(s.legal_name);
                               if (s.state_code && setPlaceOfSupply) setPlaceOfSupply(s.state_code);
+                              if (s.extra_detail || s.address) setCustomerExtraDetail(s.extra_detail || s.address || "");
                               setShowSuggestions(false);
                               setHighlightedSuggestionIndex(-1);
                               setPhoneHasError(false);
@@ -1834,11 +1840,11 @@ export function CreateBillDrawer({
                 
                 <div>
                   <label className="block text-base font-semibold text-[var(--text-muted)] mb-1">
-                    Extra Detail
+                    Customer Address
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. Address"
+                    placeholder="e.g. House No., Street, Landmark"
                     value={customerExtraDetail}
                     onChange={(e) => setCustomerExtraDetail(e.target.value)}
                     className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-2.5 py-1 text-base text-[var(--text-primary)] focus:border-sky-500 focus:outline-none"
