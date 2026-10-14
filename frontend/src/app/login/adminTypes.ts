@@ -23,7 +23,8 @@ export type AdminTab =
   | "customerservices"
   | "sessions"
   | "qrcodes"
-  | "settings";
+  | "settings"
+  | "expenses";
 
 export interface ActiveRoleContext {
   staff_id: string;

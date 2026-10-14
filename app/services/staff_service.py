@@ -44,7 +44,7 @@ ROLE_PERMISSIONS_MAP: dict[RoleEnum, RolePermissions] = {
         can_process_payments=True,
         can_manage_orders=True,
         can_view_analytics=True,
-        allowed_sidebar_tabs=["orders", "billing", "menu", "staff", "analytics", "inventory", "customerservices", "settings", "qrcodes", "sessions"],
+        allowed_sidebar_tabs=["orders", "billing", "menu", "staff", "analytics", "inventory", "customerservices", "settings", "qrcodes", "sessions", "expenses"],
     ),
     RoleEnum.OUTLET_ADMIN: RolePermissions(
         can_manage_staff=True,
@@ -55,7 +55,7 @@ ROLE_PERMISSIONS_MAP: dict[RoleEnum, RolePermissions] = {
         can_process_payments=True,
         can_manage_orders=True,
         can_view_analytics=True,
-        allowed_sidebar_tabs=["orders", "billing", "menu", "staff", "analytics", "inventory", "customerservices", "settings", "qrcodes", "sessions"],
+        allowed_sidebar_tabs=["orders", "billing", "menu", "staff", "analytics", "inventory", "customerservices", "settings", "qrcodes", "sessions", "expenses"],
     ),
     RoleEnum.MANAGER: RolePermissions(
         can_manage_staff=True,

@@ -45,6 +45,7 @@ from app.schemas.return_ledger import (
 )
 from app.services.inventory_service import process_order_auto_deduction
 from app.services.outbox_service import append_to_outbox
+from app.services.customer_service import create_customer
 from app.models.customer_ledger import CustomerLedger
 import csv
 import io
@@ -80,7 +81,6 @@ async def create_manual_bill(
     cust_id = None
     cust = None
     if data.customer_phone and data.customer_phone.strip():
-        from app.services.customer_service import create_customer
         addr_val = getattr(data, "customer_address", None) or getattr(data, "customer_extra_detail", None)
         cust = await create_customer(
             db,

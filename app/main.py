@@ -195,6 +195,7 @@ def create_app() -> FastAPI:
     from app.routers.admin.catalogues import router as catalogues_router
     from app.routers.admin.notifications import router as notifications_router
     from app.routers.admin.bulk_operations import router as bulk_operations_router
+    from app.routers.admin.expenses import router as expenses_router
     from app.routers.public.menu import router as public_menu_router
     from app.routers.public.orders import router as public_orders_router
     from app.routers.public.sessions import router as sessions_router
@@ -218,6 +219,7 @@ def create_app() -> FastAPI:
     app.include_router(catalogues_router)
     app.include_router(notifications_router)
     app.include_router(bulk_operations_router)
+    app.include_router(expenses_router)
     app.include_router(public_menu_router)
     app.include_router(public_orders_router)
     app.include_router(sessions_router)

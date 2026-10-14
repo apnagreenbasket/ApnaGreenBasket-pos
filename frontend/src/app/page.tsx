@@ -37,6 +37,7 @@ import { InventoryTab } from "./login/tabs/InventoryTab";
 import { CustomerServicesTab } from "./login/tabs/CustomerServicesTab";
 import { QrCodesTab } from "./login/tabs/QrCodesTab";
 import { SettingsTab } from "./login/tabs/SettingsTab";
+import { ExpensesTab } from "./login/tabs/ExpensesTab";
 
 import { AbandonedCartsPanel } from "./login/modals/AbandonedCartsPanel";
 import { StaffAssistBasketModal } from "./login/modals/StaffAssistBasketModal";
@@ -64,6 +65,7 @@ const VALID_TABS: AdminTab[] = [
   "qrcodes",
   "settings",
   "sessions",
+  "expenses",
 ];
 
 const TAB_TITLES: Record<AdminTab, string> = {
@@ -77,6 +79,7 @@ const TAB_TITLES: Record<AdminTab, string> = {
   qrcodes: "QR & Tables",
   settings: "Outlet Settings",
   sessions: "Baskets & Carts",
+  expenses: "Expenses & P&L",
 };
 
 const resolveTabFromHash = (raw: string): AdminTab | null => {
@@ -851,6 +854,14 @@ export default function AdminDashboardPage() {
             accessToken={accessToken}
             setNotice={setNotice}
             setError={setError}
+          />
+        )}
+
+        {/* Tab 9: Expenses & P&L */}
+        {activeTab === "expenses" && (
+          <ExpensesTab
+            restaurant={restaurant}
+            authToken={accessToken || undefined}
           />
         )}
       </main>

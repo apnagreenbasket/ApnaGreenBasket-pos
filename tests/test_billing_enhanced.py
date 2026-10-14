@@ -99,3 +99,41 @@ async def test_customer_analytics_and_daily_cash_denominations(client: AsyncClie
     ret = res_return.json()
     assert ret["status"] == "PROCESSED"
     assert ret["total_refund_amount"] == 100.0
+
+
+@pytest.mark.asyncio
+async def test_update_manual_bill_with_customer(client: AsyncClient, db_session):
+    outlet = await create_test_outlet(db_session)
+    admin = await create_test_user(db_session, outlet, role=RoleEnum.OUTLET_ADMIN)
+    cat = await create_test_category(db_session, outlet)
+    item = await create_test_menu_item(db_session, outlet, cat, name="Dragon Fruit", price=Decimal("85.00"))
+    await db_session.commit()
+    headers = get_auth_headers(admin, outlet)
+
+    # 1. Create a draft bill without customer
+    bill_res = await client.post(
+        "/api/billing/bills",
+        json={
+            "basket_number": "POS-1",
+            "items": [{"menu_item_id": str(item.id), "quantity": 1, "unit_price": 85.0, "mrp": 105.0, "tax_rate": 0}],
+        },
+        headers=headers,
+    )
+    assert bill_res.status_code == 200, bill_res.text
+    bill_id = bill_res.json()["id"]
+
+    # 2. Update manual bill with customer phone & name (previously triggered NameError: create_customer)
+    update_res = await client.put(
+        f"/api/billing/bills/{bill_id}",
+        json={
+            "customer_phone": "8329923776",
+            "customer_name": "PAVANI",
+            "items": [{"menu_item_id": str(item.id), "quantity": 1, "unit_price": 85.0, "mrp": 105.0, "tax_rate": 0}],
+        },
+        headers=headers,
+    )
+    assert update_res.status_code == 200, update_res.text
+    updated = update_res.json()
+    assert updated["customer_phone"] == "8329923776"
+    assert updated["customer_name"] == "PAVANI"
+

@@ -33,6 +33,8 @@ from app.models.local_action_queue import LocalActionQueue
 from app.models.user import User
 from app.models.webhook_event import WebhookEvent
 from app.models.cash_drawer_ledger import CashDrawerLedger
+from app.models.expense import Expense
+from app.models.payroll_staff import PayrollStaff
 from app.models.enums import (
     InventoryUnitEnum,
     OrderStatusEnum,
@@ -54,6 +56,7 @@ __all__ = [
     "BasketSession",
     "BillDiscountApproval",
     "CashDrawerLedger",
+    "Expense",
     "CatalogueBatch",
     "Category",
     "Customer",
@@ -73,6 +76,7 @@ __all__ = [
     "OrderStatusEnum",
     "Outlet",
     "PaymentModeEnum",
+    "PayrollStaff",
     "PricingModeEnum",
     "PurchaseReturn",
     "RoleEnum",
