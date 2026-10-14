@@ -1040,8 +1040,9 @@ export async function generateReceiptPDF(
       summaryY += 3;
     }
 
-    // 6. APP STORE & WEBSITE BADGES (If configured)
-    const showAppOrWeb = Boolean(billQrUrlRaw && qrDataUrl && !upiQrDataUrl) || Boolean(playStoreBase64) || Boolean(appStoreBase64);
+    // 6. APP STORE & WEBSITE BADGES (If configured) — Always shown on all bills
+    const hasQr = Boolean(billQrUrlRaw && qrDataUrl);
+    const showAppOrWeb = hasQr || Boolean(playStoreBase64) || Boolean(appStoreBase64);
     if (showAppOrWeb) {
       const qrSize = 20;
       const badgeWidth = 26;
@@ -1049,7 +1050,6 @@ export async function generateReceiptPDF(
       const badgeGapY = 2;
       const qrBadgeGapX = 4;
 
-      const hasQr = Boolean(billQrUrlRaw && qrDataUrl && !upiQrDataUrl);
       const totalBlockWidth = hasQr ? (qrSize + qrBadgeGapX + badgeWidth) : badgeWidth;
       const blockStartX = (pageWidth - totalBlockWidth) / 2;
       const qrX = blockStartX;
@@ -1058,7 +1058,7 @@ export async function generateReceiptPDF(
       const googlePlayY = summaryY + 0.5;
       const appStoreY = googlePlayY + badgeHeight + badgeGapY;
 
-      // Draw Website QR Code on Left if not using UPI QR
+      // Draw Website / Bill QR Code on Left
       if (hasQr && qrDataUrl) {
         try {
           doc.addImage(qrDataUrl, "PNG", qrX, summaryY, qrSize, qrSize);
