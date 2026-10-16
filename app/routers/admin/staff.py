@@ -596,10 +596,10 @@ async def manager_punch_in_staff_endpoint(
     if not target_staff or target_staff.outlet_id != current_user.outlet_id:
         raise HTTPException(status_code=404, detail="Staff member not found in this outlet.")
 
-    if target_staff.role in (RoleEnum.SUPERADMIN, RoleEnum.OUTLET_ADMIN, RoleEnum.MANAGER):
+    if target_staff.role in (RoleEnum.SUPERADMIN, RoleEnum.OUTLET_ADMIN, RoleEnum.MANAGER, RoleEnum.INVENTORY_MANAGER):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Shift punch attendance cannot be marked for Admin or Manager accounts.",
+            detail="Shift punch attendance cannot be marked for Admin, Manager, or Inventory Manager accounts.",
         )
 
     opening_cash = data.opening_cash if data else Decimal("0.00")
@@ -634,10 +634,10 @@ async def manager_punch_out_staff_endpoint(
     if not target_staff or target_staff.outlet_id != current_user.outlet_id:
         raise HTTPException(status_code=404, detail="Staff member not found in this outlet.")
 
-    if target_staff.role in (RoleEnum.SUPERADMIN, RoleEnum.OUTLET_ADMIN, RoleEnum.MANAGER):
+    if target_staff.role in (RoleEnum.SUPERADMIN, RoleEnum.OUTLET_ADMIN, RoleEnum.MANAGER, RoleEnum.INVENTORY_MANAGER):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Shift punch attendance cannot be marked for Admin or Manager accounts.",
+            detail="Shift punch attendance cannot be marked for Admin, Manager, or Inventory Manager accounts.",
         )
 
     notes = data.notes if data else None

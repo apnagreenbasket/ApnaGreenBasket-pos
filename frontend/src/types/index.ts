@@ -215,13 +215,15 @@ export type StaffRole =
   | "SUPERADMIN"
   | "OUTLET_ADMIN"
   | "MANAGER"
+  | "INVENTORY_MANAGER"
   | "FLOOR_STAFF"
   | "CASHIER"
   | "WAITER"
   | "DELIVERY_BOY"
   | "STAFF";
 
-export type StaffMember = components["schemas"]["StaffResponse"] & {
+export type StaffMember = Omit<components["schemas"]["StaffResponse"], "role"> & {
+  role: StaffRole;
   barcode?: string | null;
 };
 

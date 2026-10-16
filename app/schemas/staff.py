@@ -21,7 +21,7 @@ class StaffCreate(StrictSchema):
     name: str = Field(min_length=1, max_length=255)
     email: EmailStr
     phone: str | None = Field(None, max_length=50)
-    role: RoleEnum = Field(default=RoleEnum.STAFF)
+    role: RoleEnum = Field(default=RoleEnum.INVENTORY_MANAGER)
     password: str = Field(min_length=8, max_length=100)
     pin: str | None = Field(None, min_length=4, max_length=4, pattern="^[0-9]{4}$")
     barcode: str | None = Field(None, max_length=100)

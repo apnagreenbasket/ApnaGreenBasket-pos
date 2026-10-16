@@ -16,7 +16,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.datetime_utils import ensure_naive_utc
 from app.core.redis import get_redis
-from app.dependencies import DBSession, RequireAdmin, outlet_scoped_query
+from app.dependencies import DBSession, RequireInventoryOrAdmin, outlet_scoped_query
 from app.models.enums import StockChangeTypeEnum
 from app.models.inventory_item import InventoryItem
 from app.models.menu_item_recipe import MenuItemRecipe
@@ -73,7 +73,7 @@ router = APIRouter(prefix="/api/admin/inventory", tags=["admin-inventory"])
 
 @router.get("/items", response_model=InventoryPageResponse | list[InventoryItemResponse])
 async def list_inventory_items(
-    current_user: RequireAdmin,
+    current_user: RequireInventoryOrAdmin,
     db: DBSession,
     low_stock_only: bool = False,
     category: str | None = None,
@@ -148,7 +148,7 @@ async def list_inventory_items(
 @router.post("/items", response_model=InventoryItemResponse, status_code=status.HTTP_201_CREATED)
 async def create_item(
     data: InventoryItemCreate,
-    current_user: RequireAdmin,
+    current_user: RequireInventoryOrAdmin,
     db: DBSession,
 ):
     """Create a new ingredient in outlet inventory master."""
@@ -167,7 +167,7 @@ async def create_item(
 async def update_item(
     item_id: uuid.UUID,
     data: InventoryItemUpdate,
-    current_user: RequireAdmin,
+    current_user: RequireInventoryOrAdmin,
     db: DBSession,
 ):
     """Update ingredient record (threshold, cost per unit, stock)."""
@@ -185,7 +185,7 @@ async def update_item(
 @router.delete("/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def deactivate_item(
     item_id: uuid.UUID,
-    current_user: RequireAdmin,
+    current_user: RequireInventoryOrAdmin,
     db: DBSession,
 ):
     """Soft-delete/deactivate an ingredient from inventory master."""
@@ -228,7 +228,7 @@ async def deactivate_item(
 @router.delete("/batches/{batch_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_batch(
     batch_id: uuid.UUID,
-    current_user: RequireAdmin,
+    current_user: RequireInventoryOrAdmin,
     db: DBSession,
 ):
     """Void a batch, zero remaining stock, adjust parent item's stock, and record StockLedger."""
@@ -331,7 +331,7 @@ async def delete_batch(
 @router.post("/intake", response_model=StockIntakeResponse, status_code=status.HTTP_201_CREATED)
 async def record_stock_intake(
     data: StockIntakeCreate,
-    current_user: RequireAdmin,
+    current_user: RequireInventoryOrAdmin,
     db: DBSession,
 ):
     """Log daily stock intake (updates current stock & appends ledger entry)."""
@@ -350,7 +350,7 @@ async def record_stock_intake(
 
 @router.get("/ledger", response_model=StockLedgerPageResponse)
 async def list_stock_ledger(
-    current_user: RequireAdmin,
+    current_user: RequireInventoryOrAdmin,
     db: DBSession,
     item_id: uuid.UUID | None = None,
     change_type: StockChangeTypeEnum | None = None,
@@ -453,7 +453,7 @@ async def list_stock_ledger(
 @router.post("/recipes", response_model=list[RecipeIngredientResponse])
 async def save_recipe(
     data: RecipeSaveRequest,
-    current_user: RequireAdmin,
+    current_user: RequireInventoryOrAdmin,
     db: DBSession,
 ):
     """Save ingredient recipe mapping for a dish."""
@@ -483,7 +483,7 @@ async def save_recipe(
 @router.get("/recipes/{menu_item_id}", response_model=list[RecipeIngredientResponse])
 async def get_recipe(
     menu_item_id: uuid.UUID,
-    current_user: RequireAdmin,
+    current_user: RequireInventoryOrAdmin,
     db: DBSession,
 ):
     """Fetch ingredient recipe mapping for a dish."""
@@ -509,7 +509,7 @@ async def get_recipe(
 
 @router.get("/alerts", response_model=list[InventoryItemResponse])
 async def get_low_stock_alerts(
-    current_user: RequireAdmin,
+    current_user: RequireInventoryOrAdmin,
     db: DBSession,
 ):
     """List ingredients currently at or below reorder threshold."""
@@ -525,7 +525,7 @@ async def get_low_stock_alerts(
 
 @router.get("/near-expiry-alerts", response_model=list[BatchExpiryAlertResponse])
 async def get_near_expiry_alerts_route(
-    current_user: RequireAdmin,
+    current_user: RequireInventoryOrAdmin,
     db: DBSession,
     threshold_days: int = Query(7, ge=1, le=90),
 ):
@@ -542,7 +542,7 @@ async def get_near_expiry_alerts_route(
 @router.get("/barcode/{barcode}", response_model=ScanLookupResponse)
 async def lookup_barcode(
     barcode: str,
-    current_user: RequireAdmin,
+    current_user: RequireInventoryOrAdmin,
     db: DBSession,
 ):
     """
@@ -571,7 +571,7 @@ async def lookup_barcode(
 @router.post("/scan-increment", response_model=InventoryItemResponse)
 async def scan_increment_count(
     data: ScanIncrementRequest,
-    current_user: RequireAdmin,
+    current_user: RequireInventoryOrAdmin,
     db: DBSession,
 ):
     """
@@ -601,7 +601,7 @@ async def scan_increment_count(
 @router.post("/scan-onboard", response_model=InventoryItemResponse, status_code=status.HTTP_201_CREATED)
 async def scan_onboard_item(
     data: ScanOnboardRequest,
-    current_user: RequireAdmin,
+    current_user: RequireInventoryOrAdmin,
     db: DBSession,
 ):
     """
@@ -676,7 +676,7 @@ async def scan_onboard_item(
 
 @router.get("/batches", response_model=BatchPageResponse | list[BatchDetailResponse])
 async def list_all_batches_route(
-    current_user: RequireAdmin,
+    current_user: RequireInventoryOrAdmin,
     db: DBSession,
     item_id: uuid.UUID | None = Query(None),
     search: str | None = Query(None),
@@ -689,7 +689,7 @@ async def list_all_batches_route(
 
 @router.get("/suppliers", response_model=list[SupplierResponse])
 async def list_suppliers_route(
-    current_user: RequireAdmin,
+    current_user: RequireInventoryOrAdmin,
     db: DBSession,
 ):
     """List all active vendors/suppliers for current outlet."""
@@ -699,7 +699,7 @@ async def list_suppliers_route(
 @router.post("/suppliers", response_model=SupplierResponse, status_code=status.HTTP_201_CREATED)
 async def create_supplier_route(
     data: SupplierCreate,
-    current_user: RequireAdmin,
+    current_user: RequireInventoryOrAdmin,
     db: DBSession,
 ):
     """Create a new vendor/supplier record for current outlet."""
@@ -718,7 +718,7 @@ async def create_supplier_route(
 async def update_supplier_route(
     supplier_id: uuid.UUID,
     data: SupplierUpdate,
-    current_user: RequireAdmin,
+    current_user: RequireInventoryOrAdmin,
     db: DBSession,
 ):
     """Update an existing vendor/supplier record."""
@@ -741,7 +741,7 @@ async def update_supplier_route(
 @router.post("/wastage", response_model=StockWastageResponse)
 async def log_inventory_wastage(
     data: StockWastageRequest,
-    current_user: RequireAdmin,
+    current_user: RequireInventoryOrAdmin,
     db: DBSession,
 ):
     """
@@ -771,7 +771,7 @@ async def log_inventory_wastage(
 @router.delete("/wastage/{ledger_id}", response_model=DeleteWastageRestockResponse)
 async def delete_and_restock_wastage_endpoint(
     ledger_id: uuid.UUID,
-    current_user: RequireAdmin,
+    current_user: RequireInventoryOrAdmin,
     db: DBSession,
 ):
     """
@@ -801,7 +801,7 @@ async def delete_and_restock_wastage_endpoint(
 @router.get("/batches/{intake_id}/wastage", response_model=list[BatchWastageEntryResponse])
 async def get_batch_wastage_endpoint(
     intake_id: uuid.UUID,
-    current_user: RequireAdmin,
+    current_user: RequireInventoryOrAdmin,
     db: DBSession,
 ):
     """
@@ -814,7 +814,7 @@ async def get_batch_wastage_endpoint(
 async def update_batch_metadata_endpoint(
     intake_id: uuid.UUID,
     data: BatchUpdateMetadataRequest,
-    current_user: RequireAdmin,
+    current_user: RequireInventoryOrAdmin,
     db: DBSession,
 ):
     """
@@ -845,7 +845,7 @@ async def update_batch_metadata_endpoint(
 async def adjust_batch_stock_endpoint(
     intake_id: uuid.UUID,
     data: BatchAdjustmentRequest,
-    current_user: RequireAdmin,
+    current_user: RequireInventoryOrAdmin,
     db: DBSession,
 ):
     """
@@ -877,7 +877,7 @@ async def adjust_batch_stock_endpoint(
 
 @router.get("/purchase-returns")
 async def list_purchase_returns_endpoint(
-    current_user: RequireAdmin,
+    current_user: RequireInventoryOrAdmin,
     db: DBSession,
 ):
     """List all purchase return bills for current outlet."""
@@ -888,7 +888,7 @@ async def list_purchase_returns_endpoint(
 @router.get("/purchase-returns/{return_id}")
 async def get_purchase_return_endpoint(
     return_id: uuid.UUID,
-    current_user: RequireAdmin,
+    current_user: RequireInventoryOrAdmin,
     db: DBSession,
 ):
     """Get purchase return bill details by ID."""

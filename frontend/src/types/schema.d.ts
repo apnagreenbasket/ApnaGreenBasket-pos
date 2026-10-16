@@ -7096,7 +7096,7 @@ export interface components {
          * RoleEnum
          * @enum {string}
          */
-        RoleEnum: "SUPERADMIN" | "OUTLET_ADMIN" | "MANAGER" | "FLOOR_STAFF" | "CASHIER" | "DELIVERY_BOY" | "STAFF";
+        RoleEnum: "SUPERADMIN" | "OUTLET_ADMIN" | "MANAGER" | "INVENTORY_MANAGER" | "FLOOR_STAFF" | "CASHIER" | "DELIVERY_BOY" | "STAFF";
         /** RolePermissions */
         RolePermissions: {
             /** Can Manage Staff */

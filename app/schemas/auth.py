@@ -29,7 +29,7 @@ class RegisterRequest(BaseModel):
     name: str | None = None
     phone: str | None = Field(default=None, max_length=50)
     pin: str | None = Field(default=None, pattern=r"^\d{4}$")
-    role: RoleEnum = RoleEnum.STAFF
+    role: RoleEnum = RoleEnum.INVENTORY_MANAGER
     outlet_id: uuid.UUID | None = None
 
     @field_validator("phone", mode="before")

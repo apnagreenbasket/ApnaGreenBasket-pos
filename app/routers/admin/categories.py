@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dependencies import DBSession, RequireAdmin, RequireStaffOrAdmin, outlet_scoped_query
+from app.dependencies import DBSession, RequireAdmin, RequireMenuOrAdmin, RequireStaffOrAdmin, outlet_scoped_query
 from app.models.category import Category
 from app.schemas.category import CategoryCreate, CategoryResponse, CategoryUpdate
 from app.services.audit_service import log_action
@@ -39,7 +39,7 @@ async def list_categories(
 )
 async def create_category(
     data: CategoryCreate,
-    current_user: RequireAdmin,
+    current_user: RequireMenuOrAdmin,
     db: DBSession,
 ):
     """Create a category — outlet_id from JWT, not from request body."""
@@ -67,7 +67,7 @@ async def create_category(
 @router.get("/{category_id}", response_model=CategoryResponse)
 async def get_category(
     category_id: uuid.UUID,
-    current_user: RequireAdmin,
+    current_user: RequireMenuOrAdmin,
     db: DBSession,
 ):
     """Get a single category (tenant-scoped)."""
@@ -87,7 +87,7 @@ async def get_category(
 async def update_category(
     category_id: uuid.UUID,
     data: CategoryUpdate,
-    current_user: RequireAdmin,
+    current_user: RequireMenuOrAdmin,
     db: DBSession,
 ):
     """Update a category (tenant-scoped)."""
@@ -123,7 +123,7 @@ async def update_category(
 @router.delete("/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_category(
     category_id: uuid.UUID,
-    current_user: RequireAdmin,
+    current_user: RequireMenuOrAdmin,
     db: DBSession,
 ):
     """Delete a category (tenant-scoped, cascades to menu items)."""

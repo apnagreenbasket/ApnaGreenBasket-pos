@@ -216,7 +216,7 @@ export function AdminSidebar({
         </div>
 
         {/* Shift Punch Status for non-exempt staff */}
-        {!isAdminRole && (
+        {!isAdminRole && userRole !== "INVENTORY_MANAGER" && !punchStatus?.is_exempt && (
           <div>
             {punchStatus?.is_punched_in ? (
               <div className="flex items-center justify-between rounded-xl bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1.5 text-xs text-emerald-600 dark:text-emerald-400">

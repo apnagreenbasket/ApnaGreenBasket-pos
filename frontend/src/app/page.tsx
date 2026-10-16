@@ -273,7 +273,7 @@ export default function AdminDashboardPage() {
   const canAccessMenu = staffState.staffPermissions
     ? Boolean(staffState.staffPermissions.allowed_sidebar_tabs?.includes("menu"))
     : true;
-  const canManageMenu = isAdminRole && (!staffState.staffPermissions || staffState.staffPermissions.can_edit_menu);
+  const canManageMenu = (isAdminRole || Boolean(staffState.staffPermissions?.can_edit_menu)) && (!staffState.staffPermissions || staffState.staffPermissions.can_edit_menu);
   const menuState = useMenuManagement({
     accessToken,
     apiRequest,
@@ -282,7 +282,7 @@ export default function AdminDashboardPage() {
     enabled: Boolean(accessToken) && canAccessMenu,
   });
 
-  const canManageInventory = isAdminRole && (!staffState.staffPermissions || staffState.staffPermissions.can_manage_inventory);
+  const canManageInventory = (isAdminRole || Boolean(staffState.staffPermissions?.can_manage_inventory)) && (!staffState.staffPermissions || staffState.staffPermissions.can_manage_inventory);
   const handleItemOnboarded = useCallback(
     (_item: any, hadSellingPrice: boolean) => {
       if (hadSellingPrice) {
@@ -768,7 +768,7 @@ export default function AdminDashboardPage() {
                 name: "",
                 email: "",
                 phone: "",
-                role: userRole === "MANAGER" ? "CASHIER" : "STAFF",
+                role: userRole === "MANAGER" ? "CASHIER" : "INVENTORY_MANAGER",
                 password: "",
                 pin: "",
                 barcode: "",

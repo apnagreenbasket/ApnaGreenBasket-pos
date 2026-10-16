@@ -8,7 +8,7 @@ import io
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
 
-from app.dependencies import DBSession, RequireAdmin
+from app.dependencies import DBSession, RequireAdmin, RequireInventoryOrAdmin, RequireMenuOrAdmin, RequireStaffOrAdmin
 from app.schemas.bulk_operations import BulkImportSummary, ExportFormatEnum
 from app.services.bulk_export_service import export_customers, export_inventory, export_menu_items
 from app.services.bulk_import_service import import_customers, import_inventory, import_menu_items
@@ -34,7 +34,7 @@ async def _read_and_validate_file(file: UploadFile) -> bytes:
 
 @router.post("/inventory/import", response_model=BulkImportSummary)
 async def import_inventory_endpoint(
-    current_user: RequireAdmin,
+    current_user: RequireInventoryOrAdmin,
     db: DBSession,
     file: UploadFile = File(...),
 ):
@@ -48,7 +48,7 @@ async def import_inventory_endpoint(
 
 @router.get("/inventory/export")
 async def export_inventory_endpoint(
-    current_user: RequireAdmin,
+    current_user: RequireInventoryOrAdmin,
     db: DBSession,
     format: ExportFormatEnum = Query(ExportFormatEnum.EXCEL),
 ):
@@ -67,7 +67,7 @@ async def export_inventory_endpoint(
 
 @router.post("/menu-items/import", response_model=BulkImportSummary)
 async def import_menu_items_endpoint(
-    current_user: RequireAdmin,
+    current_user: RequireMenuOrAdmin,
     db: DBSession,
     file: UploadFile = File(...),
 ):
@@ -81,7 +81,7 @@ async def import_menu_items_endpoint(
 
 @router.get("/menu-items/export")
 async def export_menu_items_endpoint(
-    current_user: RequireAdmin,
+    current_user: RequireMenuOrAdmin,
     db: DBSession,
     format: ExportFormatEnum = Query(ExportFormatEnum.EXCEL),
 ):
@@ -133,7 +133,7 @@ async def export_customers_endpoint(
 
 @router.get("/templates/{entity}")
 async def download_template(
-    current_user: RequireAdmin,
+    current_user: RequireStaffOrAdmin,
     entity: str,
 ):
     """Download a blank template with the correct headers and formulas for import."""

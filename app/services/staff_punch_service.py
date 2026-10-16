@@ -42,6 +42,7 @@ EXEMPT_ROLES = {
     RoleEnum.SUPERADMIN,
     RoleEnum.OUTLET_ADMIN,
     RoleEnum.MANAGER,
+    RoleEnum.INVENTORY_MANAGER,
 }
 
 
@@ -51,7 +52,7 @@ def is_role_exempt(role: RoleEnum | str | None) -> bool:
         return False
     if isinstance(role, str):
         role_str = role.strip().upper()
-        return role_str in ("SUPERADMIN", "OUTLET_ADMIN", "MANAGER")
+        return role_str in ("SUPERADMIN", "OUTLET_ADMIN", "MANAGER", "INVENTORY_MANAGER")
     return role in EXEMPT_ROLES
 
 
@@ -515,7 +516,7 @@ async def ensure_staff_punched_in_today(
 
     from app.models.user import User
     user = await db.get(User, staff_id)
-    if not user or user.role not in (RoleEnum.FLOOR_STAFF, RoleEnum.STAFF):
+    if not user or user.role != RoleEnum.FLOOR_STAFF:
         return
 
     active = await get_active_punch_session(db, outlet_id, staff_id)
@@ -621,10 +622,10 @@ async def get_floor_staff_incentive_report(
     # Auto-close any stale shifts first
     await auto_close_midnight_shifts(db, outlet_id)
 
-    # Base query for floor staff only in outlet (supports both FLOOR_STAFF and STAFF roles)
+    # Base query for floor staff only in outlet (FLOOR_STAFF role)
     user_stmt = select(User).where(
         User.outlet_id == outlet_id,
-        User.role.in_([RoleEnum.FLOOR_STAFF, RoleEnum.STAFF]),
+        User.role == RoleEnum.FLOOR_STAFF,
     )
     if staff_id:
         user_stmt = user_stmt.where(User.id == staff_id)

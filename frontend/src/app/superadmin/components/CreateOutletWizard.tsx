@@ -201,10 +201,10 @@ export function CreateOutletWizard({
             >
               <option value="OUTLET_ADMIN">Outlet Admin / Owner</option>
               <option value="MANAGER">Store Manager</option>
+              <option value="INVENTORY_MANAGER">Inventory Manager</option>
               <option value="CASHIER">Cashier</option>
               <option value="FLOOR_STAFF">Store Assistant / Basket Verifier</option>
               <option value="DELIVERY_BOY">Delivery Executive / Delivery Boy</option>
-              <option value="STAFF">General Staff</option>
             </select>
           </label>
 

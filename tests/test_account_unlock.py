@@ -123,7 +123,7 @@ async def test_resend_unlock_email_and_cooldown(
         email=test_email,
         password_hash=hash_password(correct_password),
         name="Resend Tester",
-        role=RoleEnum.STAFF,
+        role=RoleEnum.INVENTORY_MANAGER,
         status="active",
         is_active=True,
     )

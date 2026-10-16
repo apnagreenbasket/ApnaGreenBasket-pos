@@ -101,6 +101,17 @@ ROLE_PERMISSIONS_MAP: dict[RoleEnum, RolePermissions] = {
         can_view_analytics=False,
         allowed_sidebar_tabs=["orders", "sessions"],
     ),
+    RoleEnum.INVENTORY_MANAGER: RolePermissions(
+        can_manage_staff=False,
+        can_manage_billing=False,
+        can_edit_menu=True,
+        can_manage_inventory=True,
+        can_cancel_orders=False,
+        can_process_payments=False,
+        can_manage_orders=False,
+        can_view_analytics=False,
+        allowed_sidebar_tabs=["inventory", "menu"],
+    ),
     RoleEnum.STAFF: RolePermissions(
         can_manage_staff=False,
         can_manage_billing=False,
@@ -121,6 +132,7 @@ ROLE_HIERARCHY: dict[RoleEnum, int] = {
     RoleEnum.SUPERADMIN: 100,
     RoleEnum.OUTLET_ADMIN: 50,
     RoleEnum.MANAGER: 30,
+    RoleEnum.INVENTORY_MANAGER: 20,
     RoleEnum.CASHIER: 10,
     RoleEnum.FLOOR_STAFF: 10,
     RoleEnum.DELIVERY_BOY: 10,
@@ -150,7 +162,8 @@ def can_actor_manage_target_role(actor_role: RoleEnum | None, target_role: RoleE
 
 def get_permissions_for_role(role: RoleEnum) -> RolePermissions:
     """Return permissions object for a role."""
-    return ROLE_PERMISSIONS_MAP.get(role, ROLE_PERMISSIONS_MAP[RoleEnum.STAFF])
+    return ROLE_PERMISSIONS_MAP.get(role, ROLE_PERMISSIONS_MAP.get(RoleEnum.INVENTORY_MANAGER, ROLE_PERMISSIONS_MAP[RoleEnum.FLOOR_STAFF]))
+
 
 
 def to_staff_response(user: User) -> StaffResponse:

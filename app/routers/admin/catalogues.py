@@ -13,7 +13,7 @@ from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dependencies import DBSession, RequireAdmin, outlet_scoped_query
+from app.dependencies import DBSession, RequireAdmin, RequireMenuOrAdmin, outlet_scoped_query
 from app.models.catalogue_batch import CatalogueBatch
 from app.schemas.catalogue import (
     CatalogueBatchCreate,
@@ -27,7 +27,7 @@ router = APIRouter(prefix="/api/admin/catalogues", tags=["admin-catalogues"])
 
 @router.get("", response_model=list[CatalogueBatchResponse])
 async def list_catalogues(
-    current_user: RequireAdmin,
+    current_user: RequireMenuOrAdmin,
     db: DBSession,
 ):
     """List all catalogue batches for the current user's outlet and clean up old ones."""
@@ -53,7 +53,7 @@ async def list_catalogues(
 )
 async def create_catalogue(
     data: CatalogueBatchCreate,
-    current_user: RequireAdmin,
+    current_user: RequireMenuOrAdmin,
     db: DBSession,
 ):
     """Create a catalogue batch — outlet_id from JWT, not from request body."""
@@ -78,7 +78,7 @@ async def create_catalogue(
 @router.get("/{batch_id}", response_model=CatalogueBatchResponse)
 async def get_catalogue(
     batch_id: uuid.UUID,
-    current_user: RequireAdmin,
+    current_user: RequireMenuOrAdmin,
     db: DBSession,
 ):
     """Get a single catalogue batch (tenant-scoped)."""
@@ -98,7 +98,7 @@ async def get_catalogue(
 async def update_catalogue(
     batch_id: uuid.UUID,
     data: CatalogueBatchUpdate,
-    current_user: RequireAdmin,
+    current_user: RequireMenuOrAdmin,
     db: DBSession,
 ):
     """Update a catalogue batch (tenant-scoped)."""
@@ -131,7 +131,7 @@ async def update_catalogue(
 @router.delete("/{batch_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_catalogue(
     batch_id: uuid.UUID,
-    current_user: RequireAdmin,
+    current_user: RequireMenuOrAdmin,
     db: DBSession,
 ):
     """Delete a catalogue batch (tenant-scoped)."""

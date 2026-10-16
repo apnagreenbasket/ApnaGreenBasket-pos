@@ -9,7 +9,7 @@ import uuid
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 
-from app.dependencies import DBSession, RequireAdmin, RequireStaffOrAdmin, outlet_scoped_query
+from app.dependencies import DBSession, RequireAdmin, RequireMenuOrAdmin, RequireStaffOrAdmin, outlet_scoped_query
 from app.models.menu_item import MenuItem
 from app.models.menu_item_variant import MenuItemVariant
 from app.schemas.menu import VariantCreate, VariantResponse, VariantUpdate
@@ -60,7 +60,7 @@ async def list_variants(
 async def create_variant(
     item_id: uuid.UUID,
     data: VariantCreate,
-    current_user: RequireAdmin,
+    current_user: RequireMenuOrAdmin,
     db: DBSession,
 ):
     """Create a variant for a menu item."""
@@ -91,7 +91,7 @@ async def update_variant(
     item_id: uuid.UUID,
     variant_id: uuid.UUID,
     data: VariantUpdate,
-    current_user: RequireAdmin,
+    current_user: RequireMenuOrAdmin,
     db: DBSession,
 ):
     """Update a variant (outlet-scoped via parent menu item)."""
@@ -132,7 +132,7 @@ async def update_variant(
 async def delete_variant(
     item_id: uuid.UUID,
     variant_id: uuid.UUID,
-    current_user: RequireAdmin,
+    current_user: RequireMenuOrAdmin,
     db: DBSession,
 ):
     """Delete a variant (outlet-scoped via parent menu item)."""

@@ -640,11 +640,13 @@ export function StaffTab({
                           ? "bg-purple-100 text-purple-800"
                           : member.role === "MANAGER"
                             ? "bg-indigo-100 text-indigo-800"
-                            : member.role === "FLOOR_STAFF" || member.role === "STAFF"
-                              ? "bg-amber-100 text-amber-800"
-                              : member.role === "CASHIER"
-                                ? "bg-emerald-100 text-emerald-800"
-                                : "bg-sky-100 text-sky-800"
+                            : member.role === "INVENTORY_MANAGER"
+                              ? "bg-teal-100 text-teal-800"
+                              : member.role === "FLOOR_STAFF" || member.role === "STAFF"
+                                ? "bg-amber-100 text-amber-800"
+                                : member.role === "CASHIER"
+                                  ? "bg-emerald-100 text-emerald-800"
+                                  : "bg-sky-100 text-sky-800"
                           }`}>
                           {member.role.replace("_", " ")}
                         </span>
@@ -1524,9 +1526,10 @@ export function StaffTab({
               <option value="SUPERADMIN">Superadmin</option>
               <option value="OUTLET_ADMIN">Outlet Admin</option>
               <option value="MANAGER">Manager</option>
+              <option value="INVENTORY_MANAGER">Inventory Manager</option>
               <option value="CASHIER">Cashier</option>
+              <option value="FLOOR_STAFF">Store Assistant / Basket Verifier</option>
               <option value="DELIVERY_BOY">Delivery Boy</option>
-              <option value="STAFF">General Staff</option>
             </select>
             <select
               value={auditActionFilter}

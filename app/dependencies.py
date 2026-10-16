@@ -119,6 +119,7 @@ RequireStaffOrAdmin = Annotated[
             RoleEnum.SUPERADMIN,
             RoleEnum.OUTLET_ADMIN,
             RoleEnum.MANAGER,
+            RoleEnum.INVENTORY_MANAGER,
             RoleEnum.FLOOR_STAFF,
             RoleEnum.CASHIER,
             RoleEnum.DELIVERY_BOY,
@@ -126,6 +127,29 @@ RequireStaffOrAdmin = Annotated[
         )
     ),
 ]
+RequireInventoryOrAdmin = Annotated[
+    CurrentUser,
+    Depends(
+        require_role(
+            RoleEnum.SUPERADMIN,
+            RoleEnum.OUTLET_ADMIN,
+            RoleEnum.MANAGER,
+            RoleEnum.INVENTORY_MANAGER,
+        )
+    ),
+]
+RequireMenuOrAdmin = Annotated[
+    CurrentUser,
+    Depends(
+        require_role(
+            RoleEnum.SUPERADMIN,
+            RoleEnum.OUTLET_ADMIN,
+            RoleEnum.MANAGER,
+            RoleEnum.INVENTORY_MANAGER,
+        )
+    ),
+]
+
 
 
 def require_permission(perm_name: str):

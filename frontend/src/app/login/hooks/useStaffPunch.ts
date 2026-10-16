@@ -36,10 +36,12 @@ export function useStaffPunch({
   const [punchOutModalOpen, setPunchOutModalOpen] = useState<boolean>(false);
   const [liveShiftSeconds, setLiveShiftSeconds] = useState<number>(0);
 
+  const isShiftExempt = isAdminRole || userRole?.toUpperCase() === "INVENTORY_MANAGER";
+
   const fetchPunchStatus = useCallback(async () => {
     if (!accessToken) return;
 
-    if (isAdminRole) {
+    if (isShiftExempt) {
       setPunchStatus({
         is_exempt: true,
         is_punched_in: true,
@@ -66,11 +68,11 @@ export function useStaffPunch({
     } finally {
       setIsCheckingPunch(false);
     }
-  }, [accessToken, isAdminRole, apiRequest]);
+  }, [accessToken, isShiftExempt, apiRequest]);
 
   // Live timer tick every 1 second when punched in, with automatic 12:00 AM IST midnight shift expiry detection
   useEffect(() => {
-    if (isAdminRole || !punchStatus?.is_punched_in) {
+    if (isShiftExempt || !punchStatus?.is_punched_in) {
       return;
     }
 

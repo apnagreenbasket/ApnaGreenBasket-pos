@@ -47,7 +47,7 @@ async def test_floor_staff_barcode_and_manager_punch(client, db_session: AsyncSe
         outlet_id=outlet_id,
         name="Sunil Floor Helper",
         email=f"sunil-{uuid.uuid4().hex[:4]}@test.com",
-        role=RoleEnum.STAFF,
+        role=RoleEnum.FLOOR_STAFF,
         barcode="STF-SUNIL1",
         password_hash=hash_password("password123"),
         status="active",
@@ -64,7 +64,7 @@ async def test_floor_staff_barcode_and_manager_punch(client, db_session: AsyncSe
     data = lookup_resp.json()
     assert data["id"] == str(staff.id)
     assert data["name"] == "Sunil Floor Helper"
-    assert data["role"] == "STAFF"
+    assert data["role"] == "FLOOR_STAFF"
 
     # 2. Manager punches staff in
     punch_in_resp = await client.post(f"/api/staff/{staff.id}/punch/in", headers=headers)
@@ -131,7 +131,7 @@ async def test_assisted_bill_creation_and_incentive_report(client, db_session: A
         outlet_id=outlet_id,
         name="Ramesh Basket Verifier",
         email=f"ramesh-{uuid.uuid4().hex[:4]}@test.com",
-        role=RoleEnum.STAFF,
+        role=RoleEnum.FLOOR_STAFF,
         barcode="STF-RAMESH9",
         password_hash=hash_password("password123"),
         status="active",
@@ -216,7 +216,7 @@ async def test_assisted_bill_creation_and_incentive_report(client, db_session: A
     assert ramesh_entry["calculated_incentive"] == 6.5
 
     # Verify that only floor staff are in the report (Cashier Priya is excluded)
-    assert all(s["staff_role"] == "STAFF" for s in incentive_data["staff_breakdown"])
+    assert all(s["staff_role"] == "FLOOR_STAFF" for s in incentive_data["staff_breakdown"])
     assert not any(s["staff_id"] == str(cashier.id) for s in incentive_data["staff_breakdown"])
 
 

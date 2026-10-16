@@ -141,7 +141,7 @@ async def create_manual_bill(
             if (
                 asst_user
                 and asst_user.outlet_id == outlet_id
-                and asst_user.role in (RoleEnum.FLOOR_STAFF, RoleEnum.STAFF)
+                and asst_user.role == RoleEnum.FLOOR_STAFF
             ):
                 assisted_name = asst_user.name
             else:
@@ -153,7 +153,7 @@ async def create_manual_bill(
         stmt = select(User).where(
             User.outlet_id == outlet_id,
             User.barcode == clean_code,
-            User.role.in_([RoleEnum.FLOOR_STAFF, RoleEnum.STAFF]),
+            User.role == RoleEnum.FLOOR_STAFF,
         )
         res = await db.execute(stmt)
         asst_user = res.scalar_one_or_none()
@@ -455,7 +455,7 @@ async def update_manual_bill(
                 if (
                     asst_u
                     and asst_u.outlet_id == outlet_id
-                    and asst_u.role in (RoleEnum.FLOOR_STAFF, RoleEnum.STAFF)
+                    and asst_u.role == RoleEnum.FLOOR_STAFF
                 ):
                     order.assisted_by_staff_id = asst_u.id
                     order.assisted_by_staff_name = asst_u.name
@@ -476,7 +476,7 @@ async def update_manual_bill(
                 select(User).where(
                     User.outlet_id == outlet_id,
                     User.barcode == clean_code,
-                    User.role.in_([RoleEnum.FLOOR_STAFF, RoleEnum.STAFF]),
+                    User.role == RoleEnum.FLOOR_STAFF,
                 )
             )
             asst_u = res_u.scalar_one_or_none()

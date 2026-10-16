@@ -10,9 +10,10 @@ class RoleEnum(str, enum.Enum):
     OUTLET_ADMIN = "OUTLET_ADMIN"
     MANAGER = "MANAGER"
     FLOOR_STAFF = "FLOOR_STAFF"
+    INVENTORY_MANAGER = "INVENTORY_MANAGER"
     CASHIER = "CASHIER"
     DELIVERY_BOY = "DELIVERY_BOY"
-    STAFF = "STAFF"
+    STAFF = "STAFF"  # Deprecated legacy fallback
 
 
 class PaymentModeEnum(str, enum.Enum):

@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
-from app.dependencies import DBSession, RequireAdmin, RequireStaffOrAdmin, outlet_scoped_query
+from app.dependencies import DBSession, RequireAdmin, RequireMenuOrAdmin, RequireStaffOrAdmin, outlet_scoped_query
 from app.models.category import Category
 from app.models.enums import PricingModeEnum
 from app.models.menu_item import MenuItem
@@ -209,7 +209,7 @@ async def get_menu_item_by_barcode(
 @router.post("/", response_model=MenuItemResponse, status_code=status.HTTP_201_CREATED)
 async def create_menu_item(
     data: MenuItemCreate,
-    current_user: RequireAdmin,
+    current_user: RequireMenuOrAdmin,
     db: DBSession,
 ):
     """Create a new menu item / product."""
@@ -327,7 +327,7 @@ async def get_menu_item(
 async def update_menu_item(
     item_id: uuid.UUID,
     data: MenuItemUpdate,
-    current_user: RequireAdmin,
+    current_user: RequireMenuOrAdmin,
     db: DBSession,
 ):
     """Update a menu item."""
@@ -469,7 +469,7 @@ async def update_menu_item(
 @router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_menu_item(
     item_id: uuid.UUID,
-    current_user: RequireAdmin,
+    current_user: RequireMenuOrAdmin,
     db: DBSession,
 ):
     """Delete a menu item."""
