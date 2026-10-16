@@ -18,6 +18,7 @@ export type StaffModalFormState = {
   role: StaffRole;
   password: string;
   pin: string;
+  barcode?: string;
 };
 
 type StaffModalProps = {
@@ -181,9 +182,76 @@ export function StaffModal({
                 <option value="STAFF">General Staff</option>
               </select>
             </label>
+
+            <label className="block space-y-1">
+              <span className="text-xs uppercase tracking-wide text-[var(--text-muted)] font-bold">
+                Staff Barcode Badge (Optional)
+              </span>
+              <input
+                type="text"
+                placeholder="e.g. STF-1001 (Auto-generated if empty)"
+                value={staffFormState.barcode || ""}
+                onChange={(e) => setStaffFormState((prev) => ({ ...prev, barcode: e.target.value }))}
+                className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3.5 py-2 text-xs font-mono font-bold"
+              />
+            </label>
           </div>
 
-          {!editingStaffId && (
+          {editingStaffId ? (
+            <div className="pt-2 border-t border-[var(--border-subtle)] space-y-1">
+              <label className="block space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs uppercase tracking-wide text-[var(--text-muted)] font-bold">
+                    Staff 4-Digit PIN (Optional)
+                  </span>
+                  {staffFormState.pin && staffFormState.pin !== "" ? (
+                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">
+                      {staffFormState.pin === "••••" ? "PIN Configured" : "New PIN Entered"}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold">No PIN (Cleared)</span>
+                  )}
+                </div>
+                <div className="relative">
+                  <input
+                    type="password"
+                    name="edit_staff_pin"
+                    id="edit_staff_pin"
+                    autoComplete="new-password"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
+                    data-bwignore="true"
+                    maxLength={4}
+                    inputMode="numeric"
+                    value={staffFormState.pin}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === "") {
+                        setStaffFormState((prev) => ({ ...prev, pin: "" }));
+                      } else {
+                        setStaffFormState((prev) => ({ ...prev, pin: val.replace(/\D/g, "").slice(0, 4) }));
+                      }
+                    }}
+                    placeholder="Clear to unset, or type 4 digits"
+                    className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3.5 py-2 text-xs font-mono tracking-widest text-center"
+                  />
+                  {staffFormState.pin && staffFormState.pin !== "" && (
+                    <button
+                      type="button"
+                      onClick={() => setStaffFormState((prev) => ({ ...prev, pin: "" }))}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-rose-500 hover:text-rose-600 font-bold cursor-pointer"
+                      title="Clear PIN to remove"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <p className="text-[11px] text-[var(--text-muted)]">
+                  Shows <strong>••••</strong> if configured. Clear to unset/remove PIN, or enter 4 digits to update.
+                </p>
+              </label>
+            </div>
+          ) : (
             <div className="grid gap-3 sm:grid-cols-2 pt-1 border-t border-[var(--border-subtle)]">
               <label className="block space-y-1">
                 <span className="text-xs uppercase tracking-wide text-[var(--text-muted)] font-bold">Password</span>

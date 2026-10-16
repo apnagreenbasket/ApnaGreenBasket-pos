@@ -1,16 +1,18 @@
-import React, { useMemo } from "react";
-import { Trash2, PackageOpen, Loader2 } from "lucide-react";
+import React, { useMemo, useState } from "react";
+import { Trash2, PackageOpen, Loader2, RotateCcw } from "lucide-react";
 import { useTableSortAndSearch } from "../../hooks/useTableSortAndSearch";
 import { SortableHeader, TableSearchBar } from "./shared";
-import { WastageReportResponse } from "@/types";
+import { WastageReportResponse, WastageRow } from "@/types";
 import { parseUTCDate } from "@/lib/api";
+import { apiRequest } from "@/app/login/adminUtils";
 
 type Props = {
   data: WastageReportResponse | null;
   isLoading: boolean;
+  onRefresh?: () => void;
 };
 
-export function WastageReport({ data, isLoading }: Props) {
+export function WastageReport({ data, isLoading, onRefresh }: Props) {
   // Defensive filter: Ensure voided batches are never displayed in the wastage report
   const rawItems = data?.items || [];
   const items = useMemo(() => {
@@ -20,6 +22,29 @@ export function WastageReport({ data, isLoading }: Props) {
       return !r.includes("VOID") && !ct.includes("VOID");
     });
   }, [rawItems]);
+
+  const [pendingUndoItem, setPendingUndoItem] = useState<WastageRow | null>(null);
+  const [isRestocking, setIsRestocking] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const handleRestock = async () => {
+    if (!pendingUndoItem?.id) return;
+    setIsRestocking(true);
+    setActionError(null);
+    try {
+      await apiRequest(`/api/admin/inventory/wastage/${pendingUndoItem.id}`, {
+        method: "DELETE",
+      });
+      setPendingUndoItem(null);
+      if (onRefresh) {
+        onRefresh();
+      }
+    } catch (err: any) {
+      setActionError(err?.message || "Failed to restock wastage. Please try again.");
+    } finally {
+      setIsRestocking(false);
+    }
+  };
 
   const totalEntries = items.length === rawItems.length ? (data?.total_wastage_entries ?? items.length) : items.length;
   const totalQtyWasted = useMemo(() => {
@@ -116,12 +141,13 @@ export function WastageReport({ data, isLoading }: Props) {
                 <SortableHeader label="Logged By" columnKey="created_by_name" sortConfig={sortConfig} handleSort={handleSort} />
                 <SortableHeader label="Qty" columnKey="quantity_wasted" sortConfig={sortConfig} handleSort={handleSort} className="text-right" />
                 <SortableHeader label="Loss Value" columnKey="wastage_cost" sortConfig={sortConfig} handleSort={handleSort} className="text-right" />
+                <th className="px-6 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border-subtle)]">
               {sortedAndFilteredData.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-[var(--text-secondary)]">
+                  <td colSpan={7} className="px-6 py-8 text-center text-[var(--text-secondary)]">
                     <PackageOpen className="mx-auto h-8 w-8 mb-3 opacity-20" />
                     {searchQuery ? "No matching records found." : "No wastage recorded for this period!"}
                   </td>
@@ -133,7 +159,12 @@ export function WastageReport({ data, isLoading }: Props) {
                       {parseUTCDate(item.created_at).toLocaleString()}
                     </td>
                     <td className="px-6 py-4 font-medium text-[var(--text-primary)]">
-                      {item.item_name}
+                      <div>{item.item_name}</div>
+                      {item.batch_number && (
+                        <div className="text-[10px] font-mono text-cyan-400 font-medium">
+                          Lot: #{item.batch_number}
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${
@@ -158,6 +189,21 @@ export function WastageReport({ data, isLoading }: Props) {
                     <td className="px-6 py-4 text-[var(--text-secondary)]">{item.created_by_name || 'System'}</td>
                     <td className="px-6 py-4 text-right font-medium">{item.quantity_wasted}</td>
                     <td className="px-6 py-4 text-right font-bold text-red-500">₹{item.wastage_cost.toFixed(2)}</td>
+                    <td className="px-6 py-4 text-right">
+                      {item.id ? (
+                        <button
+                          type="button"
+                          onClick={() => setPendingUndoItem(item)}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-rose-500/40 bg-rose-500/10 px-3 py-1.5 text-xs font-bold text-rose-400 hover:bg-rose-500 hover:text-white hover:border-rose-500 transition shadow-xs cursor-pointer active:scale-95"
+                          title="Delete wastage & restock to inventory"
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" />
+                          Delete & Restock
+                        </button>
+                      ) : (
+                        <span className="text-xs text-[var(--text-muted)]">-</span>
+                      )}
+                    </td>
                   </tr>
                 ))
               )}
@@ -165,6 +211,90 @@ export function WastageReport({ data, isLoading }: Props) {
           </table>
         </div>
       </div>
+
+      {/* Safety Confirmation Modal */}
+      {pendingUndoItem && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150"
+            onClick={() => {
+              if (!isRestocking) setPendingUndoItem(null);
+            }}
+          />
+          <div
+            className="relative w-full max-w-md overflow-hidden rounded-3xl bg-[var(--bg-surface)] border border-rose-500/30 shadow-2xl text-left animate-in fade-in zoom-in-95 duration-150 p-6 space-y-4"
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-rose-500/20 text-rose-500 border border-rose-500/30">
+                <RotateCcw className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-[var(--text-primary)]">
+                  Confirm Restock & Delete Wastage
+                </h3>
+                <p className="text-xs text-rose-400 font-medium">
+                  Undo human error & restore inventory
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-4 text-xs text-[var(--text-secondary)] space-y-2">
+              <p>
+                Are you sure you want to undo this wastage?{" "}
+                <span className="font-bold text-[var(--text-primary)]">
+                  {pendingUndoItem.quantity_wasted}
+                </span>{" "}
+                will be restored back to Batch{" "}
+                <span className="font-mono font-bold text-rose-400">
+                  #{pendingUndoItem.batch_number || "available stock"}
+                </span>{" "}
+                and available stock.
+              </p>
+              <div className="border-t border-[var(--border-subtle)] pt-2 flex items-center justify-between text-[11px] text-[var(--text-muted)]">
+                <span>Reason: {pendingUndoItem.reason || "Wastage"}</span>
+                <span>Loss: ₹{pendingUndoItem.wastage_cost.toFixed(2)}</span>
+              </div>
+            </div>
+
+            {actionError && (
+              <div className="rounded-xl bg-rose-500/10 border border-rose-500/20 p-2.5 text-xs text-rose-400">
+                {actionError}
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                disabled={isRestocking}
+                onClick={() => setPendingUndoItem(null)}
+                className="rounded-xl px-4 py-2.5 text-xs font-bold text-[var(--text-secondary)] hover:bg-[var(--border-subtle)] transition disabled:opacity-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isRestocking}
+                onClick={handleRestock}
+                className="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2.5 text-xs font-bold text-white shadow-md hover:bg-rose-500 active:scale-95 transition disabled:opacity-50 cursor-pointer"
+              >
+                {isRestocking ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Restoring Stock...
+                  </>
+                ) : (
+                  <>
+                    <RotateCcw className="h-4 w-4" />
+                    Confirm Restock
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

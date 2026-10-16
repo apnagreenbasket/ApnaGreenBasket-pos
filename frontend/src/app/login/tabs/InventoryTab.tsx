@@ -67,7 +67,8 @@ import { PrintBarcodesModal } from "../components/PrintBarcodesModal";
 import { DeleteInventoryModal } from "../modals/DeleteInventoryModal";
 import { EditBatchModal } from "../modals/EditBatchModal";
 import { EditInventoryModal } from "../modals/EditInventoryModal";
-import { parseUTCDate } from "../adminUtils";
+import { BatchWastageModal } from "../modals/BatchWastageModal";
+import { parseUTCDate, apiRequest } from "../adminUtils";
 import type { InventoryTabType, ScanFeedItem } from "../hooks/useInventoryManagement";
 import type { RestaurantProfile } from "../adminTypes";
 
@@ -189,6 +190,8 @@ interface InventoryTabProps {
   openEditItemModal?: (item: InventoryItem) => void;
   closeEditItemModal?: () => void;
   updateInventoryItem?: (itemId: string, data: any) => Promise<any>;
+  deleteAndRestockWastage?: (ledgerId: string) => Promise<any>;
+  getBatchWastageHistory?: (batchId: string) => Promise<any>;
   restaurant?: RestaurantProfile | null;
 }
 
@@ -261,6 +264,8 @@ export function InventoryTab({
   openEditItemModal: propOpenEditItemModal,
   closeEditItemModal: propCloseEditItemModal,
   updateInventoryItem,
+  deleteAndRestockWastage,
+  getBatchWastageHistory,
   restaurant,
 }: InventoryTabProps) {
   const [searchQuery, setSearchQuery] = useState("");
@@ -327,6 +332,10 @@ export function InventoryTab({
   // Print Barcodes Modal state
   const [selectedPrintItem, setSelectedPrintItem] = useState<InventoryItem | null>(null);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+
+  // Batch Wastage History & Undo Modal State
+  const [selectedWastageHistoryBatch, setSelectedWastageHistoryBatch] = useState<BatchDetail | null>(null);
+  const [isBatchWastageModalOpen, setIsBatchWastageModalOpen] = useState(false);
 
   // Delete Inventory Item Modal state
   const [selectedDeleteItem, setSelectedDeleteItem] = useState<InventoryItem | null>(null);
@@ -600,7 +609,7 @@ export function InventoryTab({
   const [batchSortOption, setBatchSortOption] = useState<BatchSortOption>("recent");
 
   const batchCounts = useMemo(() => {
-    let active = 0, expiring = 0, expired = 0, depleted = 0, oversold = 0, voided = 0;
+    let active = 0, expiring = 0, expired = 0, depleted = 0, oversold = 0, voided = 0, wastage = 0;
     batches.forEach((b) => {
       const matchedItem = items.find((it) => it.id === b.item_id);
       const meta = getBatchFreshnessMeta(b, matchedItem);
@@ -610,20 +619,28 @@ export function InventoryTab({
       else if (meta.effectiveStatus === "EXPIRING_SOON") expiring++;
       else if (meta.effectiveStatus === "EXPIRED") expired++;
       else if (meta.effectiveStatus === "DEPLETED") depleted++;
+
+      if (b.has_wastage || (b.wastage_count && b.wastage_count > 0)) {
+        wastage++;
+      }
     });
-    return { all: batches.length, active, expiring, expired, depleted, oversold, voided };
+    return { all: batches.length, active, expiring, expired, depleted, oversold, voided, wastage };
   }, [batches, items, getBatchFreshnessMeta]);
 
   const filteredAndSortedBatches = useMemo(() => {
     let result = [...batches];
 
-    // 1. Status Filter (uses dynamic freshness status)
+    // 1. Status Filter (uses dynamic freshness status or WASTAGE)
     if (batchStatusFilter !== "ALL") {
-      result = result.filter((b) => {
-        const matchedItem = items.find((it) => it.id === b.item_id);
-        const meta = getBatchFreshnessMeta(b, matchedItem);
-        return meta.effectiveStatus === batchStatusFilter;
-      });
+      if (batchStatusFilter === "WASTAGE") {
+        result = result.filter((b) => b.has_wastage || (b.wastage_count && b.wastage_count > 0));
+      } else {
+        result = result.filter((b) => {
+          const matchedItem = items.find((it) => it.id === b.item_id);
+          const meta = getBatchFreshnessMeta(b, matchedItem);
+          return meta.effectiveStatus === batchStatusFilter;
+        });
+      }
     }
 
     // 2. Search Filter (batch number, product name, barcode)
@@ -1598,6 +1615,17 @@ export function InventoryTab({
                 >
                   Voided ({batchCounts.voided})
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setBatchStatusFilter("WASTAGE")}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition whitespace-nowrap ${
+                    batchStatusFilter === "WASTAGE"
+                      ? "bg-rose-600 text-white shadow-xs"
+                      : "bg-rose-500/10 text-rose-400 hover:text-rose-300 border border-rose-500/20"
+                  }`}
+                >
+                  Wastage ({batchCounts.wastage})
+                </button>
               </div>
             </div>
           </div>
@@ -1906,6 +1934,21 @@ export function InventoryTab({
                                     </button>
                                   );
                                 })()
+                              )}
+
+                              {(b.has_wastage || (b.wastage_count && b.wastage_count > 0)) && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedWastageHistoryBatch(b);
+                                    setIsBatchWastageModalOpen(true);
+                                  }}
+                                  className="inline-flex items-center gap-1 rounded-lg border border-rose-500/30 bg-rose-500/10 px-2 py-1 text-[11px] font-bold text-rose-400 hover:bg-rose-500/20 transition cursor-pointer"
+                                  title="View wastage records and restore stock"
+                                >
+                                  <History className="h-3.5 w-3.5" />
+                                  Wastage ({b.wastage_count || 1})
+                                </button>
                               )}
                             </div>
                           </td>
@@ -2476,6 +2519,36 @@ export function InventoryTab({
           }
         }}
       />
+
+      {/* Batch Wastage History & Undo Modal */}
+      {isBatchWastageModalOpen && selectedWastageHistoryBatch && (
+        <BatchWastageModal
+          isOpen={isBatchWastageModalOpen}
+          batch={selectedWastageHistoryBatch}
+          onClose={() => {
+            setIsBatchWastageModalOpen(false);
+            setSelectedWastageHistoryBatch(null);
+          }}
+          getBatchWastageHistory={
+            getBatchWastageHistory ||
+            (async (batchId) => {
+              return await apiRequest(`/api/admin/inventory/batches/${batchId}/wastage`);
+            })
+          }
+          deleteAndRestockWastage={
+            deleteAndRestockWastage ||
+            (async (ledgerId) => {
+              return await apiRequest(`/api/admin/inventory/wastage/${ledgerId}`, {
+                method: "DELETE",
+              });
+            })
+          }
+          onRestockSuccess={() => {
+            if (fetchBatches) fetchBatches();
+            if (fetchItems) fetchItems();
+          }}
+        />
+      )}
     </div>
   );
 }

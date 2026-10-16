@@ -40,11 +40,17 @@ def _is_in_window(now_time: time, start: time, end: time) -> bool:
         return now_time >= start or now_time < end
 
 
+_last_midnight_auto_close_date: str | None = None
+
+
 async def _tick(db_session_factory) -> None:
     """Single scheduler tick — check all auto-enabled outlets and update state."""
     from app.models.outlet import Outlet
 
-    now_ist = datetime.now(IST).time()
+    global _last_midnight_auto_close_date
+    now_dt_ist = datetime.now(IST)
+    now_ist = now_dt_ist.time()
+    today_str = now_dt_ist.strftime("%Y-%m-%d")
 
     async with db_session_factory() as db:
         from sqlalchemy import or_
@@ -89,6 +95,18 @@ async def _tick(db_session_factory) -> None:
                     action, outlet_id, start_str, end_str,
                     now_ist.strftime("%H:%M"),
                 )
+
+        # Auto-close prior day staff shifts once per day as soon as midnight (12:00 AM IST) hits — zero load during day
+        if _last_midnight_auto_close_date != today_str:
+            try:
+                from app.services.staff_punch_service import auto_close_midnight_shifts
+                outlets_res = await db.execute(select(Outlet.id))
+                for o_id in outlets_res.scalars().all():
+                    await auto_close_midnight_shifts(db, o_id)
+                _last_midnight_auto_close_date = today_str
+                logger.info("Midnight staff shift auto-close executed for date %s", today_str)
+            except Exception as e:
+                logger.warning("Error auto-closing midnight shifts in scheduler: %s", e)
 
         await db.commit()
 

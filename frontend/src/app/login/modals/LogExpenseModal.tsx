@@ -27,6 +27,7 @@ const CATEGORIES = [
   { value: "EQUIPMENT", label: "Equipment / Machinery", emoji: "🔧" },
   { value: "MAINTENANCE", label: "Maintenance", emoji: "🛠️" },
   { value: "PACKAGING", label: "Packaging / Plastic", emoji: "📦" },
+  { value: "OIL", label: "Oil", emoji: "🛢️" },
   { value: "MARKETING", label: "Marketing", emoji: "📣" },
   { value: "OTHER", label: "Other", emoji: "📋" },
 ];
@@ -100,10 +101,10 @@ export function LogExpenseModal({ isOpen, onClose, onSave, isSaving }: Props) {
         onClick={onClose}
       />
 
-      {/* Modal */}
-      <div className="relative z-10 w-full max-w-lg rounded-3xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] shadow-2xl overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-6 py-4">
+      {/* Modal Container with Max Height & Flex Column */}
+      <div className="relative z-10 w-full max-w-lg max-h-[90vh] flex flex-col rounded-3xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        {/* Header - Fixed at Top */}
+        <div className="flex shrink-0 items-center justify-between border-b border-[var(--border-subtle)] px-6 py-4">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--accent-brand)]/10 text-[var(--accent-brand)]">
               <Wallet className="h-5 w-5" />
@@ -122,131 +123,134 @@ export function LogExpenseModal({ isOpen, onClose, onSave, isSaving }: Props) {
           </button>
         </div>
 
-        {/* Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
-          {/* Category selector */}
-          <div>
-            <label className="mb-2 block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wide">
-              Category
-            </label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {CATEGORIES.map((cat) => (
-                <button
-                  key={cat.value}
-                  type="button"
-                  onClick={() => setCategory(cat.value)}
-                  className={`flex flex-col items-center gap-1 rounded-xl border px-2 py-2.5 text-xs font-semibold transition ${
-                    category === cat.value
-                      ? "border-[var(--accent-brand)] bg-[var(--accent-brand)]/15 text-[var(--accent-brand)] shadow-xs"
-                      : "border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] text-[var(--text-secondary)] hover:border-[var(--accent-brand)]/50 hover:text-[var(--text-primary)]"
-                  }`}
-                >
-                  <span className="text-lg leading-none">{cat.emoji}</span>
-                  <span className="text-center leading-tight">{cat.label}</span>
-                </button>
-              ))}
+        {/* Form with Scrollable Body and Fixed Footer */}
+        <form onSubmit={handleSubmit} className="flex flex-col min-h-0 flex-1 overflow-hidden">
+          {/* Scrollable Fields Body */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-5">
+            {/* Category selector */}
+            <div>
+              <label className="mb-2 block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wide">
+                Category
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {CATEGORIES.map((cat) => (
+                  <button
+                    key={cat.value}
+                    type="button"
+                    onClick={() => setCategory(cat.value)}
+                    className={`flex flex-col items-center gap-1 rounded-xl border px-2 py-2.5 text-xs font-semibold transition ${
+                      category === cat.value
+                        ? "border-[var(--accent-brand)] bg-[var(--accent-brand)]/15 text-[var(--accent-brand)] shadow-xs"
+                        : "border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] text-[var(--text-secondary)] hover:border-[var(--accent-brand)]/50 hover:text-[var(--text-primary)]"
+                    }`}
+                  >
+                    <span className="text-lg leading-none">{cat.emoji}</span>
+                    <span className="text-center leading-tight">{cat.label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
 
-          {/* Custom category input (visible when OTHER) */}
-          {category === "OTHER" && (
+            {/* Custom category input (visible when OTHER) */}
+            {category === "OTHER" && (
+              <div>
+                <label className="mb-1.5 block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wide">
+                  Specify Expense *
+                </label>
+                <input
+                  type="text"
+                  value={customCategory}
+                  onChange={(e) => setCustomCategory(e.target.value)}
+                  placeholder="e.g., AC repair, water bottles, plastic..."
+                  className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3.5 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent-brand)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-brand)]/30"
+                />
+              </div>
+            )}
+
+            {/* Amount + Date row */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1.5 block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wide">
+                  Amount (₹) *
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  step="0.01"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3.5 py-2 text-sm font-mono text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent-brand)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-brand)]/30"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wide">
+                  Date *
+                </label>
+                <input
+                  type="date"
+                  value={expenseDate}
+                  onChange={(e) => setExpenseDate(e.target.value)}
+                  className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3.5 py-2 text-sm font-mono text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-brand)]/30"
+                />
+              </div>
+              <p className="col-span-2 text-[11px] text-[var(--text-muted)]">
+                Calculated inside the month of this date and deducted from that month&apos;s profit.
+              </p>
+            </div>
+
+            {/* Payment Method */}
             <div>
               <label className="mb-1.5 block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wide">
-                Specify Expense *
+                Payment Method
               </label>
-              <input
-                type="text"
-                value={customCategory}
-                onChange={(e) => setCustomCategory(e.target.value)}
-                placeholder="e.g., AC repair, water bottles, plastic..."
-                className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3.5 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent-brand)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-brand)]/30"
-              />
+              <div className="flex flex-wrap gap-2">
+                {PAYMENT_METHODS.map((pm) => (
+                  <button
+                    key={pm.value}
+                    type="button"
+                    onClick={() => setPaymentMethod(pm.value)}
+                    className={`rounded-lg border px-3 py-1.5 text-xs font-bold transition ${
+                      paymentMethod === pm.value
+                        ? "border-[var(--accent-brand)] bg-[var(--accent-brand)] text-[var(--text-on-accent)] shadow-xs"
+                        : "border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--accent-brand)]/40"
+                    }`}
+                  >
+                    {pm.label}
+                  </button>
+                ))}
+              </div>
             </div>
-          )}
 
-          {/* Amount + Date row */}
-          <div className="grid grid-cols-2 gap-3">
+            {/* Description */}
             <div>
               <label className="mb-1.5 block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wide">
-                Amount (₹) *
+                Notes (optional)
               </label>
-              <input
-                type="number"
-                min="1"
-                step="0.01"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="0.00"
-                className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3.5 py-2 text-sm font-mono text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent-brand)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-brand)]/30"
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={2}
+                placeholder="Any additional notes about this expense..."
+                className="w-full resize-none rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3.5 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent-brand)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-brand)]/30"
               />
             </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wide">
-                Date *
-              </label>
-              <input
-                type="date"
-                value={expenseDate}
-                onChange={(e) => setExpenseDate(e.target.value)}
-                className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3.5 py-2 text-sm font-mono text-[var(--text-primary)] focus:border-[var(--accent-brand)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-brand)]/30"
-              />
-            </div>
-            <p className="col-span-2 text-[11px] text-[var(--text-muted)]">
-              Calculated inside the month of this date and deducted from that month&apos;s profit.
-            </p>
+
+            {/* Error */}
+            {error && (
+              <p className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3.5 py-2.5 text-xs font-semibold text-rose-500">
+                {error}
+              </p>
+            )}
           </div>
 
-          {/* Payment Method */}
-          <div>
-            <label className="mb-1.5 block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wide">
-              Payment Method
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {PAYMENT_METHODS.map((pm) => (
-                <button
-                  key={pm.value}
-                  type="button"
-                  onClick={() => setPaymentMethod(pm.value)}
-                  className={`rounded-lg border px-3 py-1.5 text-xs font-bold transition ${
-                    paymentMethod === pm.value
-                      ? "border-[var(--accent-brand)] bg-[var(--accent-brand)] text-[var(--text-on-accent)] shadow-xs"
-                      : "border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--accent-brand)]/40"
-                  }`}
-                >
-                  {pm.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Description */}
-          <div>
-            <label className="mb-1.5 block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wide">
-              Notes (optional)
-            </label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={2}
-              placeholder="Any additional notes about this expense..."
-              className="w-full resize-none rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3.5 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent-brand)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-brand)]/30"
-            />
-          </div>
-
-          {/* Error */}
-          {error && (
-            <p className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3.5 py-2.5 text-xs font-semibold text-rose-500">
-              {error}
-            </p>
-          )}
-
-          {/* Actions */}
-          <div className="flex items-center gap-3 pt-2">
+          {/* Sticky Actions Footer - ALWAYS VISIBLE */}
+          <div className="shrink-0 border-t border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)]/50 px-6 py-4 flex items-center gap-3">
             <button
               type="button"
               onClick={onClose}
               disabled={isSaving}
-              className="flex-1 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-4 py-2.5 text-xs font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition disabled:opacity-50"
+              className="flex-1 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-4 py-2.5 text-xs font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition disabled:opacity-50"
             >
               Cancel
             </button>

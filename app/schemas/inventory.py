@@ -252,6 +252,9 @@ class BatchDetailResponse(BaseResponse):
     margin_type: MarginTypeEnum | None = None
     retail_margin_pct: Decimal | None = None
     mrp_margin_pct: Decimal | None = None
+    has_wastage: bool = False
+    wastage_count: int = 0
+    wastage_quantity: Decimal = Decimal("0.000")
 
 
 class ItemBatchSummary(StrictSchema):
@@ -360,6 +363,33 @@ class StockWastageResponse(BaseResponse):
     new_current_stock: Decimal
     estimated_loss_amount: Decimal
     ledger_entry_id: uuid.UUID
+
+
+class BatchWastageEntryResponse(BaseResponse):
+    id: uuid.UUID
+    outlet_id: uuid.UUID
+    item_id: uuid.UUID
+    item_name: str
+    intake_id: uuid.UUID | None = None
+    batch_number: str | None = None
+    quantity: Decimal
+    unit_cost: Decimal | None = None
+    wastage_cost: Decimal
+    reason: str | None = None
+    notes: str | None = None
+    created_at: datetime
+    created_by_name: str | None = None
+
+
+class DeleteWastageRestockResponse(BaseResponse):
+    success: bool
+    message: str
+    item_id: uuid.UUID
+    item_name: str
+    restored_quantity: Decimal
+    batch_number: str | None = None
+    new_current_stock: Decimal
+    new_batch_remaining: Decimal | None = None
 
 
 InventoryItemCreate.model_rebuild()

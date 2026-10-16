@@ -33,7 +33,7 @@ export function AdminLoginForm({ onLogin, onPinLogin, onlyPin = false }: AdminLo
   const [staffId, setStaffId] = useState("");
   const [pin, setPin] = useState("");
   const [outlets, setOutlets] = useState<OutletOption[]>([]);
-  const [staffList, setStaffList] = useState<{id: string, name: string}[]>([]);
+  const [staffList, setStaffList] = useState<{ id: string; name: string; role?: string }[]>([]);
   const [isLoadingOutlets, setIsLoadingOutlets] = useState(false);
   const [isLoadingStaff, setIsLoadingStaff] = useState(false);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
@@ -330,7 +330,16 @@ export function AdminLoginForm({ onLogin, onPinLogin, onlyPin = false }: AdminLo
                         className="w-full flex items-center justify-between rounded-xl border border-[var(--border-strong)] bg-[var(--bg-base)] px-3 py-2.5 text-sm font-medium focus:ring-2 focus:ring-[var(--accent-brand)] focus:outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:border-[var(--text-muted)]"
                       >
                         <span className={staffId ? "text-[var(--text-primary)] font-semibold" : "text-[var(--text-muted)]"}>
-                          {staffId ? staffList.find(s => s.id === staffId)?.name : "-- Choose Your Name --"}
+                          {staffList.length === 0
+                            ? "-- No PIN-provisioned staff found --"
+                            : staffId
+                            ? (() => {
+                                const sel = staffList.find((s) => s.id === staffId);
+                                return sel
+                                  ? `${sel.name}${sel.role ? ` (${sel.role.replace("_", " ")})` : ""}`
+                                  : "-- Choose Your Name --";
+                              })()
+                            : "-- Choose Your Name --"}
                         </span>
                         <ChevronDown className={`h-4 w-4 text-[var(--text-muted)] transition-transform duration-200 ${openDropdown === "staff" ? "rotate-180" : ""}`} />
                       </button>
@@ -351,7 +360,14 @@ export function AdminLoginForm({ onLogin, onPinLogin, onlyPin = false }: AdminLo
                                   : "text-[var(--text-primary)] hover:bg-[var(--bg-base)] font-medium"
                               }`}
                             >
-                              <span>{s.name}</span>
+                              <span className="flex items-center gap-1.5">
+                                <span className="font-semibold">{s.name}</span>
+                                {s.role && (
+                                  <span className="text-[11px] font-normal text-[var(--text-muted)]">
+                                    ({s.role.replace("_", " ")})
+                                  </span>
+                                )}
+                              </span>
                               {staffId === s.id && <Check className="h-4 w-4" />}
                             </button>
                           ))}

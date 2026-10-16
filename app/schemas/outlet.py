@@ -57,6 +57,8 @@ class OutletCreate(StrictSchema):
     interstate_mode: str = "OFF"
     b2b_enabled: bool = False
     latest_batch_price_override: bool = True
+    floor_incentive_per_bill: Decimal = Field(default=Decimal("5.00"), ge=Decimal("0"))
+    floor_incentive_percent: Decimal = Field(default=Decimal("0.50"), ge=Decimal("0"), le=Decimal("100.00"))
 
 
 class OutletUpdate(StrictSchema):
@@ -95,6 +97,8 @@ class OutletUpdate(StrictSchema):
     interstate_mode: str | None = None
     b2b_enabled: bool | None = None
     latest_batch_price_override: bool | None = None
+    floor_incentive_per_bill: Decimal | None = Field(default=None, ge=Decimal("0"))
+    floor_incentive_percent: Decimal | None = Field(default=None, ge=Decimal("0"), le=Decimal("100.00"))
 
 
 class OutletResponse(BaseResponse):
@@ -134,6 +138,8 @@ class OutletResponse(BaseResponse):
     interstate_mode: str = "OFF"
     b2b_enabled: bool = False
     latest_batch_price_override: bool = True
+    floor_incentive_per_bill: Decimal = Field(default=Decimal("5.00"))
+    floor_incentive_percent: Decimal = Field(default=Decimal("0.50"))
     created_at: datetime
     updated_at: datetime
 

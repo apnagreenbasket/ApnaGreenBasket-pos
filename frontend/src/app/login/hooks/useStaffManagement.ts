@@ -45,6 +45,7 @@ export function useStaffManagement({
     role: "STAFF",
     password: "",
     pin: "",
+    barcode: "",
   });
   const [isSavingStaff, setIsSavingStaff] = useState(false);
 
@@ -215,11 +216,19 @@ export function useStaffManagement({
 
     try {
       if (editingStaffId) {
+        const trimmedPin = staffFormState.pin.trim();
+        if (trimmedPin && trimmedPin !== "••••" && trimmedPin !== "****" && trimmedPin.length !== 4) {
+          setError("PIN must be exactly 4 digits or cleared to remove.");
+          setIsSavingStaff(false);
+          return;
+        }
         const payload = {
           name: staffFormState.name.trim(),
           email: staffFormState.email.trim(),
           phone: trimmedPhone || null,
           role: staffFormState.role,
+          barcode: staffFormState.barcode?.trim() || null,
+          pin: trimmedPin,
         };
         const updated = await apiRequest<StaffMember>(`/api/staff/${editingStaffId}`, {
           method: "PUT",
@@ -246,6 +255,7 @@ export function useStaffManagement({
           role: staffFormState.role,
           password: staffFormState.password,
           pin: trimmedPin || null,
+          barcode: staffFormState.barcode?.trim() || null,
         };
         const created = await apiRequest<StaffMember>("/api/staff", {
           method: "POST",
@@ -256,7 +266,7 @@ export function useStaffManagement({
 
       setStaffModalOpen(false);
       setEditingStaffId(null);
-      setStaffFormState({ outlet_id: "", name: "", email: "", phone: "", role: "STAFF", password: "", pin: "" });
+      setStaffFormState({ outlet_id: "", name: "", email: "", phone: "", role: "STAFF", password: "", pin: "", barcode: "" });
       void loadStaffMembers();
       void loadStaffAuditLogs();
     } catch (err) {
@@ -326,6 +336,29 @@ export function useStaffManagement({
       void loadStaffAuditLogs();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to set PIN.");
+    } finally {
+      setIsSavingPin(false);
+    }
+  };
+
+  const onUnsetStaffPin = async (staffId?: string) => {
+    const target = staffId ? staffList.find((s) => s.id === staffId) : pinTargetStaff;
+    if (!target) return;
+    setIsSavingPin(true);
+    setError(null);
+
+    try {
+      await apiRequest<void>(`/api/staff/${target.id}/pin`, {
+        method: "DELETE",
+      });
+      setNotice(`PIN removed for "${target.name}".`);
+      setPinModalOpen(false);
+      setPinTargetStaff(null);
+      setPinInput("");
+      void loadStaffMembers();
+      void loadStaffAuditLogs();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to remove PIN.");
     } finally {
       setIsSavingPin(false);
     }
@@ -426,6 +459,7 @@ export function useStaffManagement({
     onActivateStaffMember,
     onDeleteStaffMemberPermanently,
     onSubmitSetStaffPin,
+    onUnsetStaffPin,
     onSubmitPinQuickSwitch,
   };
 }

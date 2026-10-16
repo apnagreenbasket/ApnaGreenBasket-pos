@@ -154,6 +154,57 @@ async def test_punch_auto_expiration_after_12_hours(db_session: AsyncSession):
 
 
 @pytest.mark.asyncio
+async def test_punch_auto_expiration_at_midnight_day_start(db_session: AsyncSession):
+    from app.services.staff_punch_service import get_today_start_utc
+    db = db_session
+    outlet_id = uuid.uuid4()
+    staff_id = uuid.uuid4()
+
+    outlet = Outlet(
+        id=outlet_id,
+        name="Midnight Outlet",
+        slug=f"midnight-{uuid.uuid4().hex[:6]}",
+        payment_mode=PaymentModeEnum.PAY_AT_COUNTER,
+    )
+    db.add(outlet)
+    staff = User(
+        id=staff_id,
+        outlet_id=outlet_id,
+        name="Night Worker",
+        email=f"night-{uuid.uuid4().hex[:4]}@worker.com",
+        role=RoleEnum.FLOOR_STAFF,
+        password_hash="pw",
+        status="active",
+    )
+    db.add(staff)
+
+    today_start = get_today_start_utc()
+    # Shift started 2 hours before midnight (on prior day)
+    punch_in_prior = today_start - timedelta(hours=2)
+    session = StaffPunchSession(
+        id=uuid.uuid4(),
+        staff_id=staff_id,
+        outlet_id=outlet_id,
+        punch_in_at=punch_in_prior,
+        punch_out_at=None,
+        auto_punched_out=False,
+    )
+    db.add(session)
+    await db.commit()
+
+    # Active session check should detect day ended and auto-close at midnight
+    active = await get_active_punch_session(db, outlet_id, staff_id)
+    assert active is None
+
+    await db.refresh(session)
+    assert session.punch_out_at is not None
+    assert session.auto_punched_out is True
+    assert session.status == "SETTLED"
+    assert session.punch_out_at == today_start
+    assert session.duration_seconds == 7200
+
+
+@pytest.mark.asyncio
 async def test_shift_scoped_billing_isolation(client, db_session: AsyncSession):
     db = db_session
     outlet_id = uuid.uuid4()

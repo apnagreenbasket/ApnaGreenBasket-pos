@@ -367,8 +367,11 @@ class StockIntakeReportResponse(BaseResponse):
 
 
 class WastageRow(StrictSchema):
+    id: str | None = None
     item_name: str
     item_id: str
+    intake_id: str | None = None
+    batch_number: str | None = None
     change_type: str
     reason: str | None = None
     notes: str | None = None

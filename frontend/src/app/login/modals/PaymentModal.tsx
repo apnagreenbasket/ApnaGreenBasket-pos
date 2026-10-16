@@ -14,6 +14,8 @@ import type { ManualBill } from "@/types";
 import type { RestaurantProfile } from "../adminTypes";
 import type { CustomerAnalytics } from "./CustomerInsightsModal";
 import { buildUpiPaymentUri, generateUpiQrDataUrl, getOutletUpiId } from "@/lib/upiQr";
+import { dq11Display } from "@/lib/dq11DisplayService";
+import { useDQ11Display } from "@/hooks/useDQ11Display";
 
 type PaymentModalProps = {
   isOpen: boolean;
@@ -113,14 +115,17 @@ export function PaymentModal({
 
   const [error, setError] = useState<string | null>(null);
 
+  const { status: dq11Status, pairAndConnect: pairDq11 } = useDQ11Display();
+
   useEffect(() => {
     if (!isOpen) {
       submittingRef.current = false;
       setIsSubmitting(false);
+      dq11Display.sendWelcome(restaurant?.name);
     } else {
       warmUpBackend();
     }
-  }, [isOpen]);
+  }, [isOpen, restaurant?.name]);
 
   useEffect(() => {
     if (error) {
@@ -380,8 +385,17 @@ export function PaymentModal({
 
     if (!upiUri || effectiveDirectUpiAmount <= 0) {
       setScreenUpiQrUrl(null);
+      dq11Display.sendWelcome(restaurant?.name);
       return;
     }
+
+    // Push dynamic QR to external DQ11 customer display over Web Serial
+    dq11Display.showPaymentQr({
+      upiUri,
+      amount: effectiveDirectUpiAmount,
+      billNo: String(billNo),
+      storeName: restaurant?.name || "ApnaGreen Basket",
+    });
 
     setIsGeneratingScreenQr(true);
     generateUpiQrDataUrl(upiUri, { width: 260, margin: 1 })
@@ -750,6 +764,17 @@ export function PaymentModal({
         finalCashAmount,
         finalUpiAmount
       );
+      // Trigger success on customer dynamic QR display and reset after 3.5s
+      if (selectedPaymentMethod === "UPI") {
+        const billNo = (paymentTargetBill as any)?.invoice_no || paymentTargetBill?.basket_number || paymentTargetBill?.id?.slice(0, 8).toUpperCase() || "BILL";
+        dq11Display.showSuccess({
+          billNo: String(billNo),
+          amount: finalUpiAmount || effectiveDirectUpiAmount,
+        });
+        setTimeout(() => {
+          dq11Display.sendWelcome(restaurant?.name);
+        }, 3500);
+      }
       // Requirement 4: Once marked paid & settled, clear note denomination selection
       handleResetNotes();
       setCashTendered("");
@@ -2117,6 +2142,26 @@ export function PaymentModal({
                           <span>{effectiveDirectUpiAmount !== effectiveGrandTotalForCollection ? `₹${effectiveDirectUpiAmount.toFixed(2)}` : "Edit"}</span>
                         </button>
                       </div>
+                    )}
+                  </div>
+
+                  {/* DQ11 Customer Display Sync Status Badge */}
+                  <div className="flex items-center justify-center pt-0.5">
+                    {dq11Status.isConnected ? (
+                      <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[11px] font-bold">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                        <span>DQ11 Customer Screen Active (₹{effectiveDirectUpiAmount.toFixed(2)})</span>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => pairDq11()}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-elevated)] border border-[var(--border-strong)] text-[var(--text-secondary)] hover:text-sky-400 text-[11px] font-semibold transition cursor-pointer shadow-xs"
+                        title="Connect your Eventum / Bonrix DQ11 Customer Display via USB"
+                      >
+                        <span className="w-2 h-2 rounded-full bg-neutral-400" />
+                        <span>Connect DQ11 Display (USB)</span>
+                      </button>
                     )}
                   </div>
 

@@ -155,6 +155,9 @@ def get_permissions_for_role(role: RoleEnum) -> RolePermissions:
 
 def to_staff_response(user: User) -> StaffResponse:
     """Helper to convert User model to StaffResponse Pydantic schema."""
+    barcode_val = user.barcode
+    if not barcode_val and user.id:
+        barcode_val = f"STF-{str(user.id)[:4].upper()}"
     return StaffResponse(
         id=user.id,
         outlet_id=user.outlet_id,
@@ -163,6 +166,7 @@ def to_staff_response(user: User) -> StaffResponse:
         phone=user.phone,
         role=user.role,
         status=user.status,
+        barcode=barcode_val,
         has_pin=user.pin_hash is not None,
         created_at=user.created_at,
         updated_at=user.updated_at,
@@ -212,8 +216,10 @@ async def create_staff(
     pwd_hash = hash_password(data.password)
     p_hash = hash_password(data.pin) if data.pin else None
 
+    user_uuid = uuid.uuid4()
+    barcode_val = (data.barcode.strip() if data.barcode and data.barcode.strip() else f"STF-{user_uuid.hex[:4].upper()}")
     user = User(
-        id=uuid.uuid4(),
+        id=user_uuid,
         outlet_id=outlet_id,
         name=data.name.strip(),
         email=data.email.lower().strip(),
@@ -224,6 +230,7 @@ async def create_staff(
         is_active=True,
         status="active",
         created_by=created_by_user_id,
+        barcode=barcode_val,
     )
     db.add(user)
     await db.flush()
@@ -323,6 +330,33 @@ async def update_staff(
     if data.status is not None:
         user.status = data.status
         user.is_active = (data.status == "active")
+    if hasattr(data, "barcode") and data.barcode is not None:
+        user.barcode = data.barcode.strip() if data.barcode.strip() else None
+
+    if hasattr(data, "pin") and data.pin is not None:
+        clean_pin = str(data.pin).strip()
+        if clean_pin == "":
+            user.pin_hash = None
+            await create_staff_audit_log(
+                db,
+                outlet_id=outlet_id,
+                staff_id=user.id,
+                action_type="pin_removed",
+                reference_type="User",
+                reference_id=str(user.id),
+                details=f"Unset/cleared PIN for staff '{user.name}' via Edit Staff",
+            )
+        elif clean_pin not in ("••••", "****"):
+            user.pin_hash = hash_password(clean_pin)
+            await create_staff_audit_log(
+                db,
+                outlet_id=outlet_id,
+                staff_id=user.id,
+                action_type="pin_updated",
+                reference_type="User",
+                reference_id=str(user.id),
+                details=f"Updated PIN for staff '{user.name}' via Edit Staff",
+            )
 
     await db.flush()
     await db.refresh(user)
@@ -557,6 +591,48 @@ async def set_staff_pin(
         reference_type="User",
         reference_id=str(user.id),
         details=f"Updated PIN for staff '{user.name}'",
+    )
+
+
+async def unset_staff_pin(
+    db: AsyncSession,
+    outlet_id: uuid.UUID,
+    staff_id: uuid.UUID,
+    actor_role: RoleEnum | None = None,
+    actor_user_id: uuid.UUID | None = None,
+) -> None:
+    """Clear/revoke a staff member's 4-digit PIN."""
+    res = await db.execute(
+        select(User).where(
+            User.id == staff_id,
+            User.outlet_id == outlet_id,
+        )
+    )
+    user = res.scalar_one_or_none()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Staff member not found.",
+        )
+
+    if actor_role and actor_user_id and actor_user_id != staff_id:
+        if not can_actor_manage_target_role(actor_role, user.role):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Forbidden: You do not have permission to unset PIN for a staff member with role '{user.role.value}'.",
+            )
+
+    user.pin_hash = None
+    await db.flush()
+
+    await create_staff_audit_log(
+        db,
+        outlet_id=outlet_id,
+        staff_id=user.id,
+        action_type="pin_removed",
+        reference_type="User",
+        reference_id=str(user.id),
+        details=f"Revoked/unset PIN for staff '{user.name}'",
     )
 
 

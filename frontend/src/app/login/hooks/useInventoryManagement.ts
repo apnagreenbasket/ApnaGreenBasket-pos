@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import type {
   BatchDetail,
   BatchExpiryAlert,
+  BatchWastageEntry,
   InventoryItem,
   InventoryUnit,
   RecipeIngredient,
@@ -539,6 +540,46 @@ export function useInventoryManagement(
     setSelectedWastageBatch(null);
   };
 
+  const deleteAndRestockWastage = useCallback(
+    async (ledgerId: string) => {
+      const res = await apiRequest<{
+        success: boolean;
+        message: string;
+        item_id: string;
+        item_name: string;
+        restored_quantity: number;
+        batch_number?: string | null;
+        new_current_stock: number;
+        new_batch_remaining?: number | null;
+      }>(`/api/admin/inventory/wastage/${ledgerId}`, {
+        method: "DELETE",
+      });
+
+      // Update item in local list
+      setItems((prev) =>
+        prev.map((it) =>
+          it.id === res.item_id
+            ? { ...it, current_stock: String(res.new_current_stock) }
+            : it
+        )
+      );
+
+      fetchBatches();
+      fetchLedger();
+      return res;
+    },
+    [apiRequest, fetchBatches, fetchLedger]
+  );
+
+  const getBatchWastageHistory = useCallback(
+    async (batchId: string): Promise<BatchWastageEntry[]> => {
+      return await apiRequest<BatchWastageEntry[]>(
+        `/api/admin/inventory/batches/${batchId}/wastage`
+      );
+    },
+    [apiRequest]
+  );
+
   const fetchPurchaseReturns = useCallback(async () => {
     try {
       const data = await apiRequest<any[]>("/api/admin/inventory/purchase-returns");
@@ -628,5 +669,7 @@ export function useInventoryManagement(
     openWastageModal,
     closeWastageModal,
     logWastage,
+    deleteAndRestockWastage,
+    getBatchWastageHistory,
   };
 }

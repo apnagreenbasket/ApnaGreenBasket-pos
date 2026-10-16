@@ -9,8 +9,10 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { Loader2, Save, Settings2, Upload, Plus, Trash2, BellRing } from "lucide-react";
+import { Loader2, Save, Settings2, Upload, Plus, Trash2, BellRing, QrCode, Usb, RefreshCw } from "lucide-react";
 import { getApiBaseUrl } from "@/lib/api";
+import { getOutletUpiId } from "@/lib/upiQr";
+import { useDQ11Display } from "@/hooks/useDQ11Display";
 import type { PaymentMode } from "@/types";
 import type {
   AdminMenuItem,
@@ -47,6 +49,16 @@ export function SettingsTab({
 }: SettingsTabProps) {
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [activeTab, setActiveTab] = useState<SettingsSubTab>("general");
+
+  const {
+    status: dq11Status,
+    settings: dq11Settings,
+    pairAndConnect: dq11Pair,
+    disconnect: dq11Disconnect,
+    updateSettings: dq11UpdateSettings,
+    sendTestQr: dq11SendTest,
+    resetToWelcome: dq11ResetWelcome,
+  } = useDQ11Display();
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -426,6 +438,165 @@ export function SettingsTab({
                 </label>
               </div>
 
+              {/* --- CUSTOMER DYNAMIC QR DISPLAY (EVENTUM DQ11) --- */}
+              <div className="space-y-4 rounded-2xl border border-sky-500/30 bg-sky-500/5 p-5">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-sky-500/20 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-sky-500/10 border border-sky-500/30 flex items-center justify-center text-sky-400">
+                      <QrCode className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-sky-400 flex items-center gap-1.5">
+                        <span>Customer Dynamic QR Display (Eventum DQ11)</span>
+                      </h3>
+                      <p className="text-[11px] text-[var(--text-muted)]">
+                        USB Web Serial customer-facing 3.5&quot; TFT display for live UPI payment QR codes &amp; billing totals.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {dq11Status.isConnected ? (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                        Connected &amp; Synced
+                      </span>
+                    ) : dq11Status.isConnecting ? (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Connecting...
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-neutral-500/15 text-neutral-400 border border-neutral-500/30">
+                        <span className="w-2 h-2 rounded-full bg-neutral-500" />
+                        Not Connected
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Device Status & Controls Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Left Column: Port Status & Actions */}
+                  <div className="space-y-3">
+                    <div className="p-3.5 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-[var(--text-primary)]">Serial Port Status</span>
+                        <span className="text-[10px] font-mono text-[var(--text-muted)] truncate max-w-[180px]">
+                          {dq11Status.portInfo || "No device paired"}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        {dq11Status.isConnected ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => dq11Disconnect()}
+                              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-rose-500/10 text-rose-400 border border-rose-500/30 hover:bg-rose-500/20 transition cursor-pointer"
+                            >
+                              Disconnect
+                            </button>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const directId = getOutletUpiId(restaurant) || "8603057958@sbi";
+                                await dq11SendTest(directId);
+                                setNotice("Test ₹1.00 QR sent to DQ11 display!");
+                              }}
+                              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-sky-500 text-white hover:bg-sky-600 transition cursor-pointer shadow-xs flex items-center gap-1.5"
+                            >
+                              <QrCode className="w-3.5 h-3.5" />
+                              <span>Send Test QR (₹1.00)</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                await dq11ResetWelcome(restaurant?.name);
+                                setNotice("Display reset to Welcome screen!");
+                              }}
+                              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-[var(--bg-surface-elevated)] text-[var(--text-secondary)] hover:text-white border border-[var(--border-strong)] transition cursor-pointer"
+                            >
+                              Reset Screen
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const ok = await dq11Pair();
+                              if (ok) {
+                                setNotice("DQ11 Customer Display connected successfully!");
+                              }
+                            }}
+                            disabled={dq11Status.isConnecting}
+                            className="px-4 py-2 rounded-xl text-xs font-bold bg-sky-500 text-white hover:bg-sky-600 disabled:opacity-50 transition cursor-pointer shadow-xs flex items-center gap-2"
+                          >
+                            <Usb className="w-4 h-4" />
+                            <span>{dq11Status.isConnecting ? "Connecting..." : "Pair & Connect DQ11 (USB)"}</span>
+                          </button>
+                        )}
+                      </div>
+
+                      {dq11Status.error && (
+                        <p className="text-[11px] text-rose-400 font-medium pt-1">
+                          ⚠️ {dq11Status.error}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="text-[11px] text-[var(--text-muted)] space-y-1">
+                      <p>• <b>Browser Driverless</b>: Direct Chrome Web Serial connection (zero install).</p>
+                      <p>• <b>Live Sync</b>: When Direct UPI is active in billing, the payable amount &amp; QR are instantly pushed to the customer screen.</p>
+                    </div>
+                  </div>
+
+                  {/* Right Column: Hardware Configuration */}
+                  <div className="p-3.5 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] space-y-3">
+                    <span className="text-xs font-bold text-[var(--text-primary)] block">Device Communication Settings</span>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="block space-y-1">
+                        <span className="text-[10px] font-bold uppercase text-[var(--text-muted)]">Baud Rate</span>
+                        <select
+                          value={dq11Settings.baudRate}
+                          onChange={(e) => dq11UpdateSettings({ baudRate: Number(e.target.value) })}
+                          className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-2.5 py-1.5 text-xs font-mono"
+                        >
+                          <option value={115200}>115200 (Recommended)</option>
+                          <option value={230400}>230400</option>
+                          <option value={9600}>9600</option>
+                          <option value={57600}>57600</option>
+                        </select>
+                      </label>
+
+                      <label className="block space-y-1">
+                        <span className="text-[10px] font-bold uppercase text-[var(--text-muted)]">Protocol Mode</span>
+                        <select
+                          value={dq11Settings.protocolMode}
+                          onChange={(e) => dq11UpdateSettings({ protocolMode: e.target.value as any })}
+                          className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-2.5 py-1.5 text-xs"
+                        >
+                          <option value="DQ11_STANDARD">DQ11 Standard</option>
+                          <option value="RAW_UPI">Raw UPI String</option>
+                          <option value="DUAL">Dual Mode</option>
+                        </select>
+                      </label>
+                    </div>
+
+                    <label className="flex items-center gap-2 pt-1 text-xs text-[var(--text-secondary)] cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={dq11Settings.autoConnect}
+                        onChange={(e) => dq11UpdateSettings({ autoConnect: e.target.checked })}
+                        className="rounded text-sky-500 focus:ring-sky-500"
+                      />
+                      <span>Auto-reconnect when device USB is plugged in</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
               <div className="space-y-4 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-5">
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-500/20 pb-3">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
@@ -761,6 +932,71 @@ export function SettingsTab({
                       })}
                     </div>
                   )}
+                </div>
+              </div>
+
+              {/* FLOOR STAFF INCENTIVE RULES (MANAGER+) */}
+              <div className="space-y-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-500/20 pb-2">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                    <span>Floor Staff Incentive & Commission Rules (Manager+)</span>
+                  </h3>
+                  <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-2.5 py-0.5 rounded-full font-bold">
+                    Active Formula: (Bills × ₹{restaurantForm.floor_incentive_per_bill || "0"}) + ({restaurantForm.floor_incentive_percent || "0"}% of Sales)
+                  </span>
+                </div>
+
+                <p className="text-xs text-[var(--text-muted)]">
+                  Configure the incentive rates awarded to Floor Staff / Basket Verifiers who assist customers at the shopping floor and during billing. Adjust anytime based on promotional campaigns or seasonal sales targets.
+                </p>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="block space-y-1">
+                    <span className="text-xs uppercase tracking-wide text-[var(--text-muted)] font-semibold">
+                      Per Assisted Bill Reward (₹)
+                    </span>
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.5"
+                      placeholder="5.00"
+                      value={restaurantForm.floor_incentive_per_bill}
+                      onChange={(event) =>
+                        setRestaurantForm((current) => ({
+                          ...current,
+                          floor_incentive_per_bill: event.target.value,
+                        }))
+                      }
+                      className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-2 text-sm font-bold text-emerald-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                    <span className="text-[10px] text-[var(--text-muted)] block">
+                      Fixed reward earned by floor assistant for every customer bill verified (e.g., ₹5.00).
+                    </span>
+                  </label>
+
+                  <label className="block space-y-1">
+                    <span className="text-xs uppercase tracking-wide text-[var(--text-muted)] font-semibold">
+                      Sales Volume Commission (%)
+                    </span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step="0.05"
+                      placeholder="0.50"
+                      value={restaurantForm.floor_incentive_percent}
+                      onChange={(event) =>
+                        setRestaurantForm((current) => ({
+                          ...current,
+                          floor_incentive_percent: event.target.value,
+                        }))
+                      }
+                      className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-2 text-sm font-mono font-bold text-emerald-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                    <span className="text-[10px] text-[var(--text-muted)] block">
+                      Percentage of assisted sales added to incentive (e.g. 0.50% gives ₹50 on ₹10,000 sales).
+                    </span>
+                  </label>
                 </div>
               </div>
             </div>

@@ -36,27 +36,6 @@ export function useStaffPunch({
   const [punchOutModalOpen, setPunchOutModalOpen] = useState<boolean>(false);
   const [liveShiftSeconds, setLiveShiftSeconds] = useState<number>(0);
 
-  // Live timer tick every 1 second when punched in
-  useEffect(() => {
-    if (isAdminRole || !punchStatus?.is_punched_in) {
-      return;
-    }
-
-    const interval = setInterval(() => {
-      setLiveShiftSeconds((prev) => {
-        const next = prev + 1;
-        // Check if exceeded 12 hours (43200 seconds)
-        if (next >= 43200) {
-          // Trigger refresh to let backend auto-expire
-          void fetchPunchStatus();
-        }
-        return next;
-      });
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [isAdminRole, punchStatus?.is_punched_in]);
-
   const fetchPunchStatus = useCallback(async () => {
     if (!accessToken) return;
 
@@ -88,6 +67,41 @@ export function useStaffPunch({
       setIsCheckingPunch(false);
     }
   }, [accessToken, isAdminRole, apiRequest]);
+
+  // Live timer tick every 1 second when punched in, with automatic 12:00 AM IST midnight shift expiry detection
+  useEffect(() => {
+    if (isAdminRole || !punchStatus?.is_punched_in) {
+      return;
+    }
+
+    let lastKnownDate = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+
+    const interval = setInterval(() => {
+      // Check if midnight 12:00 AM IST crossed
+      const currentDate = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+      if (currentDate !== lastKnownDate) {
+        lastKnownDate = currentDate;
+        // Midnight IST arrived — trigger punch status refresh to auto-close shift and prompt punch-in for new day
+        void fetchPunchStatus();
+        try {
+          onReloadDashboardData?.();
+        } catch {}
+        return;
+      }
+
+      setLiveShiftSeconds((prev) => {
+        const next = prev + 1;
+        // Check if exceeded 12 hours (43200 seconds)
+        if (next >= 43200) {
+          // Trigger refresh to let backend auto-expire
+          void fetchPunchStatus();
+        }
+        return next;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isAdminRole, punchStatus?.is_punched_in, fetchPunchStatus, onReloadDashboardData]);
 
   // Initial check on token/role changes
   useEffect(() => {

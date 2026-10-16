@@ -155,6 +155,8 @@ export interface RestaurantProfile {
   interstate_mode?: "OFF" | "PER_BILL" | "ALWAYS_ON";
   b2b_enabled?: boolean;
   latest_batch_price_override?: boolean;
+  floor_incentive_per_bill?: number | string | null;
+  floor_incentive_percent?: number | string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -193,6 +195,8 @@ export interface RestaurantFormState {
   interstate_mode: "OFF" | "PER_BILL" | "ALWAYS_ON";
   b2b_enabled: boolean;
   latest_batch_price_override: boolean;
+  floor_incentive_per_bill: string;
+  floor_incentive_percent: string;
 }
 
 export type AdminCategory = import("@/types").Category;

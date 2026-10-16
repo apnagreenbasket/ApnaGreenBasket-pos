@@ -82,6 +82,21 @@ export function BillInsightsModal({
     matchedStaff?.role ||
     (billerName === "Admin / System" ? "ADMIN" : "STAFF");
 
+  // Resolve assistant info (Basket Verifier / Store Floor Assistant)
+  const matchedAssistant = bill.assisted_by_staff_id
+    ? staffList.find((s) => s.id === bill.assisted_by_staff_id)
+    : null;
+
+  const assistantName =
+    bill.assisted_by_staff_name ||
+    matchedAssistant?.name ||
+    null;
+
+  const assistantRole =
+    bill.assisted_by_staff_role ||
+    matchedAssistant?.role ||
+    "FLOOR_STAFF";
+
   // Calculate discount amount in INR
   let discountAmountINR = 0;
   if (bill.discount_type) {
@@ -146,7 +161,7 @@ export function BillInsightsModal({
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-sky-600 dark:text-sky-400">
                 <UserCheck className="h-4 w-4" />
-                <span>Billed By (Created By)</span>
+                <span>Billed By (Cashier)</span>
               </div>
               <span
                 className={`inline-block rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${getRoleBadgeStyle(
@@ -190,6 +205,50 @@ export function BillInsightsModal({
               </div>
             </div>
           </div>
+
+          {/* Basket Verifier / Store Floor Assistant Section */}
+          {assistantName ? (
+            <div className="rounded-xl border border-amber-500/20 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                  <ShoppingBag className="h-4 w-4" />
+                  <span>Basket Verifier / Store Assistant</span>
+                </div>
+                <span
+                  className={`inline-block rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${getRoleBadgeStyle(
+                    assistantRole
+                  )}`}
+                >
+                  {formatRoleLabel(assistantRole)}
+                </span>
+              </div>
+              <div className="flex items-baseline justify-between">
+                <div>
+                  <p className="text-base font-extrabold text-[var(--text-primary)]">
+                    {assistantName}
+                  </p>
+                  <p className="text-xs text-[var(--text-muted)] flex items-center gap-1.5 mt-0.5">
+                    <span>Floor assistant who guided customer with shopping basket</span>
+                  </p>
+                </div>
+                <div className="text-right">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/15 text-amber-600 border border-amber-500/30">
+                    Assisted
+                  </span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)]/50 p-3.5 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2 text-[var(--text-muted)]">
+                <ShoppingBag className="h-4 w-4 opacity-50" />
+                <span className="font-semibold">Basket Verifier:</span>
+              </div>
+              <span className="font-medium text-[var(--text-secondary)] italic">
+                Self-Service (Solo Customer)
+              </span>
+            </div>
+          )}
 
           {/* Customer Details Card */}
           <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-4 space-y-2">

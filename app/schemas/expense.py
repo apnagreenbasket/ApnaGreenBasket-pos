@@ -20,8 +20,13 @@ EXPENSE_CATEGORIES = [
     "EQUIPMENT",
     "MAINTENANCE",
     "PACKAGING",
+    "OIL",
     "MARKETING",
     "OTHER",
+    "TEA_REFRESHMENTS",
+    "CONVEYANCE_AUTO",
+    "CLEANING_SUPPLIES",
+    "DAILY_LABOUR",
 ]
 
 PAYMENT_METHODS = ["CASH", "UPI", "BANK_TRANSFER", "CHEQUE", "OTHER"]
@@ -70,9 +75,22 @@ class ExpenseResponse(BaseModel):
     recipient_staff_id: Optional[uuid.UUID] = None
     recipient_staff_name: Optional[str] = None
     salary_month: Optional[str] = None
+    status: str = "APPROVED"
+    approved_by_id: Optional[uuid.UUID] = None
+    approved_by_name: Optional[str] = None
+    approved_at: Optional[datetime] = None
+    rejection_reason: Optional[str] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ExpenseApprovalAction(BaseModel):
+    rejection_reason: Optional[str] = Field(None, max_length=500)
+
+
+class PendingExpensesCountResponse(BaseModel):
+    pending_count: int
 
 
 class PayrollStaffCreate(BaseModel):

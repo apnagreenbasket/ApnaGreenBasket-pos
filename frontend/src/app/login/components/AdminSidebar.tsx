@@ -83,6 +83,7 @@ type AdminSidebarProps = {
   // Badges
   pendingVerificationCount: number;
   pendingApprovalsCount: number;
+  pendingExpensesCount?: number;
   lowStockAlertCount: number;
   abandonedCartCount: number;
 
@@ -115,6 +116,7 @@ export function AdminSidebar({
   isAdminRole,
   pendingVerificationCount,
   pendingApprovalsCount,
+  pendingExpensesCount,
   lowStockAlertCount,
   abandonedCartCount,
   onShowAbandonedCarts,
@@ -370,7 +372,9 @@ export function AdminSidebar({
           </button>
         )}
 
-        {(!staffPermissions || (staffPermissions.can_view_analytics && staffPermissions.allowed_sidebar_tabs?.includes("analytics"))) && (
+        {(!staffPermissions
+          ? ["SUPERADMIN", "OUTLET_ADMIN"].includes(userRole || "")
+          : (staffPermissions.can_view_analytics && staffPermissions.allowed_sidebar_tabs?.includes("analytics"))) && (
           <button
             type="button"
             onClick={() => handleTabClick("analytics", onLoadAnalyticsData)}
@@ -384,7 +388,9 @@ export function AdminSidebar({
           </button>
         )}
 
-        {(!staffPermissions || staffPermissions.allowed_sidebar_tabs?.includes("customerservices")) && (
+        {(!staffPermissions
+          ? ["SUPERADMIN", "OUTLET_ADMIN"].includes(userRole || "")
+          : staffPermissions.allowed_sidebar_tabs?.includes("customerservices")) && (
           <button
             type="button"
             onClick={() => handleTabClick("customerservices")}
@@ -412,7 +418,46 @@ export function AdminSidebar({
           </button>
         )}
 
-        {/* Abandoned Carts Badge */}
+        {(!staffPermissions
+          ? ["SUPERADMIN", "OUTLET_ADMIN"].includes(userRole || "")
+          : staffPermissions.allowed_sidebar_tabs?.includes("expenses")) && (
+          <button
+            type="button"
+            onClick={() => handleTabClick("expenses")}
+            className={`w-full flex items-center justify-between rounded-xl px-3.5 py-3 text-sm font-semibold transition ${activeTab === "expenses"
+              ? "bg-[var(--accent-brand)] text-[var(--text-on-accent)] shadow-xs"
+              : "text-[var(--text-secondary)] hover:bg-[var(--bg-surface-elevated)] hover:text-[var(--text-primary)]"
+              }`}
+          >
+            <div className="flex items-center gap-3">
+              <Wallet className="h-4 w-4" />
+              <span>Expenses</span>
+            </div>
+            {!!pendingExpensesCount && pendingExpensesCount > 0 && (
+              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 text-[10px] font-black text-black">
+                {pendingExpensesCount}
+              </span>
+            )}
+          </button>
+        )}
+
+        {(!staffPermissions
+          ? ["SUPERADMIN", "OUTLET_ADMIN"].includes(userRole || "")
+          : staffPermissions.allowed_sidebar_tabs?.includes("settings")) && (
+          <button
+            type="button"
+            onClick={() => handleTabClick("settings")}
+            className={`w-full flex items-center gap-3 rounded-xl px-3.5 py-3 text-sm font-semibold transition ${activeTab === "settings"
+              ? "bg-[var(--accent-brand)] text-[var(--text-on-accent)] shadow-xs"
+              : "text-[var(--text-secondary)] hover:bg-[var(--bg-surface-elevated)] hover:text-[var(--text-primary)]"
+              }`}
+          >
+            <Settings2 className="h-4 w-4" />
+            <span>Outlet Settings</span>
+          </button>
+        )}
+
+        {/* Abandoned Carts / Baskets & Carts */}
         {(!staffPermissions || staffPermissions.allowed_sidebar_tabs?.includes("sessions")) && (
           <button
             type="button"
@@ -428,34 +473,6 @@ export function AdminSidebar({
                 {abandonedCartCount}
               </span>
             )}
-          </button>
-        )}
-
-        {(!staffPermissions || staffPermissions.allowed_sidebar_tabs?.includes("settings")) && (
-          <button
-            type="button"
-            onClick={() => handleTabClick("settings")}
-            className={`w-full flex items-center gap-3 rounded-xl px-3.5 py-3 text-sm font-semibold transition ${activeTab === "settings"
-              ? "bg-[var(--accent-brand)] text-[var(--text-on-accent)] shadow-xs"
-              : "text-[var(--text-secondary)] hover:bg-[var(--bg-surface-elevated)] hover:text-[var(--text-primary)]"
-              }`}
-          >
-            <Settings2 className="h-4 w-4" />
-            <span>Outlet Settings</span>
-          </button>
-        )}
-
-        {(!staffPermissions || staffPermissions.allowed_sidebar_tabs?.includes("expenses")) && (
-          <button
-            type="button"
-            onClick={() => handleTabClick("expenses")}
-            className={`w-full flex items-center gap-3 rounded-xl px-3.5 py-3 text-sm font-semibold transition ${activeTab === "expenses"
-              ? "bg-[var(--accent-brand)] text-[var(--text-on-accent)] shadow-xs"
-              : "text-[var(--text-secondary)] hover:bg-[var(--bg-surface-elevated)] hover:text-[var(--text-primary)]"
-              }`}
-          >
-            <Wallet className="h-4 w-4" />
-            <span>Expenses</span>
           </button>
         )}
       </nav>

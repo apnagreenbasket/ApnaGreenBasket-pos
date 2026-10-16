@@ -165,6 +165,16 @@ def _format_bill_response(order: Order, staff_user: Any = None) -> BillResponse:
         raw_role = getattr(staff_user, "role", None)
         staff_role = raw_role.value if hasattr(raw_role, "value") else (str(raw_role) if raw_role is not None else None)
 
+    # Safely resolve assisted_by_staff
+    asst_obj = order.__dict__.get("assisted_by_staff")
+    asst_name = getattr(order, "assisted_by_staff_name", None)
+    asst_role = None
+    if asst_obj:
+        if not asst_name:
+            asst_name = getattr(asst_obj, "name", None)
+        raw_asst_role = getattr(asst_obj, "role", None)
+        asst_role = raw_asst_role.value if hasattr(raw_asst_role, "value") else (str(raw_asst_role) if raw_asst_role is not None else None)
+
     return BillResponse(
         id=str(order.id),
         outlet_id=str(order.outlet_id),
@@ -209,6 +219,9 @@ def _format_bill_response(order: Order, staff_user: Any = None) -> BillResponse:
         created_by_staff_id=str(order.created_by_staff_id) if order.created_by_staff_id else None,
         created_by_staff_name=staff_name,
         created_by_staff_role=staff_role,
+        assisted_by_staff_id=str(order.assisted_by_staff_id) if getattr(order, "assisted_by_staff_id", None) else None,
+        assisted_by_staff_name=asst_name,
+        assisted_by_staff_role=asst_role,
         replaces_bill_id=str(order.replaces_bill_id) if getattr(order, "replaces_bill_id", None) else None,
         created_at=order.created_at.isoformat() if hasattr(order.created_at, "isoformat") else str(order.created_at),
         finalized_at=order.finalized_at.isoformat() if order.finalized_at and hasattr(order.finalized_at, "isoformat") else None,
@@ -418,6 +431,7 @@ async def list_bills_endpoint(
             selectinload(Order.items).selectinload(OrderItem.selected_batch),
             selectinload(Order.customer),
             selectinload(Order.created_by_staff),
+            selectinload(Order.assisted_by_staff),
         )
         .where(Order.outlet_id == current_user.outlet_id)
     )
@@ -692,6 +706,7 @@ async def get_bill_endpoint(
             selectinload(Order.items).selectinload(OrderItem.selected_batch),
             selectinload(Order.customer),
             selectinload(Order.created_by_staff),
+            selectinload(Order.assisted_by_staff),
         )
         .where(
             Order.id == bill_id,

@@ -48,6 +48,7 @@ class User(Base, TimestampMixin):
     pin_hash: Mapped[str | None] = mapped_column(String(512), nullable=True)
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    barcode: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
 
     # Refresh tokens — stored hashed, one active per user
     refresh_token_hash: Mapped[str | None] = mapped_column(

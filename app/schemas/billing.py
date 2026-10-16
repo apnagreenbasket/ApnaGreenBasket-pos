@@ -41,6 +41,8 @@ class CreateManualBillRequest(StrictSchema):
     replaces_bill_id: str | None = None
     is_interstate: bool = False
     place_of_supply: str | None = None
+    assisted_by_staff_id: str | None = None
+    assisted_by_barcode: str | None = None
     items: list[BillItemInput] = Field(default_factory=list)
 
 
@@ -55,6 +57,8 @@ class UpdateManualBillRequest(StrictSchema):
     replaces_bill_id: str | None = None
     is_interstate: bool = False
     place_of_supply: str | None = None
+    assisted_by_staff_id: str | None = None
+    assisted_by_barcode: str | None = None
     items: list[BillItemInput] = Field(default_factory=list)
 
 
@@ -212,6 +216,9 @@ class BillResponse(BaseResponse):
     created_by_staff_id: str | None = None
     created_by_staff_name: str | None = None
     created_by_staff_role: str | None = None
+    assisted_by_staff_id: str | None = None
+    assisted_by_staff_name: str | None = None
+    assisted_by_staff_role: str | None = None
     replaces_bill_id: str | None = None
     created_at: str
     finalized_at: str | None = None

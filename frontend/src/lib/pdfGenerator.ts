@@ -5674,6 +5674,240 @@ export function generateShiftHandoverReceiptPDF(
   }
 }
 
+export function generateFloorStaffIncentiveSlipPDF(
+  staffRow: any,
+  restaurant?: any,
+  action: "print" | "view" | "download" = "print"
+) {
+  const pageWidth = 72;
+  const margin = 3.5;
+  const contentWidth = pageWidth - margin * 2;
+
+  const drawDashedLine = (d: any, y: number) => {
+    d.setLineWidth(0.2);
+    d.setDrawColor(0, 0, 0);
+    d.setLineDashPattern([1.2, 1.2], 0);
+    d.line(margin, y, pageWidth - margin, y);
+    d.setLineDashPattern([], 0);
+  };
+
+  const drawSolidLine = (d: any, y: number) => {
+    d.setLineWidth(0.3);
+    d.setDrawColor(0, 0, 0);
+    d.setLineDashPattern([], 0);
+    d.line(margin, y, pageWidth - margin, y);
+  };
+
+  const renderReceipt = (d: any) => {
+    let y = 6;
+
+    const printRow = (
+      leftText: string,
+      rightText: string,
+      options?: { fontSize?: number; isBold?: boolean; spacing?: number }
+    ) => {
+      const fontSize = options?.fontSize ?? 7.5;
+      const isBold = options?.isBold ?? false;
+      const spacing = options?.spacing ?? 3.5;
+
+      d.setFont("helvetica", isBold ? "bold" : "normal");
+      d.setFontSize(fontSize);
+      d.setTextColor(0, 0, 0);
+
+      const leftW = d.getTextWidth(leftText);
+      const rightW = d.getTextWidth(rightText);
+
+      if (leftW + rightW > contentWidth - 2) {
+        d.text(leftText, margin, y);
+        y += spacing;
+        d.text(rightText, pageWidth - margin, y, { align: "right" });
+        y += spacing;
+      } else {
+        d.text(leftText, margin, y);
+        d.text(rightText, pageWidth - margin, y, { align: "right" });
+        y += spacing;
+      }
+    };
+
+    // Header: Store Name
+    d.setFont("helvetica", "bold");
+    d.setFontSize(10);
+    d.setTextColor(0, 0, 0);
+    d.text(restaurant?.name || "STORE / OUTLET", pageWidth / 2, y, { align: "center" });
+    y += 4;
+
+    d.setFont("helvetica", "bold");
+    d.setFontSize(8);
+    d.text("FLOOR STAFF INCENTIVE SLIP", pageWidth / 2, y, { align: "center" });
+    y += 3.5;
+
+    drawSolidLine(d, y);
+    y += 4;
+
+    // Staff Info
+    printRow("Staff Member", staffRow.staff_name || "Floor Assistant", { fontSize: 8, isBold: true, spacing: 3.8 });
+    printRow("Assigned Role", (staffRow.staff_role || "Floor Staff").replace("_", " "), { fontSize: 7, spacing: 3.5 });
+    printRow("Barcode Badge", staffRow.staff_barcode || "—", { fontSize: 7, spacing: 3.5 });
+    printRow("Shift Timing", staffRow.total_shift_duration_formatted || "In Progress", { fontSize: 7, spacing: 3.5 });
+
+    drawDashedLine(d, y);
+    y += 4;
+
+    // Performance Metrics
+    d.setFont("helvetica", "bold");
+    d.setFontSize(7.5);
+    d.text("ASSISTANCE & PERFORMANCE", margin, y);
+    y += 4;
+
+    printRow("Customers / Bills Assisted", `${staffRow.total_bills_assisted || 0} orders`, { fontSize: 7.5, spacing: 3.5 });
+    printRow("Total Assisted Sales", `INR ${(Number(staffRow.total_assisted_sales) || 0).toFixed(2)}`, { fontSize: 7.5, isBold: true, spacing: 3.8 });
+    printRow("Average Basket Value", `INR ${(Number(staffRow.average_basket_value) || 0).toFixed(2)}`, { fontSize: 7, spacing: 3.5 });
+
+    drawSolidLine(d, y);
+    y += 4;
+
+    // Calculated Incentive
+    printRow("CALCULATED INCENTIVE", `INR ${(Number(staffRow.calculated_incentive) || 0).toFixed(2)}`, { fontSize: 8.5, isBold: true, spacing: 4.5 });
+
+    drawDashedLine(d, y);
+    y += 7;
+
+    // Signatures
+    const sigLineWidth = 26;
+    d.setDrawColor(80, 80, 80);
+    d.setLineWidth(0.3);
+    d.line(margin, y, margin + sigLineWidth, y);
+    d.line(pageWidth - margin - sigLineWidth, y, pageWidth - margin, y);
+    y += 3.5;
+    d.setFont("helvetica", "normal");
+    d.setFontSize(6.5);
+    d.text("Staff Signature", margin, y);
+    d.text("Manager Signature", pageWidth - margin, y, { align: "right" });
+    y += 4.5;
+
+    d.setFont("helvetica", "normal");
+    d.setFontSize(6);
+    d.setTextColor(100, 100, 100);
+    d.text(`Generated on ${new Date().toLocaleString("en-IN")}`, pageWidth / 2, y, { align: "center" });
+    y += 3;
+
+    return y;
+  };
+
+  const measureDoc = new (jsPDF as any)({
+    orientation: "portrait",
+    unit: "mm",
+    format: [72, 3000],
+  });
+  const measuredEndY = renderReceipt(measureDoc);
+  const exactPageHeight = Math.max(80, Math.ceil(measuredEndY + 3));
+
+  const doc = new (jsPDF as any)({
+    orientation: "portrait",
+    unit: "mm",
+    format: [72, exactPageHeight],
+  });
+  renderReceipt(doc);
+
+  const cleanStaffName = (staffRow.staff_name || "Staff").replace(/[^a-zA-Z0-9]/g, "_");
+  const filename = `Incentive_Slip_${cleanStaffName}_${new Date().toISOString().slice(0, 10)}.pdf`;
+
+  if (action === "print") {
+    doc.autoPrint();
+    const blobUrl = doc.output("bloburl");
+    const printWindow = window.open(blobUrl, "_blank");
+    if (printWindow) {
+      printWindow.focus();
+    }
+  } else if (action === "view") {
+    const blobUrl = doc.output("bloburl");
+    window.open(blobUrl, "_blank");
+  } else {
+    doc.save(filename);
+  }
+}
+
+export function generateStaffBarcodeBadgePDF(
+  staff: any,
+  restaurant?: any,
+  action: "print" | "view" | "download" = "print"
+) {
+  const pageWidth = 60;
+  const pageHeight = 45;
+  const margin = 3;
+
+  const doc = new (jsPDF as any)({
+    orientation: "landscape",
+    unit: "mm",
+    format: [pageWidth, pageHeight],
+  });
+
+  // Border
+  doc.setLineWidth(0.4);
+  doc.setDrawColor(0, 0, 0);
+  doc.rect(margin, margin, pageWidth - margin * 2, pageHeight - margin * 2);
+
+  // Store Header
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(0, 0, 0);
+  doc.text(restaurant?.name || "APNA GREEN BASKET", pageWidth / 2, 8, { align: "center" });
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(6);
+  doc.setTextColor(100, 100, 100);
+  doc.text("STAFF ID & BASKET VERIFIER BADGE", pageWidth / 2, 11, { align: "center" });
+
+  // Divider
+  doc.setLineWidth(0.2);
+  doc.line(margin + 2, 13, pageWidth - margin - 2, 13);
+
+  // Staff Name & Role
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.setTextColor(0, 0, 0);
+  doc.text(staff.name || "Staff Member", pageWidth / 2, 18, { align: "center" });
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7.5);
+  doc.setTextColor(60, 60, 60);
+  doc.text((staff.role || "FLOOR_STAFF").replace("_", " ").toUpperCase(), pageWidth / 2, 22, { align: "center" });
+
+  // Barcode Box
+  const barcodeStr = staff.barcode || `STF-${(staff.id || "0000").slice(0, 4).toUpperCase()}`;
+  doc.setFont("courier", "bold");
+  doc.setFontSize(12);
+  doc.setTextColor(0, 0, 0);
+  doc.text(`* ${barcodeStr} *`, pageWidth / 2, 31, { align: "center" });
+
+  doc.setFont("courier", "normal");
+  doc.setFontSize(7);
+  doc.text(barcodeStr, pageWidth / 2, 36, { align: "center" });
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(5);
+  doc.setTextColor(120, 120, 120);
+  doc.text("Scan barcode gun at billing to attach assistant", pageWidth / 2, 40, { align: "center" });
+
+  const cleanName = (staff.name || "Staff").replace(/[^a-zA-Z0-9]/g, "_");
+  const filename = `Badge_${cleanName}_${barcodeStr}.pdf`;
+
+  if (action === "print") {
+    doc.autoPrint();
+    const blobUrl = doc.output("bloburl");
+    const printWindow = window.open(blobUrl, "_blank");
+    if (printWindow) {
+      printWindow.focus();
+    }
+  } else if (action === "view") {
+    const blobUrl = doc.output("bloburl");
+    window.open(blobUrl, "_blank");
+  } else {
+    doc.save(filename);
+  }
+}
+
+
 // ==========================================
 // 20. CONSOLIDATED STAFF EXECUTIVE CLOSING REPORT (A4 Multi-Section)
 // Section 1: Store Settlement & Returns Reconciliation

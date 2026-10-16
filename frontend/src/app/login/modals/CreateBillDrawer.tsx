@@ -9,7 +9,7 @@ import { useBarcodeScanner } from "@/hooks/useBarcodeScanner";
 import { apiRequest, warmUpBackend } from "../adminUtils";
 import { CustomerInsightsModal, CustomerAnalytics } from "./CustomerInsightsModal";
 import { OversellBatchModal, type BatchAllocation } from "./OversellBatchModal";
-import type { ItemBatchSummary } from "@/types";
+import type { ItemBatchSummary, StaffMember } from "@/types";
 
 export type DraftCartItem = {
   menu_item_id: string;
@@ -238,6 +238,9 @@ type CreateBillDrawerProps = {
   setMenuPage?: (page: number | ((p: number) => number)) => void;
   menuTotalPages?: number;
   editingCompletedBill?: import("@/types").ManualBill | null;
+  staffList?: StaffMember[];
+  assistedByStaff?: StaffMember | null;
+  setAssistedByStaff?: (staff: StaffMember | null) => void;
 };
 
 
@@ -402,9 +405,33 @@ export function CreateBillDrawer({
   setMenuPage,
   menuTotalPages,
   editingCompletedBill,
+  staffList = [],
+  assistedByStaff = null,
+  setAssistedByStaff,
 }: CreateBillDrawerProps) {
+  const [showManualStaffPicker, setShowManualStaffPicker] = useState(false);
   const { isAdminRole } = useAdminAuth();
   const isPrivileged = isAdminRole;
+
+  // Only Floor Staff / Store Assistants can verify baskets and assist walk-in customers
+  const floorStaffList = useMemo(() => {
+    return (staffList || []).filter(
+      (s) =>
+        (s.role === "FLOOR_STAFF" || s.role === "STAFF") &&
+        s.status !== "inactive"
+    );
+  }, [staffList]);
+
+  // If assistedByStaff was previously set to an ineligible role (e.g. manager, admin, cashier), clear it
+  useEffect(() => {
+    if (
+      assistedByStaff &&
+      assistedByStaff.role !== "FLOOR_STAFF" &&
+      assistedByStaff.role !== "STAFF"
+    ) {
+      setAssistedByStaff?.(null);
+    }
+  }, [assistedByStaff, setAssistedByStaff]);
 
   const inventoryStockMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -1108,6 +1135,39 @@ export function CreateBillDrawer({
   const handleBarcodeScan = useCallback(async (barcode: string) => {
     const cleanBarcode = barcode.trim();
     if (!cleanBarcode) return;
+
+    // 1. Floor Staff / Basket Verifier Barcode Check (Alternative 1)
+    const upperCode = cleanBarcode.toUpperCase();
+    const isStaffPrefix = upperCode.startsWith("STF-");
+    let matchedStaff = staffList.find(
+      (s) =>
+        (s.barcode && s.barcode.toUpperCase() === upperCode) ||
+        (isStaffPrefix && `STF-${s.id.slice(0, 4).toUpperCase()}` === upperCode) ||
+        (isStaffPrefix && s.id.toLowerCase().startsWith(cleanBarcode.slice(4).toLowerCase()))
+    );
+
+    if (!matchedStaff && isStaffPrefix) {
+      try {
+        const fetchedStaff = await apiRequest<StaffMember>(`/api/staff/by-barcode/${encodeURIComponent(cleanBarcode)}`);
+        if (fetchedStaff) {
+          matchedStaff = fetchedStaff;
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+
+    if (matchedStaff) {
+      if (matchedStaff.role !== "FLOOR_STAFF" && matchedStaff.role !== "STAFF") {
+        setInlineNotice(
+          `⚠️ ${matchedStaff.name} is ${matchedStaff.role.replace("_", " ")}. Only Store Assistants / Floor Staff can be attached as basket verifiers.`
+        );
+        return;
+      }
+      setAssistedByStaff?.(matchedStaff);
+      setInlineNotice(`✓ Basket Verifier attached: ${matchedStaff.name} (Floor Assistant)`);
+      return;
+    }
 
     let { match, scannedQuantity } = processBarcodeScan(cleanBarcode);
 
@@ -1850,6 +1910,81 @@ export function CreateBillDrawer({
                     className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-2.5 py-1 text-base text-[var(--text-primary)] focus:border-sky-500 focus:outline-none"
                   />
                 </div>
+              </div>
+
+              {/* Floor Assistant / Basket Verifier Selector */}
+              <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-2.5 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider flex items-center gap-1.5">
+                      <span>🛒</span> Basket Verifier / Assistant
+                    </span>
+                    {assistedByStaff ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                        <span>✓ {assistedByStaff.name} ({assistedByStaff.role.replace("_", " ")})</span>
+                        {setAssistedByStaff && (
+                          <button
+                            type="button"
+                            onClick={() => setAssistedByStaff(null)}
+                            className="ml-1 text-[var(--text-muted)] hover:text-rose-500 transition cursor-pointer font-black"
+                            title="Remove Assistant"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-[var(--text-muted)] italic">
+                        (Scan staff barcode or select manually)
+                      </span>
+                    )}
+                  </div>
+
+                  <label className="flex items-center gap-1.5 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={showManualStaffPicker}
+                      onChange={(e) => setShowManualStaffPicker(e.target.checked)}
+                      className="rounded border-[var(--border-strong)] text-emerald-500 h-3.5 w-3.5 cursor-pointer accent-emerald-500"
+                    />
+                    <span>Select Manually</span>
+                  </label>
+                </div>
+
+                {showManualStaffPicker && (
+                  <div className="pt-1 flex items-center gap-2">
+                    <select
+                      value={assistedByStaff?.id || ""}
+                      onChange={(e) => {
+                        const picked = floorStaffList.find((s) => s.id === e.target.value) || null;
+                        setAssistedByStaff?.(picked);
+                      }}
+                      className="flex-1 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] px-3 py-1.5 text-xs font-bold text-[var(--text-primary)] focus:border-sky-500 focus:outline-none"
+                    >
+                      <option value="">-- No Assistant (Self-Service Walk-In) --</option>
+                      {floorStaffList.length === 0 ? (
+                        <option value="" disabled>
+                          No active store assistants found
+                        </option>
+                      ) : (
+                        floorStaffList.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name} (FLOOR STAFF) {s.barcode ? `[${s.barcode}]` : ""}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                    {assistedByStaff && setAssistedByStaff && (
+                      <button
+                        type="button"
+                        onClick={() => setAssistedByStaff(null)}
+                        className="px-2.5 py-1.5 rounded-xl border border-rose-500/30 text-rose-500 text-xs font-bold hover:bg-rose-500/10 transition cursor-pointer"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* GST Compliance & Inter-State Bar */}

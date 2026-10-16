@@ -29,7 +29,7 @@ class Expense(Base):
     )
 
     # Category: predefined types + OTHER with custom specification
-    # SALARY, RENT, ELECTRICITY, WATER, EQUIPMENT, MAINTENANCE, PACKAGING, MARKETING, OTHER
+    # SALARY, RENT, ELECTRICITY, EQUIPMENT, MAINTENANCE, PACKAGING, OIL, MARKETING, OTHER
     category: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
 
     # When category == "OTHER", user can specify what it is
@@ -70,6 +70,19 @@ class Expense(Base):
     recipient_staff_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     salary_month: Mapped[str | None] = mapped_column(String(7), nullable=True, index=True)
 
+    # Approval workflow status: APPROVED, PENDING_APPROVAL, REJECTED
+    status: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="APPROVED", index=True
+    )
+    approved_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    approved_by_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    rejection_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
     # Audit timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=datetime.utcnow
@@ -81,4 +94,5 @@ class Expense(Base):
     # Relationships
     outlet = relationship("Outlet")
     logged_by = relationship("User", foreign_keys=[logged_by_staff_id])
+    approved_by = relationship("User", foreign_keys=[approved_by_id])
     recipient_staff = relationship("PayrollStaff", foreign_keys=[recipient_staff_id])

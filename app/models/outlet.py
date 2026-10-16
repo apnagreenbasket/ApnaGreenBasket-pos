@@ -128,6 +128,12 @@ class Outlet(Base, TimestampMixin):
     invoice_terms_conditions: Mapped[str | None] = mapped_column(
         String(2000), nullable=True, default="1. Goods once sold will not be taken back.\n2. Subject to local jurisdiction."
     )
+    floor_incentive_per_bill: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), nullable=False, server_default="5.00", default=Decimal("5.00")
+    )
+    floor_incentive_percent: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2), nullable=False, server_default="0.50", default=Decimal("0.50")
+    )
 
     @property
     def is_evening_active(self) -> bool:

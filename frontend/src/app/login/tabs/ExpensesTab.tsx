@@ -21,12 +21,17 @@ import {
   Pencil,
   CheckCircle2,
   Clock,
+  Check,
+  X,
 } from "lucide-react";
 import { getApiBaseUrl } from "@/lib/api";
 import { LogExpenseModal } from "../modals/LogExpenseModal";
 import { PaySalaryModal, type StaffSalaryItem } from "../modals/PaySalaryModal";
 import { EditStaffModal } from "../modals/EditStaffModal";
 import { QuickOnboardStaffModal } from "../modals/QuickOnboardStaffModal";
+import { DeleteExpenseModal } from "../modals/DeleteExpenseModal";
+import { RejectExpenseModal } from "../modals/RejectExpenseModal";
+import { RemovePayrollStaffModal } from "../modals/RemovePayrollStaffModal";
 import type { RestaurantProfile } from "../adminTypes";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -64,6 +69,9 @@ interface Expense {
   description?: string;
   expense_date: string;
   logged_by_staff_name?: string;
+  status?: string;
+  approved_by_name?: string;
+  rejection_reason?: string;
   created_at: string;
 }
 
@@ -118,8 +126,13 @@ const CATEGORY_DISPLAY: Record<string, string> = {
   EQUIPMENT: "Equipment / Machinery",
   MAINTENANCE: "Maintenance",
   PACKAGING: "Packaging / Plastic",
+  OIL: "Oil",
   MARKETING: "Marketing",
   OTHER: "Other",
+  TEA_REFRESHMENTS: "Tea & Refreshments",
+  CONVEYANCE_AUTO: "Auto Fare / Conveyance",
+  CLEANING_SUPPLIES: "Cleaning & Supplies",
+  DAILY_LABOUR: "Daily Labour / Loading",
 };
 
 const CATEGORY_EMOJI: Record<string, string> = {
@@ -129,8 +142,13 @@ const CATEGORY_EMOJI: Record<string, string> = {
   EQUIPMENT: "🔧",
   MAINTENANCE: "🛠️",
   PACKAGING: "📦",
+  OIL: "🛢️",
   MARKETING: "📣",
   OTHER: "📋",
+  TEA_REFRESHMENTS: "☕",
+  CONVEYANCE_AUTO: "🛺",
+  CLEANING_SUPPLIES: "🧹",
+  DAILY_LABOUR: "💪",
 };
 
 const fmt = (n: number) =>
@@ -202,6 +220,7 @@ const ALL_CATEGORIES = [
   "EQUIPMENT",
   "MAINTENANCE",
   "PACKAGING",
+  "OIL",
   "MARKETING",
   "OTHER",
 ];
@@ -211,9 +230,10 @@ const ALL_CATEGORIES = [
 type ExpensesTabProps = {
   restaurant: RestaurantProfile | null;
   authToken?: string;
+  onPendingExpensesChange?: (count: number) => void;
 };
 
-export function ExpensesTab({ restaurant, authToken }: ExpensesTabProps) {
+export function ExpensesTab({ restaurant, authToken, onPendingExpensesChange }: ExpensesTabProps) {
   const [datePreset, setDatePreset] = useState<DatePreset>("this_month");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
@@ -231,6 +251,12 @@ export function ExpensesTab({ restaurant, authToken }: ExpensesTabProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  // Approval Workflow State
+  const [pendingExpenses, setPendingExpenses] = useState<Expense[]>([]);
+  const [isLoadingPending, setIsLoadingPending] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [processingApprovalId, setProcessingApprovalId] = useState<string | null>(null);
+
   // Staff Salary Roster State
   const [rosterMonth, setRosterMonth] = useState<string>(getCurrentMonth);
   const [salaryRoster, setSalaryRoster] = useState<StaffSalaryRosterResponse | null>(null);
@@ -241,6 +267,54 @@ export function ExpensesTab({ restaurant, authToken }: ExpensesTabProps) {
   const [selectedStaffForPay, setSelectedStaffForPay] = useState<StaffSalaryItem | null>(null);
   const [selectedStaffForEdit, setSelectedStaffForEdit] = useState<StaffSalaryItem | null>(null);
   const [isQuickOnboardOpen, setIsQuickOnboardOpen] = useState(false);
+
+  // Custom In-App Confirmation & Rejection Dialog Modals
+  const [expenseToDelete, setExpenseToDelete] = useState<Expense | null>(null);
+  const [expenseToReject, setExpenseToReject] = useState<Expense | null>(null);
+  const [staffToRemoveFromPayroll, setStaffToRemoveFromPayroll] = useState<StaffSalaryItem | null>(null);
+
+  // Global Keyboard Shortcut: Press '+' or Numpad '+' to open Log Expense modal
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
+
+      if (
+        isModalOpen ||
+        isQuickOnboardOpen ||
+        selectedStaffForPay ||
+        selectedStaffForEdit ||
+        expenseToDelete ||
+        expenseToReject ||
+        staffToRemoveFromPayroll
+      ) {
+        return;
+      }
+
+      if (e.key === "+" || e.code === "NumpadAdd") {
+        e.preventDefault();
+        setIsModalOpen(true);
+      }
+    };
+
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, [
+    isModalOpen,
+    isQuickOnboardOpen,
+    selectedStaffForPay,
+    selectedStaffForEdit,
+    expenseToDelete,
+    expenseToReject,
+    staffToRemoveFromPayroll,
+  ]);
 
   const apiBase = getApiBaseUrl();
   const headers: Record<string, string> = {
@@ -285,6 +359,7 @@ export function ExpensesTab({ restaurant, authToken }: ExpensesTabProps) {
         page_size: "50",
       });
       if (categoryFilter !== "ALL") params.set("category", categoryFilter);
+      if (statusFilter !== "ALL") params.set("status", statusFilter);
       if (search.trim()) params.set("search", search.trim());
 
       const res = await fetch(`${apiBase}/api/admin/expenses?${params}`, { headers });
@@ -295,7 +370,23 @@ export function ExpensesTab({ restaurant, authToken }: ExpensesTabProps) {
     } finally {
       setIsLoadingList(false);
     }
-  }, [getRange, page, categoryFilter, search, apiBase, authToken]);
+  }, [getRange, page, categoryFilter, statusFilter, search, apiBase, authToken]);
+
+  const loadPendingExpenses = useCallback(async () => {
+    setIsLoadingPending(true);
+    try {
+      const res = await fetch(`${apiBase}/api/admin/expenses/pending`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setPendingExpenses(data);
+        onPendingExpensesChange?.(data.length);
+      }
+    } catch {
+      // non-blocking
+    } finally {
+      setIsLoadingPending(false);
+    }
+  }, [apiBase, authToken, onPendingExpensesChange]);
 
   const loadSalaryRoster = useCallback(async () => {
     setIsLoadingRoster(true);
@@ -314,12 +405,13 @@ export function ExpensesTab({ restaurant, authToken }: ExpensesTabProps) {
 
   useEffect(() => {
     setPage(1);
-  }, [datePreset, customFrom, customTo, categoryFilter]);
+  }, [datePreset, customFrom, customTo, categoryFilter, statusFilter]);
 
   useEffect(() => {
     void loadSummary();
     void loadList();
-  }, [loadSummary, loadList]);
+    void loadPendingExpenses();
+  }, [loadSummary, loadList, loadPendingExpenses]);
 
   useEffect(() => {
     void loadSalaryRoster();
@@ -333,17 +425,20 @@ export function ExpensesTab({ restaurant, authToken }: ExpensesTabProps) {
     ]);
   };
 
-  const handleDeletePayrollStaff = async (staffId: string, name: string) => {
-    if (!confirm(`Are you sure you want to remove ${name} from payroll?`)) return;
+  const handleConfirmRemovePayrollStaff = async (staffId: string) => {
     try {
       const res = await fetch(`${apiBase}/api/admin/expenses/payroll-staff/${staffId}`, {
         method: "DELETE",
         headers,
       });
-      if (!res.ok) throw new Error("Failed to remove staff member");
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: "Failed to remove staff member" }));
+        throw new Error(err.detail || "Failed to remove staff member");
+      }
       await loadSalaryRoster();
     } catch (e: any) {
-      alert(e.message || "Failed to remove staff member");
+      setError(e.message || "Failed to remove staff member");
+      throw e;
     }
   };
 
@@ -360,24 +455,70 @@ export function ExpensesTab({ restaurant, authToken }: ExpensesTabProps) {
         throw new Error(err.detail || "Failed to save expense");
       }
       setIsModalOpen(false);
-      await Promise.all([loadSummary(), loadList(), loadSalaryRoster()]);
+      await Promise.all([loadSummary(), loadList(), loadPendingExpenses(), loadSalaryRoster()]);
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Delete this expense? This cannot be undone.")) return;
-    setDeletingId(id);
+  const handleApproveExpense = async (id: string) => {
+    setProcessingApprovalId(id);
     try {
-      const res = await fetch(`${apiBase}/api/admin/expenses/${id}`, {
-        method: "DELETE",
+      const res = await fetch(`${apiBase}/api/admin/expenses/${id}/approve`, {
+        method: "POST",
         headers,
       });
-      if (!res.ok) throw new Error("Delete failed");
-      await Promise.all([loadSummary(), loadList(), loadSalaryRoster()]);
-    } catch {
-      alert("Failed to delete expense.");
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: "Failed to approve expense" }));
+        throw new Error(err.detail || "Approval failed");
+      }
+      await Promise.all([loadSummary(), loadList(), loadPendingExpenses()]);
+    } catch (e: any) {
+      setError(e.message || "Approval failed");
+    } finally {
+      setProcessingApprovalId(null);
+    }
+  };
+
+  const handleConfirmRejectExpense = async (id: string, reason?: string) => {
+    setProcessingApprovalId(id);
+    try {
+      const res = await fetch(`${apiBase}/api/admin/expenses/${id}/reject`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ rejection_reason: reason?.trim() || undefined }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: "Failed to reject expense" }));
+        throw new Error(err.detail || "Rejection failed");
+      }
+      await Promise.all([loadSummary(), loadList(), loadPendingExpenses()]);
+    } catch (e: any) {
+      setError(e.message || "Rejection failed");
+      throw e;
+    } finally {
+      setProcessingApprovalId(null);
+    }
+  };
+
+  const handleConfirmDeleteExpense = async (id: string, pin: string) => {
+    setDeletingId(id);
+    try {
+      const res = await fetch(`${apiBase}/api/admin/expenses/${id}?pin=${encodeURIComponent(pin)}`, {
+        method: "DELETE",
+        headers: {
+          ...headers,
+          "X-Admin-PIN": pin,
+        },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: "Failed to delete expense" }));
+        throw new Error(err.detail || "Failed to delete expense");
+      }
+      await Promise.all([loadSummary(), loadList(), loadSalaryRoster(), loadPendingExpenses()]);
+    } catch (e: any) {
+      setError(e.message || "Failed to delete expense.");
+      throw e;
     } finally {
       setDeletingId(null);
     }
@@ -430,9 +571,13 @@ export function ExpensesTab({ restaurant, authToken }: ExpensesTabProps) {
           <button
             onClick={() => setIsModalOpen(true)}
             className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--accent-brand)] px-3.5 py-1.5 text-xs font-bold text-[var(--text-on-accent)] shadow-xs hover:opacity-90 transition"
+            title="Log Expense (Press '+')"
           >
             <Plus className="h-3.5 w-3.5" />
-            Log Expense
+            <span>Log Expense</span>
+            <kbd className="hidden sm:inline-block rounded bg-black/20 px-1 py-0.2 text-[10px] font-mono leading-tight">
+              +
+            </kbd>
           </button>
         </div>
       </div>
@@ -505,9 +650,6 @@ export function ExpensesTab({ restaurant, authToken }: ExpensesTabProps) {
             </div>
             <div className="flex items-baseline justify-between mt-2">
               <p className="text-2xl font-black">₹{fmt(summary.gross_profit)}</p>
-              <span className="text-[10px] font-bold text-emerald-500">
-                {summary.gross_margin_pct}% margin
-              </span>
             </div>
           </div>
 
@@ -519,9 +661,6 @@ export function ExpensesTab({ restaurant, authToken }: ExpensesTabProps) {
             </div>
             <div className="flex items-baseline justify-between mt-2">
               <p className="text-2xl font-black text-rose-500">₹{fmt(summary.total_expenses)}</p>
-              <span className="text-[10px] font-bold text-[var(--text-muted)]">
-                {summary.expense_count} {summary.expense_count === 1 ? "entry" : "entries"}
-              </span>
             </div>
           </div>
 
@@ -547,9 +686,6 @@ export function ExpensesTab({ restaurant, authToken }: ExpensesTabProps) {
               <p className={`text-2xl font-black ${isProfit ? "text-emerald-500" : "text-rose-500"}`}>
                 ₹{fmt(Math.abs(summary.actual_net_profit))}
               </p>
-              <span className={`text-[10px] font-bold ${isProfit ? "text-emerald-500" : "text-rose-500"}`}>
-                {summary.actual_margin_pct}% margin
-              </span>
             </div>
           </div>
         </div>
@@ -746,7 +882,7 @@ export function ExpensesTab({ restaurant, authToken }: ExpensesTabProps) {
                           <Pencil className="h-3.5 w-3.5" />
                         </button>
                         <button
-                          onClick={() => handleDeletePayrollStaff(staff.staff_id, staff.staff_name)}
+                          onClick={() => setStaffToRemoveFromPayroll(staff)}
                           className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-rose-500/10 hover:text-rose-500 transition"
                           title={`Remove ${staff.staff_name} from payroll`}
                         >
@@ -809,6 +945,98 @@ export function ExpensesTab({ restaurant, authToken }: ExpensesTabProps) {
         </div>
       )}
 
+      {/* PENDING EXPENSE APPROVALS REVIEW CARD */}
+      {pendingExpenses.length > 0 && (
+        <div className="rounded-3xl border border-amber-500/30 bg-amber-500/10 p-5 shadow-xs space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-500/20 text-amber-500">
+                <Clock className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-[var(--text-primary)] flex items-center gap-2">
+                  <span>Pending Expense Approvals</span>
+                  <span className="rounded-full bg-amber-500 px-2 py-0.5 text-xs font-black text-black">
+                    {pendingExpenses.length}
+                  </span>
+                </h3>
+                <p className="text-xs text-[var(--text-muted)]">
+                  Logged by managers from &quot;Staff &amp; Team&quot; tab. Needs Admin review before counting in P&amp;L accounts.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => void loadPendingExpenses()}
+              className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] transition"
+              title="Refresh pending list"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {pendingExpenses.map((exp) => (
+              <div
+                key={exp.id}
+                className="flex flex-col justify-between rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 shadow-2xs space-y-3"
+              >
+                <div>
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold bg-[var(--bg-surface-elevated)] border border-[var(--border-strong)]">
+                      <span>{CATEGORY_EMOJI[exp.category] || "📋"}</span>
+                      <span>{exp.custom_category || CATEGORY_DISPLAY[exp.category] || exp.category}</span>
+                    </span>
+                    <span className="text-base font-black font-mono text-rose-500">
+                      ₹{fmt(exp.amount)}
+                    </span>
+                  </div>
+
+                  {exp.description && (
+                    <p className="mt-2 text-xs text-[var(--text-secondary)] line-clamp-2">
+                      {exp.description}
+                    </p>
+                  )}
+
+                  <div className="mt-2.5 flex items-center justify-between text-[11px] text-[var(--text-muted)]">
+                    <span>{fmtDate(exp.expense_date)}</span>
+                    <span className="inline-flex items-center gap-1 rounded bg-[var(--bg-surface-elevated)] px-1.5 py-0.5 font-bold uppercase text-[10px]">
+                      {exp.payment_method}
+                    </span>
+                  </div>
+
+                  <div className="mt-2 text-[11px] text-[var(--text-muted)]">
+                    Submitted by: <span className="font-semibold text-[var(--text-primary)]">{exp.logged_by_staff_name || "Manager"}</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 pt-2 border-t border-[var(--border-subtle)]">
+                  <button
+                    onClick={() => setExpenseToReject(exp)}
+                    disabled={processingApprovalId === exp.id}
+                    className="flex-1 flex items-center justify-center gap-1 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs font-bold text-rose-500 hover:bg-rose-500/20 transition disabled:opacity-50"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                    Reject
+                  </button>
+                  <button
+                    onClick={() => handleApproveExpense(exp.id)}
+                    disabled={processingApprovalId === exp.id}
+                    className="flex-1 flex items-center justify-center gap-1 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-500 transition shadow-xs disabled:opacity-50"
+                  >
+                    {processingApprovalId === exp.id ? (
+                      <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                    ) : (
+                      <Check className="h-3.5 w-3.5" />
+                    )}
+                    Accept
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* EXPENSE RECORDS TABLE */}
       <div className="rounded-3xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] overflow-hidden shadow-xs">
         {/* Toolbar */}
@@ -833,6 +1061,27 @@ export function ExpensesTab({ restaurant, authToken }: ExpensesTabProps) {
                 placeholder="Search description, staff..."
                 className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] py-1.5 pl-9 pr-3 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-brand)]"
               />
+            </div>
+
+            <div className="flex items-center gap-1 bg-[var(--bg-surface-elevated)] p-1 rounded-xl border border-[var(--border-strong)]">
+              {[
+                { id: "ALL", label: "All" },
+                { id: "APPROVED", label: "Approved" },
+                { id: "PENDING_APPROVAL", label: "Pending" },
+                { id: "REJECTED", label: "Rejected" },
+              ].map((st) => (
+                <button
+                  key={st.id}
+                  onClick={() => { setStatusFilter(st.id); setPage(1); }}
+                  className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
+                    statusFilter === st.id
+                      ? "bg-[var(--accent-brand)] text-[var(--text-on-accent)] shadow-xs"
+                      : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                  }`}
+                >
+                  {st.label}
+                </button>
+              ))}
             </div>
 
             <div className="flex flex-wrap gap-1">
@@ -870,7 +1119,8 @@ export function ExpensesTab({ restaurant, authToken }: ExpensesTabProps) {
                     <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Category</th>
                     <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Notes</th>
                     <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Method</th>
-                    <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Staff</th>
+                    <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Logged By</th>
+                    <th className="px-5 py-3 text-center text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Status</th>
                     <th className="px-5 py-3 text-right text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Amount</th>
                     <th className="px-5 py-3 text-center text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Action</th>
                   </tr>
@@ -898,25 +1148,72 @@ export function ExpensesTab({ restaurant, authToken }: ExpensesTabProps) {
                           {exp.payment_method}
                         </span>
                       </td>
-                      <td className="px-5 py-3 text-xs text-[var(--text-muted)]">
-                        {exp.logged_by_staff_name || "—"}
+                      <td className="px-5 py-3 text-xs text-[var(--text-secondary)] whitespace-nowrap">
+                        {exp.logged_by_staff_name ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] text-[var(--text-primary)]">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                            {exp.logged_by_staff_name}
+                          </span>
+                        ) : (
+                          <span className="text-[var(--text-muted)]">—</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3 text-center whitespace-nowrap">
+                        {exp.status === "PENDING_APPROVAL" ? (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-500 border border-amber-500/20">
+                            <Clock className="h-3 w-3" />
+                            Pending
+                          </span>
+                        ) : exp.status === "REJECTED" ? (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-rose-500/10 px-2 py-0.5 text-[10px] font-bold text-rose-500 border border-rose-500/20" title={exp.rejection_reason || undefined}>
+                            <X className="h-3 w-3" />
+                            Rejected
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-500 border border-emerald-500/20">
+                            <CheckCircle2 className="h-3 w-3" />
+                            Approved
+                          </span>
+                        )}
                       </td>
                       <td className="px-5 py-3 text-right font-mono font-bold text-rose-500 text-sm">
                         ₹{fmt(exp.amount)}
                       </td>
                       <td className="px-5 py-3 text-center">
-                        <button
-                          onClick={() => handleDelete(exp.id)}
-                          disabled={deletingId === exp.id}
-                          className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-rose-500/10 hover:text-rose-500 transition disabled:opacity-40"
-                          title="Delete expense"
-                        >
-                          {deletingId === exp.id ? (
-                            <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-rose-300 border-t-rose-500" />
-                          ) : (
-                            <Trash2 className="h-3.5 w-3.5" />
+                        <div className="flex items-center justify-center gap-1">
+                          {exp.status === "PENDING_APPROVAL" && (
+                            <>
+                              <button
+                                onClick={() => handleApproveExpense(exp.id)}
+                                disabled={processingApprovalId === exp.id}
+                                className="rounded-lg p-1 text-emerald-500 hover:bg-emerald-500/15 transition disabled:opacity-40"
+                                title="Approve expense"
+                              >
+                                <Check className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                onClick={() => setExpenseToReject(exp)}
+                                disabled={processingApprovalId === exp.id}
+                                className="rounded-lg p-1 text-rose-500 hover:bg-rose-500/15 transition disabled:opacity-40"
+                                title="Reject expense"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </>
                           )}
-                        </button>
+                          <button
+                            onClick={() => setExpenseToDelete(exp)}
+                            disabled={deletingId === exp.id}
+                            className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-rose-500/10 hover:text-rose-500 transition disabled:opacity-40"
+                            title="Delete expense"
+                          >
+                            {deletingId === exp.id ? (
+                              <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-rose-300 border-t-rose-500" />
+                            ) : (
+                              <Trash2 className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1007,6 +1304,30 @@ export function ExpensesTab({ restaurant, authToken }: ExpensesTabProps) {
         outletId={restaurant?.id}
         authToken={authToken}
         onSuccess={handleRosterActionSuccess}
+      />
+
+      {/* Delete Expense Modal */}
+      <DeleteExpenseModal
+        isOpen={!!expenseToDelete}
+        expense={expenseToDelete}
+        onClose={() => setExpenseToDelete(null)}
+        onConfirm={handleConfirmDeleteExpense}
+      />
+
+      {/* Reject Expense Modal */}
+      <RejectExpenseModal
+        isOpen={!!expenseToReject}
+        expense={expenseToReject}
+        onClose={() => setExpenseToReject(null)}
+        onConfirm={handleConfirmRejectExpense}
+      />
+
+      {/* Remove Payroll Staff Modal */}
+      <RemovePayrollStaffModal
+        isOpen={!!staffToRemoveFromPayroll}
+        staff={staffToRemoveFromPayroll}
+        onClose={() => setStaffToRemoveFromPayroll(null)}
+        onConfirm={handleConfirmRemovePayrollStaff}
       />
     </div>
   );

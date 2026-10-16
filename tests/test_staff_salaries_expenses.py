@@ -283,3 +283,249 @@ async def test_payroll_staff_mobile_uniqueness_and_required(client: AsyncClient,
     assert edit_ok_res.json()["base_salary"] == 25000.0
 
 
+@pytest.mark.asyncio
+async def test_daily_petty_cash_expenses(client: AsyncClient, db_session: AsyncSession):
+    """
+    Test logging daily ₹100 and ₹200 petty cash expenses (Tea, Auto, Cleaning, Labour)
+    and verifying they appear in the monthly P&L and category breakdown.
+    """
+    outlet = await create_test_outlet(db_session, slug="petty-cash-outlet")
+    admin = await create_test_user(db_session, outlet=outlet, email="admin@pettycash.com", role=RoleEnum.SUPERADMIN)
+    headers = get_auth_headers(admin, outlet)
+
+    # 1. Log ₹50 Tea / Refreshment expense
+    tea_res = await client.post(
+        "/api/admin/expenses",
+        json={
+            "category": "TEA_REFRESHMENTS",
+            "amount": 50.0,
+            "payment_method": "CASH",
+            "description": "Evening chai and samosas for staff",
+            "expense_date": "2026-10-15T16:30:00",
+        },
+        headers=headers,
+    )
+    assert tea_res.status_code == 201, tea_res.text
+    tea = tea_res.json()
+    assert tea["category"] == "TEA_REFRESHMENTS"
+    assert tea["amount"] == 50.0
+
+    # 2. Log ₹100 Auto Fare expense
+    auto_res = await client.post(
+        "/api/admin/expenses",
+        json={
+            "category": "CONVEYANCE_AUTO",
+            "amount": 100.0,
+            "payment_method": "CASH",
+            "description": "Auto fare to bring emergency plastic bags",
+            "expense_date": "2026-10-15T11:00:00",
+        },
+        headers=headers,
+    )
+    assert auto_res.status_code == 201, auto_res.text
+
+    # 3. Log ₹200 Cleaning Supplies expense
+    clean_res = await client.post(
+        "/api/admin/expenses",
+        json={
+            "category": "CLEANING_SUPPLIES",
+            "amount": 200.0,
+            "payment_method": "UPI",
+            "description": "Floor cleaner and broom",
+            "expense_date": "2026-10-15T12:00:00",
+        },
+        headers=headers,
+    )
+    assert clean_res.status_code == 201, clean_res.text
+
+    # 4. Log ₹200 Daily Labour expense
+    labour_res = await client.post(
+        "/api/admin/expenses",
+        json={
+            "category": "DAILY_LABOUR",
+            "amount": 200.0,
+            "payment_method": "CASH",
+            "description": "Unloading crate helper",
+            "expense_date": "2026-10-15T09:00:00",
+        },
+        headers=headers,
+    )
+    assert labour_res.status_code == 201, labour_res.text
+
+    # 5. Log ₹350 Oil expense
+    oil_res = await client.post(
+        "/api/admin/expenses",
+        json={
+            "category": "OIL",
+            "amount": 350.0,
+            "payment_method": "CASH",
+            "description": "Generator engine oil & diesel fuel",
+            "expense_date": "2026-10-15T10:00:00",
+        },
+        headers=headers,
+    )
+    assert oil_res.status_code == 201, oil_res.text
+
+    # 6. Verify Monthly Summary contains all petty cash expenses: total = 550 + 350 = 900
+    summary_res = await client.get(
+        "/api/admin/expenses/summary?from_date=2026-10-01T00:00:00&to_date=2026-10-31T23:59:59",
+        headers=headers,
+    )
+    assert summary_res.status_code == 200
+    summary = summary_res.json()
+    assert summary["total_expenses"] == 900.0
+
+    breakdown = {c["category"]: c["total"] for c in summary["expenses_by_category"]}
+    assert breakdown.get("TEA_REFRESHMENTS") == 50.0
+    assert breakdown.get("CONVEYANCE_AUTO") == 100.0
+    assert breakdown.get("CLEANING_SUPPLIES") == 200.0
+    assert breakdown.get("DAILY_LABOUR") == 200.0
+    assert breakdown.get("OIL") == 350.0
+
+
+@pytest.mark.asyncio
+async def test_manager_expense_approval_workflow(client: AsyncClient, db_session: AsyncSession):
+    """
+    Test that an expense logged by a MANAGER is saved as PENDING_APPROVAL,
+    does NOT affect P&L until approved by an OUTLET_ADMIN, and can be approved/rejected.
+    """
+    outlet = await create_test_outlet(db_session, slug="approval-outlet")
+    admin = await create_test_user(db_session, outlet=outlet, email="admin@approval.com", role=RoleEnum.OUTLET_ADMIN)
+    manager = await create_test_user(db_session, outlet=outlet, email="manager@approval.com", role=RoleEnum.MANAGER)
+    admin_headers = get_auth_headers(admin, outlet)
+    manager_headers = get_auth_headers(manager, outlet)
+
+    # 1. Manager logs an expense of ₹250 for Maintenance / Repairs
+    log_res = await client.post(
+        "/api/admin/expenses",
+        json={
+            "category": "MAINTENANCE",
+            "amount": 250.0,
+            "payment_method": "CASH",
+            "description": "Store door lock repair",
+            "expense_date": "2026-10-16T11:00:00",
+        },
+        headers=manager_headers,
+    )
+    assert log_res.status_code == 201, log_res.text
+    exp_data = log_res.json()
+    assert exp_data["status"] == "PENDING_APPROVAL"
+    assert exp_data["amount"] == 250.0
+    exp_id = exp_data["id"]
+
+    # 2. Check pending count endpoint
+    cnt_res = await client.get("/api/admin/expenses/pending-count", headers=admin_headers)
+    assert cnt_res.status_code == 200
+    assert cnt_res.json()["pending_count"] == 1
+
+    # 3. Check that it is NOT counted in total expenses yet
+    summary_res = await client.get(
+        "/api/admin/expenses/summary?from_date=2026-10-01T00:00:00&to_date=2026-10-31T23:59:59",
+        headers=admin_headers,
+    )
+    assert summary_res.status_code == 200
+    assert summary_res.json()["total_expenses"] == 0.0
+
+    # 4. Admin approves the expense
+    appr_res = await client.post(f"/api/admin/expenses/{exp_id}/approve", headers=admin_headers)
+    assert appr_res.status_code == 200
+    appr_data = appr_res.json()
+    assert appr_data["status"] == "APPROVED"
+    assert appr_data["approved_by_name"] is not None
+
+    # 5. Now total expenses should reflect the ₹250
+    summary_res2 = await client.get(
+        "/api/admin/expenses/summary?from_date=2026-10-01T00:00:00&to_date=2026-10-31T23:59:59",
+        headers=admin_headers,
+    )
+    assert summary_res2.status_code == 200
+    assert summary_res2.json()["total_expenses"] == 250.0
+
+    # 6. Manager logs a second expense of ₹500
+    log2_res = await client.post(
+        "/api/admin/expenses",
+        json={
+            "category": "MARKETING",
+            "amount": 500.0,
+            "payment_method": "UPI",
+            "description": "Pamphlet distribution",
+            "expense_date": "2026-10-16T14:00:00",
+        },
+        headers=manager_headers,
+    )
+    exp2_id = log2_res.json()["id"]
+
+    # 7. Admin rejects the second expense
+    rej_res = await client.post(
+        f"/api/admin/expenses/{exp2_id}/reject",
+        json={"rejection_reason": "Not approved in marketing budget"},
+        headers=admin_headers,
+    )
+    assert rej_res.status_code == 200
+    rej_data = rej_res.json()
+    assert rej_data["status"] == "REJECTED"
+    assert rej_data["rejection_reason"] == "Not approved in marketing budget"
+
+    # 8. Total expenses remains 250 (rejected is not counted)
+    summary_res3 = await client.get(
+        "/api/admin/expenses/summary?from_date=2026-10-01T00:00:00&to_date=2026-10-31T23:59:59",
+        headers=admin_headers,
+    )
+    assert summary_res3.json()["total_expenses"] == 250.0
+
+
+@pytest.mark.asyncio
+async def test_delete_expense_requires_admin_pin(client: AsyncClient, db_session: AsyncSession):
+    """
+    Test that deleting an expense requires a valid 4-digit admin security PIN.
+    Without PIN -> 400 Bad Request
+    With wrong PIN -> 401 Unauthorized
+    With correct PIN -> 204 No Content and expense is deleted.
+    """
+    from app.core.security import hash_password
+
+    outlet = await create_test_outlet(db_session, slug="del-exp-pin-outlet")
+    admin = await create_test_user(db_session, outlet=outlet, email="admin_pin@test.com", role=RoleEnum.OUTLET_ADMIN)
+    admin.pin_hash = hash_password("9876")
+    await db_session.commit()
+
+    admin_headers = get_auth_headers(admin, outlet)
+
+    # 1. Create an expense record
+    create_res = await client.post(
+        "/api/admin/expenses",
+        json={
+            "category": "RENT",
+            "amount": 1500.0,
+            "payment_method": "CASH",
+            "description": "Shop rent advance",
+            "expense_date": "2026-10-16T10:00:00",
+        },
+        headers=admin_headers,
+    )
+    assert create_res.status_code == 201
+    exp_id = create_res.json()["id"]
+
+    # 2. Attempt delete without PIN -> 400 Bad Request
+    del_no_pin = await client.delete(f"/api/admin/expenses/{exp_id}", headers=admin_headers)
+    assert del_no_pin.status_code == 400
+    assert "Admin security PIN is required" in del_no_pin.json()["detail"]
+
+    # 3. Attempt delete with wrong PIN -> 401 Unauthorized
+    del_wrong_pin = await client.delete(f"/api/admin/expenses/{exp_id}?pin=0000", headers=admin_headers)
+    assert del_wrong_pin.status_code == 401
+    assert "Invalid admin security PIN" in del_wrong_pin.json()["detail"]
+
+    # 4. Attempt delete with correct PIN via query param -> 204 No Content
+    del_ok = await client.delete(f"/api/admin/expenses/{exp_id}?pin=9876", headers=admin_headers)
+    assert del_ok.status_code == 204
+
+    # 5. Verify expense is deleted
+    list_res = await client.get("/api/admin/expenses", headers=admin_headers)
+    assert list_res.status_code == 200
+    assert len(list_res.json()["items"]) == 0
+
+
+
+
+

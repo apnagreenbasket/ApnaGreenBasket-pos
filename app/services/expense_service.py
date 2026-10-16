@@ -16,7 +16,7 @@ from app.models.expense import Expense
 from app.models.order import Order
 from app.models.stock_ledger import StockLedger
 from app.models.customer_return import CustomerReturn
-from app.models.enums import OrderStatusEnum, StockChangeTypeEnum
+from app.models.enums import OrderStatusEnum, StockChangeTypeEnum, RoleEnum
 from decimal import Decimal
 from sqlalchemy import case, or_, and_
 from app.models.payroll_staff import PayrollStaff
@@ -51,8 +51,13 @@ CATEGORY_DISPLAY_NAMES = {
     "EQUIPMENT": "Equipment / Machinery",
     "MAINTENANCE": "Maintenance",
     "PACKAGING": "Packaging / Plastic",
+    "OIL": "Oil",
     "MARKETING": "Marketing",
     "OTHER": "Other",
+    "TEA_REFRESHMENTS": "Tea & Refreshments",
+    "CONVEYANCE_AUTO": "Auto Fare / Conveyance",
+    "CLEANING_SUPPLIES": "Cleaning & Supplies",
+    "DAILY_LABOUR": "Daily Labour / Loading",
 }
 
 
@@ -61,6 +66,7 @@ async def create_expense(
     outlet_id: uuid.UUID,
     data: ExpenseCreate,
     logged_by_staff_id: uuid.UUID | None = None,
+    user_role: RoleEnum | str | None = None,
 ) -> Expense:
     """Create a new expense record."""
     exp_date = ensure_naive_utc(data.expense_date) if data.expense_date else datetime.utcnow()
@@ -87,9 +93,26 @@ async def create_expense(
             select(PayrollStaff.name).where(PayrollStaff.id == data.recipient_staff_id)
         )
         recip_name = ps_res.scalar_one_or_none()
-        if not recip_name:
-            u_res = await db.execute(select(User.name).where(User.id == data.recipient_staff_id))
-            recip_name = u_res.scalar_one_or_none()
+    logged_name = data.logged_by_staff_name
+    if not logged_name and logged_by_staff_id:
+        u_res = await db.execute(select(User).where(User.id == logged_by_staff_id))
+        user_obj = u_res.scalar_one_or_none()
+        if user_obj:
+            logged_name = user_obj.name or user_obj.email or "Admin"
+
+    # Approval Status:
+    # If logged by Superadmin or Outlet Admin, auto-approve immediately
+    role_val = getattr(user_role, "value", str(user_role)) if user_role else "OUTLET_ADMIN"
+    if role_val in ["SUPERADMIN", "OUTLET_ADMIN"] or data.category.upper() == "SALARY":
+        status_val = "APPROVED"
+        approved_by_id = logged_by_staff_id
+        approved_by_name = logged_name
+        approved_at = datetime.utcnow()
+    else:
+        status_val = "PENDING_APPROVAL"
+        approved_by_id = None
+        approved_by_name = None
+        approved_at = None
 
     expense = Expense(
         id=uuid.uuid4(),
@@ -101,10 +124,14 @@ async def create_expense(
         description=data.description,
         expense_date=exp_date,
         logged_by_staff_id=logged_by_staff_id,
-        logged_by_staff_name=data.logged_by_staff_name,
+        logged_by_staff_name=logged_name,
         recipient_staff_id=data.recipient_staff_id,
         recipient_staff_name=recip_name,
         salary_month=sal_month,
+        status=status_val,
+        approved_by_id=approved_by_id,
+        approved_by_name=approved_by_name,
+        approved_at=approved_at,
     )
     db.add(expense)
     await db.commit()
@@ -120,6 +147,7 @@ async def list_expenses(
     from_dt: datetime | None = None,
     to_dt: datetime | None = None,
     category: str | None = None,
+    status: str | None = None,
     search: str | None = None,
 ) -> ExpensePageResponse:
     """List expenses with pagination and optional filtering."""
@@ -131,6 +159,8 @@ async def list_expenses(
         stmt = stmt.where(Expense.expense_date <= ensure_naive_utc(to_dt))
     if category and category.upper() != "ALL":
         stmt = stmt.where(Expense.category == category.upper())
+    if status and status.upper() != "ALL":
+        stmt = stmt.where(Expense.status == status.upper())
     if search:
         like = f"%{search}%"
         stmt = stmt.where(
@@ -138,6 +168,7 @@ async def list_expenses(
                 Expense.description.ilike(like),
                 Expense.custom_category.ilike(like),
                 Expense.logged_by_staff_name.ilike(like),
+                Expense.approved_by_name.ilike(like),
             )
         )
 
@@ -304,15 +335,16 @@ async def get_expense_summary(
     gross_profit = net_revenue - total_cogs
     gross_margin_pct = round((gross_profit / net_revenue) * 100, 2) if net_revenue > 0 else 0.0
 
-    # ── 4. Total Expenses in date range ─────────────────────────────────────
+    # ── 4. Total Expenses in date range (only APPROVED count towards P&L) ──
     exp_total_stmt = select(func.sum(Expense.amount)).where(
         Expense.outlet_id == outlet_id,
+        Expense.status == "APPROVED",
         Expense.expense_date >= from_dt_naive,
         Expense.expense_date <= to_dt_naive,
     )
     total_expenses = float((await db.execute(exp_total_stmt)).scalar_one() or 0)
 
-    # ── 5. Expenses breakdown by category ───────────────────────────────────
+    # ── 5. Expenses breakdown by category (only APPROVED) ───────────────────
     cat_stmt = (
         select(
             Expense.category,
@@ -321,6 +353,7 @@ async def get_expense_summary(
         )
         .where(
             Expense.outlet_id == outlet_id,
+            Expense.status == "APPROVED",
             Expense.expense_date >= from_dt_naive,
             Expense.expense_date <= to_dt_naive,
         )
@@ -343,9 +376,10 @@ async def get_expense_summary(
             )
         )
 
-    # Count total expense records
+    # Count total expense records (only APPROVED)
     count_stmt = select(func.count(Expense.id)).where(
         Expense.outlet_id == outlet_id,
+        Expense.status == "APPROVED",
         Expense.expense_date >= from_dt_naive,
         Expense.expense_date <= to_dt_naive,
     )
@@ -638,3 +672,79 @@ async def update_staff_salary(
     await db.commit()
     await db.refresh(staff)
     return staff
+
+
+async def approve_expense(
+    db: AsyncSession,
+    expense_id: uuid.UUID,
+    outlet_id: uuid.UUID,
+    admin_user_id: uuid.UUID,
+    admin_user_name: str | None = None,
+) -> Expense | None:
+    """Approve a pending expense record."""
+    result = await db.execute(
+        select(Expense).where(Expense.id == expense_id, Expense.outlet_id == outlet_id)
+    )
+    expense = result.scalar_one_or_none()
+    if not expense:
+        return None
+    expense.status = "APPROVED"
+    expense.approved_by_id = admin_user_id
+    expense.approved_by_name = admin_user_name or "Admin"
+    expense.approved_at = datetime.utcnow()
+    expense.updated_at = datetime.utcnow()
+    await db.commit()
+    await db.refresh(expense)
+    return expense
+
+
+async def reject_expense(
+    db: AsyncSession,
+    expense_id: uuid.UUID,
+    outlet_id: uuid.UUID,
+    admin_user_id: uuid.UUID,
+    admin_user_name: str | None = None,
+    rejection_reason: str | None = None,
+) -> Expense | None:
+    """Reject a pending expense record."""
+    result = await db.execute(
+        select(Expense).where(Expense.id == expense_id, Expense.outlet_id == outlet_id)
+    )
+    expense = result.scalar_one_or_none()
+    if not expense:
+        return None
+    expense.status = "REJECTED"
+    expense.approved_by_id = admin_user_id
+    expense.approved_by_name = admin_user_name or "Admin"
+    expense.approved_at = datetime.utcnow()
+    expense.rejection_reason = rejection_reason
+    expense.updated_at = datetime.utcnow()
+    await db.commit()
+    await db.refresh(expense)
+    return expense
+
+
+async def get_pending_expenses_count(
+    db: AsyncSession,
+    outlet_id: uuid.UUID,
+) -> int:
+    """Return the number of expenses waiting for Admin approval."""
+    stmt = select(func.count(Expense.id)).where(
+        Expense.outlet_id == outlet_id,
+        Expense.status == "PENDING_APPROVAL",
+    )
+    return int((await db.execute(stmt)).scalar_one() or 0)
+
+
+async def list_pending_expenses(
+    db: AsyncSession,
+    outlet_id: uuid.UUID,
+) -> list[Expense]:
+    """List all expenses currently pending approval."""
+    stmt = (
+        select(Expense)
+        .where(Expense.outlet_id == outlet_id, Expense.status == "PENDING_APPROVAL")
+        .order_by(Expense.created_at.desc())
+    )
+    return list((await db.execute(stmt)).scalars().all())
+

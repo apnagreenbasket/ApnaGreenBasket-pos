@@ -131,6 +131,42 @@ async def create_manual_bill(
         place_of_supply=getattr(data, "place_of_supply", None),
     )
     
+    # Resolve assisted_by_staff if provided (strictly floor staff / store assistants only)
+    assisted_id = None
+    assisted_name = None
+    if getattr(data, "assisted_by_staff_id", None):
+        try:
+            assisted_id = uuid.UUID(str(data.assisted_by_staff_id))
+            asst_user = await db.get(User, assisted_id)
+            if (
+                asst_user
+                and asst_user.outlet_id == outlet_id
+                and asst_user.role in (RoleEnum.FLOOR_STAFF, RoleEnum.STAFF)
+            ):
+                assisted_name = asst_user.name
+            else:
+                assisted_id = None
+        except Exception:
+            assisted_id = None
+    elif getattr(data, "assisted_by_barcode", None):
+        clean_code = str(data.assisted_by_barcode).strip()
+        stmt = select(User).where(
+            User.outlet_id == outlet_id,
+            User.barcode == clean_code,
+            User.role.in_([RoleEnum.FLOOR_STAFF, RoleEnum.STAFF]),
+        )
+        res = await db.execute(stmt)
+        asst_user = res.scalar_one_or_none()
+        if asst_user:
+            assisted_id = asst_user.id
+            assisted_name = asst_user.name
+
+    if assisted_id and assisted_name:
+        order.assisted_by_staff_id = assisted_id
+        order.assisted_by_staff_name = assisted_name
+        from app.services.staff_punch_service import ensure_staff_punched_in_today
+        await ensure_staff_punched_in_today(db, outlet_id, assisted_id, assisted_name)
+    
     # Inherit discount if replacing a bill
     old_approval = None
     if replaces_bill_uuid:
@@ -351,6 +387,7 @@ async def create_manual_bill(
             selectinload(Order.items).selectinload(OrderItem.selected_batch),
             selectinload(Order.customer),
             selectinload(Order.created_by_staff),
+            selectinload(Order.assisted_by_staff),
         )
     )
     final_order = res_final.scalar_one()
@@ -382,6 +419,7 @@ async def update_manual_bill(
             selectinload(Order.items).selectinload(OrderItem.selected_batch),
             selectinload(Order.customer),
             selectinload(Order.created_by_staff),
+            selectinload(Order.assisted_by_staff),
         )
         .where(
             Order.id == order_id,
@@ -408,6 +446,51 @@ async def update_manual_bill(
             order.replaces_bill_id = uuid.UUID(str(data.replaces_bill_id)) if data.replaces_bill_id else None
         except Exception:
             pass
+
+    if hasattr(data, "assisted_by_staff_id") and data.assisted_by_staff_id is not None:
+        try:
+            if data.assisted_by_staff_id:
+                asst_uuid = uuid.UUID(str(data.assisted_by_staff_id))
+                asst_u = await db.get(User, asst_uuid)
+                if (
+                    asst_u
+                    and asst_u.outlet_id == outlet_id
+                    and asst_u.role in (RoleEnum.FLOOR_STAFF, RoleEnum.STAFF)
+                ):
+                    order.assisted_by_staff_id = asst_u.id
+                    order.assisted_by_staff_name = asst_u.name
+                    from app.services.staff_punch_service import ensure_staff_punched_in_today
+                    await ensure_staff_punched_in_today(db, outlet_id, asst_u.id, asst_u.name)
+                else:
+                    order.assisted_by_staff_id = None
+                    order.assisted_by_staff_name = None
+            else:
+                order.assisted_by_staff_id = None
+                order.assisted_by_staff_name = None
+        except Exception:
+            pass
+    elif hasattr(data, "assisted_by_barcode") and data.assisted_by_barcode is not None:
+        if data.assisted_by_barcode:
+            clean_code = str(data.assisted_by_barcode).strip()
+            res_u = await db.execute(
+                select(User).where(
+                    User.outlet_id == outlet_id,
+                    User.barcode == clean_code,
+                    User.role.in_([RoleEnum.FLOOR_STAFF, RoleEnum.STAFF]),
+                )
+            )
+            asst_u = res_u.scalar_one_or_none()
+            if asst_u:
+                order.assisted_by_staff_id = asst_u.id
+                order.assisted_by_staff_name = asst_u.name
+                from app.services.staff_punch_service import ensure_staff_punched_in_today
+                await ensure_staff_punched_in_today(db, outlet_id, asst_u.id, asst_u.name)
+            else:
+                order.assisted_by_staff_id = None
+                order.assisted_by_staff_name = None
+        else:
+            order.assisted_by_staff_id = None
+            order.assisted_by_staff_name = None
 
     if data.customer_phone and data.customer_phone.strip():
 

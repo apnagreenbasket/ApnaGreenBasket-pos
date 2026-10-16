@@ -64,6 +64,8 @@ export function useSettingsManagement({
     interstate_mode: "OFF",
     b2b_enabled: false,
     latest_batch_price_override: true,
+    floor_incentive_per_bill: "5.00",
+    floor_incentive_percent: "0.50",
   });
   const [isSavingRestaurant, setIsSavingRestaurant] = useState(false);
 
@@ -105,6 +107,14 @@ export function useSettingsManagement({
         interstate_mode: (restaurant as any).interstate_mode || "OFF",
         b2b_enabled: Boolean(restaurant.b2b_enabled),
         latest_batch_price_override: restaurant.latest_batch_price_override !== false,
+        floor_incentive_per_bill:
+          restaurant.floor_incentive_per_bill !== null && restaurant.floor_incentive_per_bill !== undefined
+            ? String(restaurant.floor_incentive_per_bill)
+            : "5.00",
+        floor_incentive_percent:
+          restaurant.floor_incentive_percent !== null && restaurant.floor_incentive_percent !== undefined
+            ? String(restaurant.floor_incentive_percent)
+            : "0.50",
       });
     }
   }, [restaurant]);
@@ -147,6 +157,8 @@ export function useSettingsManagement({
         interstate_mode: restaurantForm.interstate_mode || "OFF",
         b2b_enabled: Boolean(restaurantForm.b2b_enabled),
         latest_batch_price_override: restaurantForm.latest_batch_price_override,
+        floor_incentive_per_bill: restaurantForm.floor_incentive_per_bill?.trim() ? parseFloat(restaurantForm.floor_incentive_per_bill) : 5.0,
+        floor_incentive_percent: restaurantForm.floor_incentive_percent?.trim() ? parseFloat(restaurantForm.floor_incentive_percent) : 0.5,
       };
 
       const updated = await apiRequest<RestaurantProfile>(

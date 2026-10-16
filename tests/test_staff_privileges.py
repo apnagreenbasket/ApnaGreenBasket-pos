@@ -644,6 +644,7 @@ async def test_manager_analytics_and_customer_services_restrictions(client, db_s
     assert perms["can_view_analytics"] is False
     assert "analytics" not in perms["allowed_sidebar_tabs"]
     assert "customerservices" not in perms["allowed_sidebar_tabs"]
+    assert "expenses" not in perms["allowed_sidebar_tabs"]
     assert "inventory" in perms["allowed_sidebar_tabs"]
     assert "menu" in perms["allowed_sidebar_tabs"]
 
@@ -652,11 +653,21 @@ async def test_manager_analytics_and_customer_services_restrictions(client, db_s
     assert kpi_mgr_resp.status_code == 403
     assert "can_view_analytics" in kpi_mgr_resp.json()["detail"]
 
-    # 3. Outlet Admin calling /api/analytics/kpi-summary -> 200 OK
+    # 3. Manager calling expenses summary / list -> 403 Forbidden
+    exp_summary_mgr_resp = await client.get("/api/admin/expenses/summary", headers=mgr_headers)
+    assert exp_summary_mgr_resp.status_code == 403
+
+    exp_list_mgr_resp = await client.get("/api/admin/expenses", headers=mgr_headers)
+    assert exp_list_mgr_resp.status_code == 403
+
+    # 4. Outlet Admin calling /api/analytics/kpi-summary and /api/admin/expenses/summary -> 200 OK
     kpi_adm_resp = await client.get("/api/analytics/kpi-summary", headers=adm_headers)
     assert kpi_adm_resp.status_code == 200
 
-    # 4. Verify Manager can still perform regular admin/management tasks
+    exp_adm_resp = await client.get("/api/admin/expenses/summary", headers=adm_headers)
+    assert exp_adm_resp.status_code == 200
+
+    # 5. Verify Manager can still perform regular admin/management tasks
     # (RequireAdmin endpoints like inventory, menu items, categories, staff listing)
     cat_resp = await client.get("/api/admin/categories", headers=mgr_headers)
     assert cat_resp.status_code == 200

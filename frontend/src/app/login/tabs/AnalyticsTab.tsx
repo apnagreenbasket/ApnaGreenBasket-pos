@@ -551,7 +551,7 @@ export function AnalyticsTab(props: AnalyticsTabProps) {
                     customToDate={props.customToDate}
                   />
                   <StockIntakeReport data={props.stockIntakeData} isLoading={props.isLoading} />
-                  <WastageReport data={props.wastageData} isLoading={props.isLoading} />
+                  <WastageReport data={props.wastageData} isLoading={props.isLoading} onRefresh={props.loadActiveTabData} />
                   <PurchaseReturnReport data={props.purchaseReturnData} isLoading={props.isLoading} />
                   <SupplierSpendReport data={props.supplierSpendData} isLoading={props.isLoading} />
                 </div>
@@ -566,7 +566,7 @@ export function AnalyticsTab(props: AnalyticsTabProps) {
                 />
               )}
               {props.activeInventorySubTab === "intake" && <StockIntakeReport data={props.stockIntakeData} isLoading={props.isLoading} />}
-              {props.activeInventorySubTab === "wastage" && <WastageReport data={props.wastageData} isLoading={props.isLoading} />}
+              {props.activeInventorySubTab === "wastage" && <WastageReport data={props.wastageData} isLoading={props.isLoading} onRefresh={props.loadActiveTabData} />}
               {props.activeInventorySubTab === "purchase_returns" && <PurchaseReturnReport data={props.purchaseReturnData} isLoading={props.isLoading} />}
               {props.activeInventorySubTab === "supplier_spend" && <SupplierSpendReport data={props.supplierSpendData} isLoading={props.isLoading} />}
             </div>

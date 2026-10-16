@@ -43,15 +43,23 @@ async def list_outlet_staff(
     except ValueError:
         return []
 
-    stmt = select(User.id, User.name).where(
+    stmt = select(User.id, User.name, User.role).where(
         User.outlet_id == valid_outlet_id,
         User.is_active == True,
         User.status == "active",
+        User.pin_hash.isnot(None),
         User.role != RoleEnum.SUPERADMIN
     ).order_by(User.name)
     
     result = await db.execute(stmt)
-    staff_list = [{"id": row.id, "name": row.name} for row in result.all()]
+    staff_list = [
+        {
+            "id": str(row.id),
+            "name": row.name,
+            "role": row.role.value if hasattr(row.role, "value") else str(row.role),
+        }
+        for row in result.all()
+    ]
     return staff_list
 
 

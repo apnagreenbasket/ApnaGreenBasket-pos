@@ -80,6 +80,15 @@ class Order(Base, TimestampMixin):
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
+    assisted_by_staff_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    assisted_by_staff_name: Mapped[str | None] = mapped_column(
+        String(255), nullable=True
+    )
     is_void: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
     )
@@ -183,4 +192,7 @@ class Order(Base, TimestampMixin):
     )
     created_by_staff: Mapped[User | None] = relationship(
         "User", foreign_keys=[created_by_staff_id]
+    )
+    assisted_by_staff: Mapped[User | None] = relationship(
+        "User", foreign_keys=[assisted_by_staff_id]
     )

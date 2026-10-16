@@ -3,6 +3,7 @@ import type {
   DiscountApproval,
   ManualBill,
   BillingDateRangeMode,
+  StaffMember,
 } from "@/types";
 import type { DraftCartItem } from "../modals/CreateBillDrawer";
 import { isAuthError, formatLocalDate } from "../adminUtils";
@@ -192,6 +193,7 @@ export function useBillingManagement({
   const [customerGstin, setCustomerGstin] = useState<string>("");
   const [customerLegalName, setCustomerLegalName] = useState("");
   const [isWalkIn, setIsWalkIn] = useState<boolean>(false);
+  const [assistedByStaff, setAssistedByStaff] = useState<StaffMember | null>(null);
 
   // Discount Modal State
   const [discountModalOpen, setDiscountModalOpen] = useState(false);
@@ -277,6 +279,7 @@ export function useBillingManagement({
         place_of_supply: placeOfSupply || null,
         customer_gstin: customerGstin || null,
         customer_legal_name: customerLegalName || null,
+        assisted_by_staff_id: assistedByStaff ? assistedByStaff.id : null,
         items: draftCartItems.map((item) => ({
           menu_item_id: item.menu_item_id || null,
           variant_id: item.variant_id || null,
@@ -348,6 +351,15 @@ export function useBillingManagement({
       setEditingCompletedBill(null);
     }
     setSelectedTable(bill.basket_number || "WALK-IN");
+    if (bill.assisted_by_staff_id) {
+      setAssistedByStaff({
+        id: bill.assisted_by_staff_id,
+        name: bill.assisted_by_staff_name || "Floor Staff",
+        role: (bill.assisted_by_staff_role as any) || "FLOOR_STAFF",
+      } as StaffMember);
+    } else {
+      setAssistedByStaff(null);
+    }
 
     setCustomerName(bill.customer_name || "");
     setCustomerPhone(bill.customer_phone || "");
@@ -419,6 +431,15 @@ export function useBillingManagement({
     setCustomerLegalName((bill as any).customer_legal_name || "");
     setDeliveryCharge(bill.delivery_charge || 0);
     setHandlingCharge(bill.handling_charge || 0);
+    if (bill.assisted_by_staff_id) {
+      setAssistedByStaff({
+        id: bill.assisted_by_staff_id,
+        name: bill.assisted_by_staff_name || "Floor Staff",
+        role: (bill.assisted_by_staff_role as any) || "FLOOR_STAFF",
+      } as StaffMember);
+    } else {
+      setAssistedByStaff(null);
+    }
     if (bill.items && bill.items.length > 0) {
       const itemsMapped: DraftCartItem[] = bill.items.map((it: any) => {
         const uPrice = typeof it.unit_price === "number" ? it.unit_price : parseFloat(it.unit_price) || 0;
@@ -628,6 +649,7 @@ export function useBillingManagement({
     setHandlingCharge(0);
     setDraftCartItems([]);
     setIsWalkIn(false);
+    setAssistedByStaff(null);
   }, []);
 
   const handleCloseCreateBillDrawer = useCallback(() => {
@@ -739,6 +761,8 @@ export function useBillingManagement({
     handleResumeDraft,
     handleCloseCreateBillDrawer,
     resetCreateBillForm,
+    assistedByStaff,
+    setAssistedByStaff,
     handleApplyDiscount,
     handleResolveApproval,
     handleMarkPaid,

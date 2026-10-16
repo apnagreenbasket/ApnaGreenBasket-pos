@@ -105,6 +105,10 @@ RequireAdmin = Annotated[
     CurrentUser,
     Depends(require_role(RoleEnum.SUPERADMIN, RoleEnum.OUTLET_ADMIN, RoleEnum.MANAGER)),
 ]
+RequireOutletAdmin = Annotated[
+    CurrentUser,
+    Depends(require_role(RoleEnum.SUPERADMIN, RoleEnum.OUTLET_ADMIN)),
+]
 RequireSuperadmin = Annotated[
     CurrentUser, Depends(require_role(RoleEnum.SUPERADMIN))
 ]

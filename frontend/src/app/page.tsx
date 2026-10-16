@@ -49,6 +49,7 @@ import { OfferModal } from "./login/modals/OfferModal";
 import { StaffModal } from "./login/modals/StaffModal";
 import { PinModal } from "./login/modals/PinModal";
 import { PinSwitchModal } from "./login/modals/PinSwitchModal";
+import { LogExpenseModal } from "./login/modals/LogExpenseModal";
 
 import type { AdminTab, RestaurantProfile, AdminMenuItem } from "./login/adminTypes";
 import type { ActiveSession, StaffMember } from "@/types";
@@ -152,6 +153,57 @@ export default function AdminDashboardPage() {
     isAdminRole,
     setSessionToken,
   } = useAdminAuth();
+
+  // Pending Expenses Approvals Badge
+  const [pendingExpensesCount, setPendingExpensesCount] = useState<number>(0);
+
+  const loadPendingExpensesCount = useCallback(async () => {
+    if (!accessToken || !["SUPERADMIN", "OUTLET_ADMIN"].includes(userRole || "")) {
+      setPendingExpensesCount(0);
+      return;
+    }
+    try {
+      const res = await apiRequest<{ count: number }>("/api/admin/expenses/pending-count");
+      setPendingExpensesCount(res?.count || 0);
+    } catch (err) {
+      if (isAuthError(err)) return;
+    }
+  }, [accessToken, userRole, apiRequest]);
+
+  useEffect(() => {
+    void loadPendingExpensesCount();
+    if (["SUPERADMIN", "OUTLET_ADMIN"].includes(userRole || "")) {
+      const interval = setInterval(() => {
+        void loadPendingExpensesCount();
+      }, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [loadPendingExpensesCount, userRole]);
+
+  // Staff & Team Tab Log Expense State
+  const [isStaffLogExpenseOpen, setIsStaffLogExpenseOpen] = useState(false);
+  const [isStaffExpenseSaving, setIsStaffExpenseSaving] = useState(false);
+
+  const handleStaffSaveExpense = async (data: any) => {
+    setIsStaffExpenseSaving(true);
+    try {
+      await apiRequest<any>("/api/admin/expenses", {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+      setIsStaffLogExpenseOpen(false);
+      void loadPendingExpensesCount();
+      if (userRole === "MANAGER") {
+        setNotice("Expense submitted successfully! It has been sent to Admin for review & approval.");
+      } else {
+        setNotice("Expense recorded and approved successfully.");
+      }
+    } catch (err: any) {
+      setError(err?.message || "Failed to submit expense.");
+    } finally {
+      setIsStaffExpenseSaving(false);
+    }
+  };
 
   // Restaurant Profile State
   const [restaurant, setRestaurant] = useState<RestaurantProfile | null>(null);
@@ -431,6 +483,7 @@ export default function AdminDashboardPage() {
         isAdminRole={isAdminRole}
         pendingVerificationCount={pendingVerificationCount}
         pendingApprovalsCount={billingState.pendingApprovalsCount}
+        pendingExpensesCount={pendingExpensesCount}
         lowStockAlertCount={inventoryState.alerts.length}
         abandonedCartCount={sessionsState.abandonedCartCount}
         onShowAbandonedCarts={() => sessionsState.setShowAbandonedCartsPanel(true)}
@@ -718,6 +771,7 @@ export default function AdminDashboardPage() {
                 role: userRole === "MANAGER" ? "CASHIER" : "STAFF",
                 password: "",
                 pin: "",
+                barcode: "",
               });
               staffState.setStaffModalOpen(true);
             }}
@@ -730,7 +784,8 @@ export default function AdminDashboardPage() {
                 phone: member.phone || "",
                 role: member.role,
                 password: "",
-                pin: "",
+                pin: member.has_pin ? "••••" : "",
+                barcode: member.barcode || "",
               });
               staffState.setStaffModalOpen(true);
             }}
@@ -742,11 +797,16 @@ export default function AdminDashboardPage() {
               void staffState.loadStaffMembers();
               staffState.setPinSwitchModalOpen(true);
             }}
+            onOpenLogExpense={() => setIsStaffLogExpenseOpen(true)}
           />
         )}
 
         {/* Tab 5: Analytics */}
-        {activeTab === "analytics" && (staffState.staffPermissions?.can_view_analytics ?? true) && (
+        {activeTab === "analytics" && (
+          staffState.staffPermissions
+            ? (staffState.staffPermissions.can_view_analytics && staffState.staffPermissions.allowed_sidebar_tabs?.includes("analytics"))
+            : ["SUPERADMIN", "OUTLET_ADMIN"].includes(userRole || "")
+        ) && (
           <AnalyticsTab
             restaurant={restaurant}
             categories={menuState.categories}
@@ -818,6 +878,8 @@ export default function AdminDashboardPage() {
             deleteBatch={inventoryState.deleteBatch}
             updateBatchMetadata={inventoryState.updateBatchMetadata}
             logWastage={inventoryState.logWastage}
+            deleteAndRestockWastage={inventoryState.deleteAndRestockWastage}
+            getBatchWastageHistory={inventoryState.getBatchWastageHistory}
             selectedEditItem={inventoryState.selectedEditItem}
             isEditItemModalOpen={inventoryState.isEditItemModalOpen}
             openEditItemModal={inventoryState.openEditItemModal}
@@ -834,7 +896,11 @@ export default function AdminDashboardPage() {
         )}
 
         {/* Tab 7: Customer Services (Customer Directory & QR Codes) */}
-        {activeTab === "customerservices" && (staffState.staffPermissions?.allowed_sidebar_tabs?.includes("customerservices") ?? true) && (
+        {activeTab === "customerservices" && (
+          staffState.staffPermissions
+            ? staffState.staffPermissions.allowed_sidebar_tabs?.includes("customerservices")
+            : ["SUPERADMIN", "OUTLET_ADMIN"].includes(userRole || "")
+        ) && (
           <CustomerServicesTab
             restaurant={restaurant}
             authToken={accessToken || undefined}
@@ -844,6 +910,10 @@ export default function AdminDashboardPage() {
 
         {/* Tab 8: Restaurant Settings */}
         {activeTab === "settings" && (
+          staffState.staffPermissions
+            ? staffState.staffPermissions.allowed_sidebar_tabs?.includes("settings")
+            : ["SUPERADMIN", "OUTLET_ADMIN"].includes(userRole || "")
+        ) && (
           <SettingsTab
             restaurant={restaurant}
             menuItems={menuState.menuItems}
@@ -859,9 +929,14 @@ export default function AdminDashboardPage() {
 
         {/* Tab 9: Expenses & P&L */}
         {activeTab === "expenses" && (
+          staffState.staffPermissions
+            ? staffState.staffPermissions.allowed_sidebar_tabs?.includes("expenses")
+            : ["SUPERADMIN", "OUTLET_ADMIN"].includes(userRole || "")
+        ) && (
           <ExpensesTab
             restaurant={restaurant}
             authToken={accessToken || undefined}
+            onPendingExpensesChange={setPendingExpensesCount}
           />
         )}
       </main>
@@ -925,6 +1000,9 @@ export default function AdminDashboardPage() {
         eveningPriceActive={restaurant?.evening_price_active ?? false}
         restaurant={restaurant}
         editingCompletedBill={billingState.editingCompletedBill}
+        staffList={staffState.staffList}
+        assistedByStaff={billingState.assistedByStaff}
+        setAssistedByStaff={billingState.setAssistedByStaff}
         onQuickEditOffer={async (itemId, updates) => {
 
           try {
@@ -1022,6 +1100,7 @@ export default function AdminDashboardPage() {
         setPinInput={staffState.setPinInput}
         isSavingPin={staffState.isSavingPin}
         onSubmitSetStaffPin={staffState.onSubmitSetStaffPin}
+        onUnsetStaffPin={staffState.onUnsetStaffPin}
       />
 
       <PinSwitchModal
@@ -1074,6 +1153,14 @@ export default function AdminDashboardPage() {
         fetchShiftSummary={punchState.fetchLiveShiftSummary}
         outlet={restaurant}
         onConfirmPunchOut={punchState.handlePunchOut}
+      />
+
+      {/* Operational Expense Logging Modal from Staff & Team Tab */}
+      <LogExpenseModal
+        isOpen={isStaffLogExpenseOpen}
+        onClose={() => setIsStaffLogExpenseOpen(false)}
+        onSave={handleStaffSaveExpense}
+        isSaving={isStaffExpenseSaving}
       />
     </div>
   );

@@ -43,6 +43,8 @@ from app.schemas.inventory import (
     StockLedgerResponse,
     StockWastageRequest,
     StockWastageResponse,
+    BatchWastageEntryResponse,
+    DeleteWastageRestockResponse,
     SupplierCreate,
     SupplierUpdate,
     SupplierResponse,
@@ -51,7 +53,9 @@ from app.services.audit_service import log_action
 from app.services.inventory_service import (
     create_inventory_item,
     create_supplier,
+    delete_and_restock_wastage,
     get_all_batches,
+    get_batch_wastage_history,
     get_near_expiry_alerts,
     list_suppliers,
     log_stock_intake,
@@ -762,6 +766,48 @@ async def log_inventory_wastage(
     )
 
     return res
+
+
+@router.delete("/wastage/{ledger_id}", response_model=DeleteWastageRestockResponse)
+async def delete_and_restock_wastage_endpoint(
+    ledger_id: uuid.UUID,
+    current_user: RequireAdmin,
+    db: DBSession,
+):
+    """
+    Safely undoes an accidental wastage entry: restores stock back to its specific batch lot
+    and product available stock, deletes the wastage ledger entry, and reconciles inventory.
+    """
+    res = await delete_and_restock_wastage(
+        db,
+        current_user.outlet_id,
+        ledger_id,
+        user_id=current_user.user_id,
+    )
+
+    await log_action(
+        db,
+        current_user.outlet_id,
+        current_user.user_id,
+        "RESTOCK_DELETE_WASTAGE",
+        "StockLedger",
+        str(ledger_id),
+        details=res,
+    )
+
+    return res
+
+
+@router.get("/batches/{intake_id}/wastage", response_model=list[BatchWastageEntryResponse])
+async def get_batch_wastage_endpoint(
+    intake_id: uuid.UUID,
+    current_user: RequireAdmin,
+    db: DBSession,
+):
+    """
+    Get all active wastage entries for a specific batch lot.
+    """
+    return await get_batch_wastage_history(db, current_user.outlet_id, intake_id)
 
 
 @router.patch("/batches/{intake_id}")

@@ -67,6 +67,7 @@ from app.services.staff_service import (
     delete_staff_permanently,
     get_permissions_for_role,
     set_staff_pin,
+    unset_staff_pin,
     to_staff_response,
     update_staff,
 )
@@ -125,6 +126,9 @@ async def list_staff_endpoint(
 ):
     """List staff for an outlet (Admin: own outlet; Superadmin: filterable)."""
     target_outlet_id = outlet_id or current_user.outlet_id
+    if target_outlet_id:
+        from app.services.staff_punch_service import auto_close_midnight_shifts
+        await auto_close_midnight_shifts(db, target_outlet_id)
 
     stmt = select(User).where(User.role != RoleEnum.SUPERADMIN)
     stmt = outlet_scoped_query(stmt, User, target_outlet_id, current_user)
@@ -290,6 +294,34 @@ async def set_staff_pin_endpoint(
         actor_user_id=current_user.user_id,
     )
     return {"message": "Staff PIN set successfully"}
+
+
+@router.delete("/{staff_id}/pin", status_code=status.HTTP_200_OK)
+async def unset_staff_pin_endpoint(
+    staff_id: uuid.UUID,
+    current_user: RequireAdmin,
+    db: DBSession,
+):
+    """Admin/Superadmin unsets/revokes a staff member's 4-digit PIN."""
+    target_outlet_id = current_user.outlet_id
+    if current_user.role == RoleEnum.SUPERADMIN:
+        res = await db.execute(select(User).where(User.id == staff_id))
+        s = res.scalar_one_or_none()
+        if not s:
+            raise HTTPException(status_code=404, detail="Staff member not found")
+        target_outlet_id = s.outlet_id
+
+    if not target_outlet_id:
+        raise HTTPException(status_code=400, detail="outlet_id required")
+
+    await unset_staff_pin(
+        db,
+        target_outlet_id,
+        staff_id,
+        actor_role=current_user.role,
+        actor_user_id=current_user.user_id,
+    )
+    return {"message": "Staff PIN removed successfully"}
 
 
 @router.post("/set-my-pin", status_code=status.HTTP_200_OK)
@@ -523,85 +555,169 @@ async def list_staff_audit_log_endpoint(
 # ── Staff Incentives & Performance ──────────────────────────────────────
 
 
+@router.get("/by-barcode/{barcode}", response_model=StaffResponse)
+async def get_staff_by_barcode_endpoint(
+    barcode: str,
+    current_user: AuthenticatedUser,
+    db: DBSession,
+):
+    """Lookup staff member by barcode scanner string within the outlet."""
+    if not current_user.outlet_id:
+        raise HTTPException(status_code=400, detail="Active outlet required")
+
+    clean_code = barcode.strip()
+    res = await db.execute(
+        select(User).where(User.outlet_id == current_user.outlet_id, User.barcode == clean_code)
+    )
+    staff = res.scalar_one_or_none()
+    if not staff:
+        raise HTTPException(status_code=404, detail="No staff member found matching barcode.")
+    return to_staff_response(staff)
+
+
+@router.post("/{staff_id}/punch/in")
+async def manager_punch_in_staff_endpoint(
+    staff_id: uuid.UUID,
+    current_user: AuthenticatedUser,
+    db: DBSession,
+    data: StaffPunchInRequest | None = None,
+):
+    """Allow Outlet Admin or Manager to punch in a staff member for a shift."""
+    if not current_user.outlet_id:
+        raise HTTPException(status_code=400, detail="Active outlet required")
+
+    if current_user.role not in (RoleEnum.SUPERADMIN, RoleEnum.OUTLET_ADMIN, RoleEnum.MANAGER):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Only Managers or Admins can mark attendance for staff.",
+        )
+
+    target_staff = await db.get(User, staff_id)
+    if not target_staff or target_staff.outlet_id != current_user.outlet_id:
+        raise HTTPException(status_code=404, detail="Staff member not found in this outlet.")
+
+    if target_staff.role in (RoleEnum.SUPERADMIN, RoleEnum.OUTLET_ADMIN, RoleEnum.MANAGER):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Shift punch attendance cannot be marked for Admin or Manager accounts.",
+        )
+
+    opening_cash = data.opening_cash if data else Decimal("0.00")
+    session = await punch_in_staff(
+        db,
+        outlet_id=current_user.outlet_id,
+        staff_id=staff_id,
+        staff_name=target_staff.name,
+        opening_cash=opening_cash,
+    )
+    return {"message": f"Successfully punched in {target_staff.name}", "session_id": str(session.id)}
+
+
+@router.post("/{staff_id}/punch/out")
+async def manager_punch_out_staff_endpoint(
+    staff_id: uuid.UUID,
+    current_user: AuthenticatedUser,
+    db: DBSession,
+    data: StaffPunchOutRequest | None = None,
+):
+    """Allow Outlet Admin or Manager to punch out a staff member."""
+    if not current_user.outlet_id:
+        raise HTTPException(status_code=400, detail="Active outlet required")
+
+    if current_user.role not in (RoleEnum.SUPERADMIN, RoleEnum.OUTLET_ADMIN, RoleEnum.MANAGER):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Only Managers or Admins can mark attendance for staff.",
+        )
+
+    target_staff = await db.get(User, staff_id)
+    if not target_staff or target_staff.outlet_id != current_user.outlet_id:
+        raise HTTPException(status_code=404, detail="Staff member not found in this outlet.")
+
+    if target_staff.role in (RoleEnum.SUPERADMIN, RoleEnum.OUTLET_ADMIN, RoleEnum.MANAGER):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Shift punch attendance cannot be marked for Admin or Manager accounts.",
+        )
+
+    notes = data.notes if data else None
+    actual_cash = data.actual_cash_handed_over if data else None
+    session, duration_str, stats = await punch_out_staff(
+        db,
+        outlet_id=current_user.outlet_id,
+        staff_id=staff_id,
+        staff_name=target_staff.name,
+        notes=notes,
+        actual_cash_handed_over=actual_cash,
+    )
+    if not session:
+        raise HTTPException(status_code=400, detail="No active shift punch-in session found for this staff member.")
+
+    return {
+        "message": f"Successfully punched out {target_staff.name}",
+        "session_id": str(session.id),
+        "duration": duration_str,
+        "stats": stats,
+    }
+
+
 @router.get("/incentives/report")
 async def get_staff_incentives_report(
-    current_user: RequireAdmin,
+    current_user: AuthenticatedUser,
     db: DBSession,
     start_date: str | None = Query(None, description="Format: YYYY-MM-DD"),
     end_date: str | None = Query(None, description="Format: YYYY-MM-DD"),
+    staff_id: uuid.UUID | None = Query(None),
 ):
     """
-    Store-wide staff incentive report for settled orders.
-    Calculates total items assisted, sales volume generated, and estimated commission.
+    Store-wide floor staff incentive & customer assistance report.
+    Tracks assisted bills count, gross sales volume, average basket value, shift timing, and incentive earnings.
     """
-    from app.models.enums import OrderStatusEnum
-    from app.models.order import Order
-    from app.models.order_item import OrderItem
-    from app.models.user import User
+    if not current_user.outlet_id:
+        raise HTTPException(status_code=400, detail="Active outlet required")
 
-    stmt = (
-        select(
-            OrderItem.added_by_staff_id,
-            User.name.label("staff_name"),
-            User.email.label("staff_email"),
-            func.count(OrderItem.id).label("item_count"),
-            func.sum(OrderItem.quantity).label("total_quantity"),
-            func.sum(OrderItem.unit_price * OrderItem.quantity).label("total_sales"),
-        )
-        .join(Order, Order.id == OrderItem.order_id)
-        .join(User, User.id == OrderItem.added_by_staff_id)
-        .where(
-            Order.outlet_id == current_user.outlet_id,
-            Order.status == OrderStatusEnum.COMPLETED,
-            OrderItem.added_by_staff_id.isnot(None),
-        )
+    dt_start = None
+    dt_end = None
+    if start_date or end_date:
+        try:
+            from datetime import time, timedelta
+            from app.core.datetime_utils import ensure_naive_utc
+            if start_date:
+                d_start = datetime.strptime(start_date, "%Y-%m-%d").date()
+                # DB stores naive UTC. 00:00:00 IST = 18:30:00 UTC of previous day
+                dt_start = ensure_naive_utc(datetime.combine(d_start, time.min) - timedelta(hours=5, minutes=30))
+            if end_date:
+                d_end = datetime.strptime(end_date, "%Y-%m-%d").date()
+                # 23:59:59.999999 IST = 18:29:59.999999 UTC
+                dt_end = ensure_naive_utc(datetime.combine(d_end, time.max) - timedelta(hours=5, minutes=30))
+        except ValueError:
+            pass
+
+    from app.services.staff_punch_service import get_floor_staff_incentive_report
+    report_items = await get_floor_staff_incentive_report(
+        db,
+        outlet_id=current_user.outlet_id,
+        start_date=dt_start,
+        end_date=dt_end,
+        staff_id=staff_id,
     )
 
-    if start_date:
-        try:
-            dt_start = datetime.strptime(start_date, "%Y-%m-%d")
-            stmt = stmt.where(Order.created_at >= dt_start)
-        except ValueError:
-            pass
+    total_assisted_sales = sum(r["total_assisted_sales"] for r in report_items)
+    total_bills = sum(r["total_bills_assisted"] for r in report_items)
+    total_incentives = sum(r["calculated_incentive"] for r in report_items)
 
-    if end_date:
-        try:
-            dt_end = datetime.strptime(end_date, "%Y-%m-%d")
-            stmt = stmt.where(Order.created_at <= dt_end)
-        except ValueError:
-            pass
-
-    stmt = stmt.group_by(
-        OrderItem.added_by_staff_id,
-        User.name,
-        User.email,
-    ).order_by(func.sum(OrderItem.unit_price * OrderItem.quantity).desc())
-
-    result = await db.execute(stmt)
-    rows = result.all()
-
-    report_items = []
-    total_store_assisted_sales = 0.0
-
-    for r in rows:
-        sales_val = float(r.total_sales or 0.0)
-        total_store_assisted_sales += sales_val
-        report_items.append(
-            {
-                "staff_id": str(r.added_by_staff_id),
-                "staff_name": r.staff_name or "Staff Member",
-                "staff_email": r.staff_email,
-                "item_count": r.item_count,
-                "total_quantity": r.total_quantity,
-                "total_sales": sales_val,
-                "estimated_incentive": round(sales_val * 0.01, 2),
-            }
-        )
+    from app.models.outlet import Outlet
+    outlet = await db.get(Outlet, current_user.outlet_id)
+    rate_raw = getattr(outlet, "floor_incentive_per_bill", None)
+    pct_raw = getattr(outlet, "floor_incentive_percent", None)
 
     return {
         "outlet_id": str(current_user.outlet_id),
-        "total_assisted_sales": round(total_store_assisted_sales, 2),
-        "total_estimated_incentive_pool": round(total_store_assisted_sales * 0.01, 2),
+        "total_bills_assisted": total_bills,
+        "total_assisted_sales": round(total_assisted_sales, 2),
+        "total_incentives": round(total_incentives, 2),
+        "incentive_per_bill": float(rate_raw) if rate_raw is not None else 5.0,
+        "incentive_percent": float(pct_raw) if pct_raw is not None else 0.50,
         "staff_breakdown": report_items,
     }
 
@@ -811,6 +927,7 @@ async def list_shift_sessions_endpoint(
     current_user: AuthenticatedUser,
     db: DBSession,
     staff_id: uuid.UUID | None = Query(None),
+    role: str | None = Query(None),
     start_date: str | None = Query(None),
     end_date: str | None = Query(None),
     status: str | None = Query(None),
@@ -832,6 +949,7 @@ async def list_shift_sessions_endpoint(
         start_date=start_date,
         end_date=end_date,
         status=status,
+        role=role,
         limit=limit,
     )
 

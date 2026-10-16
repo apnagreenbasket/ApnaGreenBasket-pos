@@ -8,29 +8,47 @@
 
 "use client";
 
-import { FormEvent, useState, useEffect, useCallback } from "react";
+import { FormEvent, useState, useEffect, useCallback, useMemo } from "react";
 import { ConfirmModal } from "../modals/ConfirmModal";
+import { ManagerPunchOutModal } from "../modals/ManagerPunchOutModal";
+import { ToastNotification } from "@/app/components/ToastNotification";
 import {
   Activity,
   AlertCircle,
+  Award,
+  Barcode,
   Calendar,
   CheckCircle2,
   Clock,
   KeyRound,
   Pencil,
+  Play,
   Printer,
   Receipt,
   RefreshCw,
+  ShoppingBag,
+  Square,
   Trash2,
   UserCheck,
   UserPlus,
   Users,
   UserX,
+  Wallet,
 } from "lucide-react";
 import { formatRupees, formatDateTime, parseUTCDate } from "../adminUtils";
-import type { StaffAuditEntry, StaffMember, StaffRole } from "@/types";
+import type {
+  StaffAuditEntry,
+  StaffMember,
+  StaffRole,
+  FloorStaffIncentiveRow,
+  FloorStaffIncentiveReportResponse,
+} from "@/types";
 import type { RestaurantProfile, StaffPunchSessionItem } from "../adminTypes";
-import { generateShiftHandoverReceiptPDF } from "@/lib/pdfGenerator";
+import {
+  generateShiftHandoverReceiptPDF,
+  generateFloorStaffIncentiveSlipPDF,
+  generateStaffBarcodeBadgePDF,
+} from "@/lib/pdfGenerator";
 
 type StaffFormState = {
   outlet_id: string;
@@ -78,6 +96,7 @@ type StaffTabProps = {
   onOpenEditStaff: (member: StaffMember) => void;
   onOpenPinSetup: (member: StaffMember) => void;
   onOpenPinSwitch: () => void;
+  onOpenLogExpense?: () => void;
 };
 
 export function StaffTab({
@@ -106,17 +125,26 @@ export function StaffTab({
   onOpenEditStaff,
   onOpenPinSetup,
   onOpenPinSwitch,
+  onOpenLogExpense,
 }: StaffTabProps) {
   const [staffToDeactivate, setStaffToDeactivate] = useState<{ id: string; name: string } | null>(null);
   const [staffToActivate, setStaffToActivate] = useState<{ id: string; name: string } | null>(null);
   const [staffToDelete, setStaffToDelete] = useState<{ id: string; name: string } | null>(null);
   const [statusFilter, setStatusFilter] = useState<"active" | "inactive" | "all">("active");
 
+  const getTodayDateStr = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
+
   // Shift Handover Sessions State
   const [shiftSessions, setShiftSessions] = useState<StaffPunchSessionItem[]>([]);
   const [isLoadingSessions, setIsLoadingSessions] = useState(false);
   const [sessionStaffFilter, setSessionStaffFilter] = useState<string>("");
-  const [sessionDatePreset, setSessionDatePreset] = useState<string>("today");
+  const [sessionDatePreset, setSessionDatePreset] = useState<"today" | "yesterday" | "7days" | "30days" | "custom">("today");
+  const [sessionCustomFrom, setSessionCustomFrom] = useState<string>("");
+  const [sessionCustomTo, setSessionCustomTo] = useState<string>("");
+  const [sessionPage, setSessionPage] = useState<number>(1);
 
   const loadShiftSessions = useCallback(async () => {
     if (!apiRequest) return;
@@ -153,8 +181,17 @@ export function StaffTab({
         past30.setDate(now.getDate() - 30);
         params.append("start_date", formatDateStr(past30));
         params.append("end_date", formatDateStr(now));
+      } else if (sessionDatePreset === "custom") {
+        if (sessionCustomFrom && sessionCustomTo) {
+          params.append("start_date", sessionCustomFrom);
+          params.append("end_date", sessionCustomTo);
+        } else {
+          setIsLoadingSessions(false);
+          return;
+        }
       }
-      params.append("limit", "50");
+      params.append("role", "CASHIER");
+      params.append("limit", "500");
 
       const data = await apiRequest<StaffPunchSessionItem[]>(`/api/staff/punch/sessions?${params.toString()}`);
       setShiftSessions(data || []);
@@ -163,18 +200,237 @@ export function StaffTab({
     } finally {
       setIsLoadingSessions(false);
     }
-  }, [apiRequest, sessionStaffFilter, sessionDatePreset]);
+  }, [apiRequest, sessionStaffFilter, sessionDatePreset, sessionCustomFrom, sessionCustomTo]);
 
   useEffect(() => {
     void loadShiftSessions();
   }, [loadShiftSessions]);
+
+  useEffect(() => {
+    setSessionPage(1);
+  }, [sessionStaffFilter, sessionDatePreset, sessionCustomFrom, sessionCustomTo]);
 
   const totalSalesRecorded = shiftSessions.reduce((acc, s) => acc + (Number(s.total_sales_amount) || 0), 0);
   const totalCashCollected = shiftSessions.reduce((acc, s) => acc + (Number(s.cash_collected) || 0), 0);
   const totalHandedOver = shiftSessions.reduce((acc, s) => acc + (Number(s.actual_cash_handed_over) || 0), 0);
   const totalDifference = shiftSessions.reduce((acc, s) => acc + (Number(s.cash_difference) || 0), 0);
 
+  // Pagination for Shift Handover (15 rows per page)
+  const sessionPageSize = 15;
+  const sessionTotalPages = Math.max(1, Math.ceil(shiftSessions.length / sessionPageSize));
+  const paginatedSessions = useMemo(() => {
+    const start = (sessionPage - 1) * sessionPageSize;
+    return shiftSessions.slice(start, start + sessionPageSize);
+  }, [shiftSessions, sessionPage]);
+
+  // Filtered staff lists for dedicated section dropdowns
+  const cashierStaffList = useMemo(
+    () => staffList.filter((m) => m.role === "CASHIER"),
+    [staffList]
+  );
+  const floorStaffOnlyList = useMemo(
+    () => staffList.filter((m) => m.role === "FLOOR_STAFF" || m.role === "STAFF"),
+    [staffList]
+  );
+
+  // Live active shifts (queried directly from open shift sessions)
+  const [liveActiveShiftStaffIds, setLiveActiveShiftStaffIds] = useState<Set<string>>(new Set());
+
+  const loadActiveShifts = useCallback(async () => {
+    if (!apiRequest) return;
+    try {
+      const openSessions = await apiRequest<StaffPunchSessionItem[]>("/api/staff/punch/sessions?status=OPEN");
+      if (openSessions && Array.isArray(openSessions)) {
+        const ids = new Set<string>();
+        for (const s of openSessions) {
+          if (!s.punch_out_at && s.status !== "SETTLED") {
+            ids.add(s.staff_id);
+          }
+        }
+        setLiveActiveShiftStaffIds(ids);
+      }
+    } catch (err) {
+      console.warn("Failed to load active shifts:", err);
+    }
+  }, [apiRequest]);
+
+  useEffect(() => {
+    void loadActiveShifts();
+  }, [loadActiveShifts]);
+
+  // Floor Staff Incentive Report State
+  const [incentiveRows, setIncentiveRows] = useState<FloorStaffIncentiveRow[]>([]);
+  const [isLoadingIncentives, setIsLoadingIncentives] = useState(false);
+  const [incentiveStaffFilter, setIncentiveStaffFilter] = useState<string>("");
+  const [incentiveDatePreset, setIncentiveDatePreset] = useState<"today" | "yesterday" | "7days" | "30days" | "custom">("today");
+  const [incentiveCustomFrom, setIncentiveCustomFrom] = useState<string>("");
+  const [incentiveCustomTo, setIncentiveCustomTo] = useState<string>("");
+  const [incentivePage, setIncentivePage] = useState<number>(1);
+  const [totalIncentiveBills, setTotalIncentiveBills] = useState(0);
+  const [totalIncentiveSales, setTotalIncentiveSales] = useState(0);
+  const [totalIncentivesPaid, setTotalIncentivesPaid] = useState(0);
+  const [incentivePerBillRate, setIncentivePerBillRate] = useState<number>(5.0);
+  const [incentivePercentRate, setIncentivePercentRate] = useState<number>(0.5);
+  const [punchingStaffId, setPunchingStaffId] = useState<string | null>(null);
+  const [staffToPunchOut, setStaffToPunchOut] = useState<StaffMember | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  // Active shift staff IDs (merged from live open sessions, cashier shift sessions and floor staff report)
+  const activeShiftStaffIds = useMemo(() => {
+    const ids = new Set<string>(liveActiveShiftStaffIds);
+    for (const s of shiftSessions) {
+      if (s.status !== "SETTLED" && !s.punch_out_at) {
+        ids.add(s.staff_id);
+      }
+    }
+    for (const r of incentiveRows) {
+      if (r.is_active_shift) {
+        ids.add(r.staff_id);
+      }
+    }
+    return ids;
+  }, [liveActiveShiftStaffIds, shiftSessions, incentiveRows]);
+
+  const loadIncentiveReport = useCallback(async () => {
+    if (!apiRequest) return;
+    setIsLoadingIncentives(true);
+    try {
+      const params = new URLSearchParams();
+      if (incentiveStaffFilter) params.append("staff_id", incentiveStaffFilter);
+
+      const now = new Date();
+      const formatDateStr = (d: Date) => {
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
+      };
+
+      if (incentiveDatePreset === "today") {
+        const todayStr = formatDateStr(now);
+        params.append("start_date", todayStr);
+        params.append("end_date", todayStr);
+      } else if (incentiveDatePreset === "yesterday") {
+        const yesterday = new Date(now);
+        yesterday.setDate(now.getDate() - 1);
+        const yStr = formatDateStr(yesterday);
+        params.append("start_date", yStr);
+        params.append("end_date", yStr);
+      } else if (incentiveDatePreset === "7days") {
+        const past7 = new Date(now);
+        past7.setDate(now.getDate() - 7);
+        params.append("start_date", formatDateStr(past7));
+        params.append("end_date", formatDateStr(now));
+      } else if (incentiveDatePreset === "30days") {
+        const past30 = new Date(now);
+        past30.setDate(now.getDate() - 30);
+        params.append("start_date", formatDateStr(past30));
+        params.append("end_date", formatDateStr(now));
+      } else if (incentiveDatePreset === "custom") {
+        if (incentiveCustomFrom && incentiveCustomTo) {
+          params.append("start_date", incentiveCustomFrom);
+          params.append("end_date", incentiveCustomTo);
+        } else {
+          setIsLoadingIncentives(false);
+          return;
+        }
+      }
+
+      const res = await apiRequest<FloorStaffIncentiveReportResponse>(
+        `/api/staff/incentives/report?${params.toString()}`
+      );
+      if (res) {
+        setIncentiveRows(res.staff_breakdown || []);
+        setTotalIncentiveBills(res.total_bills_assisted || 0);
+        setTotalIncentiveSales(res.total_assisted_sales || 0);
+        setTotalIncentivesPaid(res.total_incentives || 0);
+        if (res.incentive_per_bill !== undefined) {
+          setIncentivePerBillRate(res.incentive_per_bill);
+        }
+        if (res.incentive_percent !== undefined) {
+          setIncentivePercentRate(res.incentive_percent);
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to load incentive report:", err);
+    } finally {
+      setIsLoadingIncentives(false);
+    }
+  }, [apiRequest, incentiveStaffFilter, incentiveDatePreset, incentiveCustomFrom, incentiveCustomTo]);
+
+  useEffect(() => {
+    void loadIncentiveReport();
+  }, [loadIncentiveReport]);
+
+  useEffect(() => {
+    setIncentivePage(1);
+  }, [incentiveStaffFilter, incentiveDatePreset, incentiveCustomFrom, incentiveCustomTo]);
+
+  // Pagination for Floor Staff Incentive Report (15 rows per page)
+  const incentivePageSize = 15;
+  const incentiveTotalPages = Math.max(1, Math.ceil(incentiveRows.length / incentivePageSize));
+  const paginatedIncentiveRows = useMemo(() => {
+    const start = (incentivePage - 1) * incentivePageSize;
+    return incentiveRows.slice(start, start + incentivePageSize);
+  }, [incentiveRows, incentivePage]);
+
   const isManager = currentUserRole === "MANAGER";
+  const canManageAttendance =
+    currentUserRole === "OUTLET_ADMIN" || currentUserRole === "SUPERADMIN" || isManager;
+
+  const handleManagerPunchIn = async (member: StaffMember) => {
+    if (!apiRequest) return;
+    setPunchingStaffId(member.id);
+    setActionError(null);
+    try {
+      await apiRequest(`/api/staff/${member.id}/punch/in`, {
+        method: "POST",
+        body: JSON.stringify({ opening_cash: 0 }),
+      });
+      setLiveActiveShiftStaffIds((prev) => new Set(prev).add(member.id));
+      setActionNotice(`Successfully punched in ${member.name}`);
+      await Promise.all([
+        loadActiveShifts(),
+        loadStaffMembers(),
+        loadShiftSessions(),
+        loadIncentiveReport(),
+      ]);
+    } catch (err: any) {
+      setActionError(err?.message || "Failed to punch in staff");
+    } finally {
+      setPunchingStaffId(null);
+    }
+  };
+
+  const handleManagerPunchOut = async (member: StaffMember, notes?: string) => {
+    if (!apiRequest) return;
+    setPunchingStaffId(member.id);
+    setActionError(null);
+    try {
+      await apiRequest(`/api/staff/${member.id}/punch/out`, {
+        method: "POST",
+        body: JSON.stringify({ notes }),
+      });
+      setLiveActiveShiftStaffIds((prev) => {
+        const next = new Set(prev);
+        next.delete(member.id);
+        return next;
+      });
+      setActionNotice(`Successfully punched out ${member.name}`);
+      await Promise.all([
+        loadActiveShifts(),
+        loadStaffMembers(),
+        loadShiftSessions(),
+        loadIncentiveReport(),
+      ]);
+    } catch (err: any) {
+      setActionError(err?.message || "Failed to punch out staff");
+      throw err;
+    } finally {
+      setPunchingStaffId(null);
+    }
+  };
 
 
   const activeStaffCount = staffList.filter((s) => s.status === "active").length;
@@ -227,14 +483,17 @@ export function StaffTab({
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <button
-            type="button"
-            onClick={onOpenPinSwitch}
-            className="inline-flex items-center gap-2 rounded-xl border border-[var(--accent-brand)]/30 bg-[var(--accent-brand)]/10 px-3.5 py-2 text-xs font-bold text-[var(--accent-brand)] hover:bg-[var(--accent-brand)]/20 transition"
-          >
-            <KeyRound className="h-4 w-4" />
-            <span>PIN Quick-Switch</span>
-          </button>
+          {onOpenLogExpense && (
+            <button
+              type="button"
+              onClick={onOpenLogExpense}
+              className="inline-flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2 text-xs font-bold text-amber-500 hover:bg-amber-500/20 transition shadow-2xs"
+              title="Log an operational store expense (Tea, Auto, Oil, Repairs, etc.)"
+            >
+              <Wallet className="h-4 w-4" />
+              <span>Log Expense</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={onOpenCreateStaff}
@@ -321,7 +580,10 @@ export function StaffTab({
           </div>
           <button
             type="button"
-            onClick={() => void loadStaffMembers()}
+            onClick={() => {
+              void loadStaffMembers();
+              void loadActiveShifts();
+            }}
             className="p-1.5 rounded-lg hover:bg-[var(--bg-surface-elevated)] text-[var(--text-muted)] self-end sm:self-auto"
             title="Refresh Roster"
           >
@@ -335,9 +597,9 @@ export function StaffTab({
               <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
                 <th className="p-3.5">Staff Member</th>
                 <th className="p-3.5">Contact</th>
-                <th className="p-3.5">Assigned Role</th>
+                <th className="p-3.5">Assigned Role &amp; Barcode</th>
                 <th className="p-3.5 text-center">PIN Status</th>
-                <th className="p-3.5 text-center">Account Status</th>
+                <th className="p-3.5 text-center">Shift Status</th>
                 <th className="p-3.5 text-right">Actions</th>
               </tr>
             </thead>
@@ -373,18 +635,33 @@ export function StaffTab({
                     </td>
 
                     <td className="p-3.5">
-                      <span className={`inline-block rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${member.role === "OUTLET_ADMIN" || member.role === "SUPERADMIN"
-                        ? "bg-purple-100 text-purple-800"
-                        : member.role === "MANAGER"
-                          ? "bg-indigo-100 text-indigo-800"
-                          : member.role === "FLOOR_STAFF"
-                            ? "bg-amber-100 text-amber-800"
-                            : member.role === "CASHIER"
-                              ? "bg-emerald-100 text-emerald-800"
-                              : "bg-sky-100 text-sky-800"
-                        }`}>
-                        {member.role.replace("_", " ")}
-                      </span>
+                      <div className="flex flex-col gap-1">
+                        <span className={`inline-block w-fit rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${member.role === "OUTLET_ADMIN" || member.role === "SUPERADMIN"
+                          ? "bg-purple-100 text-purple-800"
+                          : member.role === "MANAGER"
+                            ? "bg-indigo-100 text-indigo-800"
+                            : member.role === "FLOOR_STAFF" || member.role === "STAFF"
+                              ? "bg-amber-100 text-amber-800"
+                              : member.role === "CASHIER"
+                                ? "bg-emerald-100 text-emerald-800"
+                                : "bg-sky-100 text-sky-800"
+                          }`}>
+                          {member.role.replace("_", " ")}
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] text-[var(--text-secondary)]">
+                            {member.barcode || `STF-${member.id.slice(0, 4).toUpperCase()}`}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => generateStaffBarcodeBadgePDF(member, restaurant, "print")}
+                            className="p-1 rounded hover:bg-[var(--bg-surface-elevated)] text-[var(--text-muted)] hover:text-[var(--accent-brand)] transition"
+                            title="Print Barcode Badge / Sticker"
+                          >
+                            <Barcode className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
                     </td>
 
                     <td className="p-3.5 text-center">
@@ -401,10 +678,19 @@ export function StaffTab({
                     </td>
 
                     <td className="p-3.5 text-center">
-                      <span className={`inline-block rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${member.status === "active" ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
-                        }`}>
-                        {member.status}
-                      </span>
+                      {(() => {
+                        const isPunchedIn = activeShiftStaffIds.has(member.id);
+                        return isPunchedIn ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            On Shift
+                          </span>
+                        ) : (
+                          <span className="inline-block rounded-full bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] px-2.5 py-0.5 text-[10px] font-semibold text-[var(--text-muted)]">
+                            Off Shift
+                          </span>
+                        );
+                      })()}
                     </td>
 
                     <td className="p-3.5 text-right space-x-1">
@@ -421,21 +707,50 @@ export function StaffTab({
                           member.status === "inactive" &&
                           !isSelf;
 
+                        const isStaffOnShift = activeShiftStaffIds.has(member.id);
+
                         return (
                           <>
-                            {/* Set PIN */}
+                            {/* Manager Shift Punch-In / Punch-Out (For all staff who cannot access Staff & Team: Cashiers, Floor Staff, Delivery) */}
+                            {canManageAttendance &&
+                              member.status === "active" &&
+                              !isSelf &&
+                              member.role !== "OUTLET_ADMIN" &&
+                              member.role !== "SUPERADMIN" &&
+                              member.role !== "MANAGER" && (
+                              isStaffOnShift ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setStaffToPunchOut(member)}
+                                  disabled={punchingStaffId === member.id}
+                                  className="inline-flex items-center gap-1 rounded-lg border border-rose-500/30 bg-rose-500/10 px-2 py-1 text-[10px] font-bold text-rose-500 hover:bg-rose-500/20 transition disabled:opacity-50 cursor-pointer"
+                                  title="Manager Punch Out Staff"
+                                >
+                                  <Square className="h-3 w-3 fill-current" />
+                                  <span>Punch Out</span>
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => void handleManagerPunchIn(member)}
+                                  disabled={punchingStaffId === member.id}
+                                  className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[10px] font-bold text-emerald-600 hover:bg-emerald-500/20 transition disabled:opacity-50"
+                                  title="Manager Punch In Staff"
+                                >
+                                  <Play className="h-3 w-3 fill-current" />
+                                  <span>Punch In</span>
+                                </button>
+                              )
+                            )}
+
+                            {/* Print Badge Button */}
                             <button
                               type="button"
-                              onClick={() => onOpenPinSetup(member)}
-                              disabled={!canManageTarget && !isSelf}
-                              className="p-1.5 rounded-lg hover:bg-[var(--bg-surface-elevated)] text-[var(--accent-brand)] disabled:opacity-30 disabled:cursor-not-allowed"
-                              title={
-                                !canManageTarget && !isSelf
-                                  ? "Managers cannot set PIN for peer or admin accounts"
-                                  : "Set 4-Digit PIN"
-                              }
+                              onClick={() => generateStaffBarcodeBadgePDF(member, restaurant, "print")}
+                              className="p-1.5 rounded-lg hover:bg-[var(--bg-surface-elevated)] text-[var(--text-primary)]"
+                              title="Print Barcode Badge / Sticker"
                             >
-                              <KeyRound className="h-4 w-4" />
+                              <Barcode className="h-4 w-4" />
                             </button>
 
                             {/* Edit Details */}
@@ -535,16 +850,16 @@ export function StaffTab({
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
-            {/* Staff Filter */}
+            {/* Staff Filter (Cashiers Only) */}
             <select
               value={sessionStaffFilter}
               onChange={(e) => setSessionStaffFilter(e.target.value)}
               className="text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] px-3 py-2 font-medium text-[var(--text-primary)]"
             >
-              <option value="">All Cashiers &amp; Staff</option>
-              {staffList.map((member) => (
+              <option value="">All Cashiers</option>
+              {cashierStaffList.map((member) => (
                 <option key={member.id} value={member.id}>
-                  {member.name} ({member.role})
+                  {member.name}
                 </option>
               ))}
             </select>
@@ -597,14 +912,18 @@ export function StaffTab({
               </button>
               <button
                 type="button"
-                onClick={() => setSessionDatePreset("all")}
+                onClick={() => {
+                  setSessionDatePreset("custom");
+                  if (!sessionCustomFrom) setSessionCustomFrom(getTodayDateStr());
+                  if (!sessionCustomTo) setSessionCustomTo(getTodayDateStr());
+                }}
                 className={`rounded-lg px-2.5 py-1 font-semibold transition ${
-                  sessionDatePreset === "all"
+                  sessionDatePreset === "custom"
                     ? "bg-[var(--accent-brand)] text-white shadow-xs"
                     : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                 }`}
               >
-                All
+                Custom
               </button>
             </div>
 
@@ -620,6 +939,29 @@ export function StaffTab({
             </button>
           </div>
         </div>
+
+        {/* Custom Date Range Picker for Shift Handover */}
+        {sessionDatePreset === "custom" && (
+          <div className="flex flex-wrap items-center gap-2.5 px-4 py-2.5 border-b border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)]/50 text-xs">
+            <div className="flex items-center gap-1.5 font-bold text-[var(--accent-brand)]">
+              <Calendar className="h-4 w-4" />
+              <span>Custom Range:</span>
+            </div>
+            <input
+              type="date"
+              value={sessionCustomFrom}
+              onChange={(e) => setSessionCustomFrom(e.target.value)}
+              className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 py-1 text-[var(--text-primary)] font-medium"
+            />
+            <span className="text-[var(--text-muted)] font-medium">to</span>
+            <input
+              type="date"
+              value={sessionCustomTo}
+              onChange={(e) => setSessionCustomTo(e.target.value)}
+              className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 py-1 text-[var(--text-primary)] font-medium"
+            />
+          </div>
+        )}
 
         {/* Stats Summary Bar */}
         {shiftSessions.length > 0 && (
@@ -700,7 +1042,7 @@ export function StaffTab({
                   </td>
                 </tr>
               ) : (
-                shiftSessions.map((session) => {
+                paginatedSessions.map((session) => {
                   const isSettled = session.status === "SETTLED";
                   const diffVal = Number(session.cash_difference || 0);
                   const isDiffZero = Math.abs(diffVal) < 0.01;
@@ -830,6 +1172,339 @@ export function StaffTab({
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Controls for Shift Handover */}
+        {shiftSessions.length > 0 && (
+          <div className="p-4 border-t border-[var(--border-subtle)] flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs text-[var(--text-muted)]">
+              Showing <span className="font-semibold text-[var(--text-primary)]">{(sessionPage - 1) * sessionPageSize + 1}</span>–
+              <span className="font-semibold text-[var(--text-primary)]">{Math.min(sessionPage * sessionPageSize, shiftSessions.length)}</span> of{" "}
+              <span className="font-semibold text-[var(--text-primary)]">{shiftSessions.length}</span> shifts • Page {sessionPage} of {sessionTotalPages}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={sessionPage <= 1}
+                onClick={() => setSessionPage((p) => Math.max(1, p - 1))}
+                className="px-3 py-1.5 text-xs font-bold rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] text-[var(--text-primary)] hover:bg-[var(--border-subtle)] transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              >
+                Previous
+              </button>
+              <button
+                type="button"
+                disabled={sessionPage >= sessionTotalPages}
+                onClick={() => setSessionPage((p) => p + 1)}
+                className="px-3 py-1.5 text-xs font-bold rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] text-[var(--text-primary)] hover:bg-[var(--border-subtle)] transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+      </article>
+
+      {/* Floor Staff Incentive & Assistant Performance Report */}
+      <article className="rounded-3xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] overflow-hidden shadow-xs space-y-4">
+        <div className="p-4 border-b border-[var(--border-subtle)] flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400">
+              <Award className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="font-display text-lg font-bold text-[var(--text-primary)]">
+                Floor Staff Incentive &amp; Assistance Report
+              </h2>
+              <p className="text-xs text-[var(--text-muted)]">
+                Basket verifiers, customer shopping assistance metrics, shift hours, and earned incentives
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Staff Filter */}
+            <select
+              value={incentiveStaffFilter}
+              onChange={(e) => setIncentiveStaffFilter(e.target.value)}
+              className="text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] px-3 py-2 font-medium text-[var(--text-primary)]"
+            >
+              <option value="">All Floor Staff</option>
+              {floorStaffOnlyList.map((member) => (
+                <option key={member.id} value={member.id}>
+                  {member.name}
+                </option>
+              ))}
+            </select>
+
+            {/* Date Preset Filter */}
+            <div className="flex items-center gap-1 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-1 text-xs">
+              <button
+                type="button"
+                onClick={() => setIncentiveDatePreset("today")}
+                className={`rounded-lg px-2.5 py-1 font-semibold transition ${
+                  incentiveDatePreset === "today"
+                    ? "bg-[var(--accent-brand)] text-white shadow-xs"
+                    : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                Today
+              </button>
+              <button
+                type="button"
+                onClick={() => setIncentiveDatePreset("yesterday")}
+                className={`rounded-lg px-2.5 py-1 font-semibold transition ${
+                  incentiveDatePreset === "yesterday"
+                    ? "bg-[var(--accent-brand)] text-white shadow-xs"
+                    : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                Yesterday
+              </button>
+              <button
+                type="button"
+                onClick={() => setIncentiveDatePreset("7days")}
+                className={`rounded-lg px-2.5 py-1 font-semibold transition ${
+                  incentiveDatePreset === "7days"
+                    ? "bg-[var(--accent-brand)] text-white shadow-xs"
+                    : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                Last 7 Days
+              </button>
+              <button
+                type="button"
+                onClick={() => setIncentiveDatePreset("30days")}
+                className={`rounded-lg px-2.5 py-1 font-semibold transition ${
+                  incentiveDatePreset === "30days"
+                    ? "bg-[var(--accent-brand)] text-white shadow-xs"
+                    : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                Last 30 Days
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIncentiveDatePreset("custom");
+                  if (!incentiveCustomFrom) setIncentiveCustomFrom(getTodayDateStr());
+                  if (!incentiveCustomTo) setIncentiveCustomTo(getTodayDateStr());
+                }}
+                className={`rounded-lg px-2.5 py-1 font-semibold transition ${
+                  incentiveDatePreset === "custom"
+                    ? "bg-[var(--accent-brand)] text-white shadow-xs"
+                    : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                Custom
+              </button>
+            </div>
+
+            {/* Refresh */}
+            <button
+              type="button"
+              onClick={() => void loadIncentiveReport()}
+              disabled={isLoadingIncentives}
+              className="p-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition disabled:opacity-50"
+              title="Refresh Incentive Report"
+            >
+              <RefreshCw className={`h-4 w-4 ${isLoadingIncentives ? "animate-spin" : ""}`} />
+            </button>
+          </div>
+        </div>
+
+        {/* Custom Date Range Picker for Floor Staff Report */}
+        {incentiveDatePreset === "custom" && (
+          <div className="flex flex-wrap items-center gap-2.5 px-4 py-2.5 border-b border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)]/50 text-xs">
+            <div className="flex items-center gap-1.5 font-bold text-[var(--accent-brand)]">
+              <Calendar className="h-4 w-4" />
+              <span>Custom Range:</span>
+            </div>
+            <input
+              type="date"
+              value={incentiveCustomFrom}
+              onChange={(e) => setIncentiveCustomFrom(e.target.value)}
+              className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 py-1 text-[var(--text-primary)] font-medium"
+            />
+            <span className="text-[var(--text-muted)] font-medium">to</span>
+            <input
+              type="date"
+              value={incentiveCustomTo}
+              onChange={(e) => setIncentiveCustomTo(e.target.value)}
+              className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 py-1 text-[var(--text-primary)] font-medium"
+            />
+          </div>
+        )}
+
+        {/* Stats Summary Bar */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-4">
+          <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-3">
+            <span className="text-[11px] font-medium text-[var(--text-muted)] block">Customers / Bills Assisted</span>
+            <span className="font-mono text-base font-bold text-[var(--text-primary)]">
+              {totalIncentiveBills} orders
+            </span>
+          </div>
+          <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-3">
+            <span className="text-[11px] font-medium text-[var(--text-muted)] block">Total Assisted Sales</span>
+            <span className="font-mono text-base font-bold text-emerald-600 dark:text-emerald-400">
+              {formatRupees(totalIncentiveSales)}
+            </span>
+          </div>
+          <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-3">
+            <span className="text-[11px] font-medium text-[var(--text-muted)] block">Average Basket Size</span>
+            <span className="font-mono text-base font-bold text-sky-600 dark:text-sky-400">
+              {formatRupees(totalIncentiveBills > 0 ? totalIncentiveSales / totalIncentiveBills : 0)}
+            </span>
+          </div>
+          <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-medium text-[var(--text-muted)] block">Calculated Incentive Pool</span>
+              <span className="text-[9px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                ₹{incentivePerBillRate}/bill + {incentivePercentRate}%
+              </span>
+            </div>
+            <span className="font-mono text-base font-bold text-amber-500">
+              {formatRupees(totalIncentivesPaid)}
+            </span>
+          </div>
+        </div>
+
+        {/* Table of Floor Assistants */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse min-w-[850px]">
+            <thead>
+              <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
+                <th className="py-3 px-4">Floor Staff / Assistant</th>
+                <th className="py-3 px-4">Shift Status &amp; Timing</th>
+                <th className="py-3 px-4 text-right">Bills Assisted</th>
+                <th className="py-3 px-4 text-right">Assisted Sales</th>
+                <th className="py-3 px-4 text-right">Avg Basket</th>
+                <th className="py-3 px-4 text-right">Earned Incentive</th>
+                <th className="py-3 px-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[var(--border-subtle)] text-xs">
+              {isLoadingIncentives ? (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center text-[var(--text-muted)]">
+                    <div className="inline-flex items-center gap-2">
+                      <div className="h-4 w-4 rounded-full border-2 border-[var(--accent-brand)]/30 border-t-[var(--accent-brand)] animate-spin" />
+                      <span>Loading floor staff incentive records...</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : incentiveRows.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center text-[var(--text-muted)]">
+                    <Award className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                    <p className="font-medium">No floor assistant records found</p>
+                    <p className="text-[11px] opacity-75">
+                      Assistant summaries appear here whenever customer bills are scanned and linked to staff badges.
+                    </p>
+                  </td>
+                </tr>
+              ) : (
+                paginatedIncentiveRows.map((row) => (
+                  <tr key={row.staff_id} className="hover:bg-[var(--bg-surface-elevated)]/50 transition">
+                    {/* Staff & Role */}
+                    <td className="py-3.5 px-4">
+                      <div className="flex flex-col">
+                        <span className="font-bold text-[var(--text-primary)]">{row.staff_name}</span>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="rounded-md bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
+                            {row.staff_role}
+                          </span>
+                          <span className="font-mono text-[9px] font-bold text-[var(--text-secondary)]">
+                            {row.staff_barcode}
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Timing */}
+                    <td className="py-3.5 px-4">
+                      <div className="flex flex-col gap-0.5">
+                        <div className="flex items-center gap-1.5">
+                          {row.is_active_shift ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[9px] font-bold text-emerald-500">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                              Active On Shift
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-[var(--text-muted)]">Shift Settled</span>
+                          )}
+                        </div>
+                        <span className="text-[10px] font-mono text-amber-600 dark:text-amber-400">
+                          ⏱ {row.total_shift_duration_formatted || "0m"}
+                        </span>
+                      </div>
+                    </td>
+
+                    {/* Bills Count */}
+                    <td className="py-3.5 px-4 text-right font-mono font-bold text-[var(--text-primary)]">
+                      {row.total_bills_assisted} {row.total_bills_assisted === 1 ? "bill" : "bills"}
+                    </td>
+
+                    {/* Total Sales */}
+                    <td className="py-3.5 px-4 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                      {formatRupees(row.total_assisted_sales)}
+                    </td>
+
+                    {/* Avg Basket */}
+                    <td className="py-3.5 px-4 text-right font-mono font-medium text-[var(--text-primary)]">
+                      {formatRupees(row.average_basket_value)}
+                    </td>
+
+                    {/* Incentive */}
+                    <td className="py-3.5 px-4 text-right font-mono font-black text-amber-500 text-sm">
+                      {formatRupees(row.calculated_incentive)}
+                    </td>
+
+                    {/* Action: Slip Button */}
+                    <td className="py-3.5 px-4 text-right">
+                      <button
+                        type="button"
+                        onClick={() => generateFloorStaffIncentiveSlipPDF(row, restaurant, "print")}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] px-2.5 py-1.5 text-[11px] font-bold text-[var(--text-primary)] hover:bg-[var(--accent-brand)] hover:text-white transition shadow-2xs cursor-pointer"
+                        title="Print Thermal Floor Staff Incentive Slip"
+                      >
+                        <Printer className="h-3.5 w-3.5" />
+                        <span>Slip</span>
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination Controls for Floor Staff Incentive Report */}
+        {incentiveRows.length > 0 && (
+          <div className="p-4 border-t border-[var(--border-subtle)] flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs text-[var(--text-muted)]">
+              Showing <span className="font-semibold text-[var(--text-primary)]">{(incentivePage - 1) * incentivePageSize + 1}</span>–
+              <span className="font-semibold text-[var(--text-primary)]">{Math.min(incentivePage * incentivePageSize, incentiveRows.length)}</span> of{" "}
+              <span className="font-semibold text-[var(--text-primary)]">{incentiveRows.length}</span> floor assistants • Page {incentivePage} of {incentiveTotalPages}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={incentivePage <= 1}
+                onClick={() => setIncentivePage((p) => Math.max(1, p - 1))}
+                className="px-3 py-1.5 text-xs font-bold rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] text-[var(--text-primary)] hover:bg-[var(--border-subtle)] transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              >
+                Previous
+              </button>
+              <button
+                type="button"
+                disabled={incentivePage >= incentiveTotalPages}
+                onClick={() => setIncentivePage((p) => p + 1)}
+                className="px-3 py-1.5 text-xs font-bold rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] text-[var(--text-primary)] hover:bg-[var(--border-subtle)] transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </article>
 
       {/* Staff Audit Trail */}
@@ -1131,6 +1806,24 @@ export function StaffTab({
           }
         }}
         onClose={() => setStaffToDelete(null)}
+      />
+
+      {/* Manager Punch Out Confirmation Modal */}
+      <ManagerPunchOutModal
+        isOpen={!!staffToPunchOut}
+        member={staffToPunchOut}
+        onClose={() => setStaffToPunchOut(null)}
+        onConfirm={handleManagerPunchOut}
+      />
+
+      {/* Action Toast Notifications */}
+      <ToastNotification
+        notice={actionNotice}
+        error={actionError}
+        clear={() => {
+          setActionNotice(null);
+          setActionError(null);
+        }}
       />
     </div>
   );

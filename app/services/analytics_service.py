@@ -1884,8 +1884,11 @@ async def get_wastage_report(
 ) -> WastageReportResponse:
     stmt = (
         select(
+            StockLedger.id.label("id"),
             InventoryItem.name.label("item_name"),
             InventoryItem.id.label("item_id"),
+            StockLedger.intake_id.label("intake_id"),
+            StockIntake.batch_number.label("batch_number"),
             StockLedger.change_type,
             StockLedger.reason,
             StockLedger.notes,
@@ -1896,6 +1899,7 @@ async def get_wastage_report(
         )
         .select_from(StockLedger)
         .join(InventoryItem, StockLedger.item_id == InventoryItem.id)
+        .outerjoin(StockIntake, StockLedger.intake_id == StockIntake.id)
         .outerjoin(User, StockLedger.created_by == User.id)
         .where(
             StockLedger.outlet_id == outlet_id,
@@ -1941,8 +1945,11 @@ async def get_wastage_report(
 
         items.append(
             WastageRow(
+                id=str(r.id) if getattr(r, "id", None) else None,
                 item_name=r.item_name or "Unknown",
                 item_id=str(r.item_id),
+                intake_id=str(r.intake_id) if getattr(r, "intake_id", None) else None,
+                batch_number=r.batch_number if getattr(r, "batch_number", None) else None,
                 change_type=r.change_type.value if hasattr(r.change_type, "value") else str(r.change_type),
                 reason=display_reason,
                 notes=r.notes,

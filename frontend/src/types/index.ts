@@ -172,6 +172,9 @@ export type BatchDetail = components["schemas"]["BatchDetailResponse"] & {
   wholesale_price?: number | string | null;
   is_oldest?: boolean;
   is_void?: boolean;
+  has_wastage?: boolean;
+  wastage_count?: number;
+  wastage_quantity?: number | string;
 };
 
 export interface PurchaseReturn {
@@ -218,7 +221,9 @@ export type StaffRole =
   | "DELIVERY_BOY"
   | "STAFF";
 
-export type StaffMember = components["schemas"]["StaffResponse"];
+export type StaffMember = components["schemas"]["StaffResponse"] & {
+  barcode?: string | null;
+};
 
 export type RolePermissions = components["schemas"]["RolePermissions"];
 
@@ -304,7 +309,37 @@ export type ManualBill = Omit<components["schemas"]["BillResponse"], "items"> & 
   replaces_bill_id?: string | null;
   created_by_staff_name?: string | null;
   created_by_staff_role?: string | null;
+  assisted_by_staff_id?: string | null;
+  assisted_by_staff_name?: string | null;
+  assisted_by_staff_role?: string | null;
 };
+
+export interface FloorStaffIncentiveRow {
+  staff_id: string;
+  staff_name: string;
+  staff_role: string;
+  staff_barcode: string;
+  staff_phone?: string | null;
+  total_bills_assisted: number;
+  total_assisted_sales: number;
+  average_basket_value: number;
+  total_shift_seconds: number;
+  total_shift_duration_formatted: string;
+  is_active_shift: boolean;
+  latest_punch_in?: string | null;
+  latest_punch_out?: string | null;
+  calculated_incentive: number;
+}
+
+export interface FloorStaffIncentiveReportResponse {
+  outlet_id: string;
+  total_bills_assisted: number;
+  total_assisted_sales: number;
+  total_incentives: number;
+  incentive_per_bill?: number;
+  incentive_percent?: number;
+  staff_breakdown: FloorStaffIncentiveRow[];
+}
 
 
 export type DiscountApproval = components["schemas"]["DiscountApprovalResponse"];
@@ -374,6 +409,9 @@ export type StockIntakeRow = components["schemas"]["StockIntakeRow"];
 export type StockIntakeReportResponse = components["schemas"]["StockIntakeReportResponse"];
 
 export type WastageRow = components["schemas"]["WastageRow"] & {
+  id?: string | null;
+  intake_id?: string | null;
+  batch_number?: string | null;
   reason?: string | null;
   notes?: string | null;
 };
@@ -382,6 +420,22 @@ export type WastageReportResponse = Omit<components["schemas"]["WastageReportRes
   total_audit_corrections?: number;
   audit_correction_cost?: number;
 };
+
+export interface BatchWastageEntry {
+  id: string;
+  outlet_id: string;
+  item_id: string;
+  item_name: string;
+  intake_id?: string | null;
+  batch_number?: string | null;
+  quantity: number;
+  unit_cost?: number | null;
+  wastage_cost: number;
+  reason?: string | null;
+  notes?: string | null;
+  created_at: string;
+  created_by_name?: string | null;
+}
 
 export type StockMovementRow = components["schemas"]["StockMovementRow"];
 export type StockMovementResponse = components["schemas"]["StockMovementResponse"];

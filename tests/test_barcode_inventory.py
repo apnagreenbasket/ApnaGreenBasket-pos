@@ -187,6 +187,59 @@ async def test_batches_listing_and_wastage_log(client: AsyncClient, db_session: 
     )
     assert invalid_batch_resp.status_code == 404
 
+    # 1. Test GET /api/admin/inventory/batches/{batch_id}/wastage
+    batch_wastage_list_resp = await client.get(
+        f"/api/admin/inventory/batches/{batch_ghee['id']}/wastage",
+        headers=headers,
+    )
+    assert batch_wastage_list_resp.status_code == 200
+    b_waste_entries = batch_wastage_list_resp.json()
+    assert len(b_waste_entries) == 1
+    assert b_waste_entries[0]["id"] == str(specific_waste_entry["id"])
+    assert float(b_waste_entries[0]["quantity"]) == 3.0
+    assert b_waste_entries[0]["batch_number"] == "BAT-GHEE-44"
+
+    # Verify batch lot listing has wastage flags
+    assert batch_ghee["has_wastage"] is True
+    assert batch_ghee["wastage_count"] == 1
+    assert float(batch_ghee["wastage_quantity"]) == 3.0
+
+    # 2. Test GET /api/analytics/wastage returns id, intake_id, batch_number
+    analytics_resp = await client.get("/api/analytics/wastage", headers=headers)
+    assert analytics_resp.status_code == 200
+    analytics_items = analytics_resp.json()["items"]
+    matched_analytics_entry = next((i for i in analytics_items if i.get("id") == str(specific_waste_entry["id"])), None)
+    assert matched_analytics_entry is not None
+    assert matched_analytics_entry["batch_number"] == "BAT-GHEE-44"
+    assert matched_analytics_entry["intake_id"] == str(batch_ghee["id"])
+
+    # 3. Test DELETE /api/admin/inventory/wastage/{ledger_id} (Undo & Restock)
+    delete_restock_resp = await client.delete(
+        f"/api/admin/inventory/wastage/{specific_waste_entry['id']}",
+        headers=headers,
+    )
+    assert delete_restock_resp.status_code == 200
+    restock_data = delete_restock_resp.json()
+    assert restock_data["success"] is True
+    assert float(restock_data["restored_quantity"]) == 3.0
+    assert float(restock_data["new_current_stock"]) == 13.0  # 10 + 3
+    assert float(restock_data["new_batch_remaining"]) == 13.0
+
+    # 4. Verify batch lot is restocked and wastage flag cleared
+    batches_resp3 = await client.get("/api/admin/inventory/batches", headers=headers)
+    batch_ghee_restocked = next(b for b in batches_resp3.json() if b["batch_number"] == "BAT-GHEE-44")
+    assert float(batch_ghee_restocked["remaining_quantity"]) == 13.0
+    assert batch_ghee_restocked["has_wastage"] is False
+    assert batch_ghee_restocked["wastage_count"] == 0
+
+    # 5. Verify batch wastage list is now empty
+    b_waste_empty = await client.get(f"/api/admin/inventory/batches/{batch_ghee['id']}/wastage", headers=headers)
+    assert len(b_waste_empty.json()) == 0
+
+    # 6. Verify analytics report no longer lists the deleted wastage
+    analytics_resp2 = await client.get("/api/analytics/wastage", headers=headers)
+    assert all(i.get("id") != str(specific_waste_entry["id"]) for i in analytics_resp2.json()["items"])
+
 
 @pytest.mark.asyncio
 async def test_direct_1to1_stock_deduction_on_checkout(client: AsyncClient, db_session: AsyncSession):

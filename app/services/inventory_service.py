@@ -28,6 +28,7 @@ from app.models.order_item import OrderItem
 from app.models.stock_intake import StockIntake
 from app.models.stock_ledger import StockLedger
 from app.models.supplier import Supplier
+from app.models.user import User
 from app.schemas.inventory import (
     BatchUpdateMetadataRequest,
     InventoryItemCreate,
@@ -2007,6 +2008,28 @@ async def get_all_batches(
     )
     voided_batch_ids = set(voided_res.scalars().all())
 
+    # Fetch all batch wastage aggregations for this outlet from StockLedger
+    wastage_stmt = (
+        select(
+            StockLedger.intake_id,
+            func.count(StockLedger.id).label("wastage_count"),
+            func.coalesce(func.sum(func.abs(StockLedger.quantity_change)), Decimal("0.000")).label("wastage_quantity")
+        )
+        .where(
+            StockLedger.outlet_id == outlet_id,
+            StockLedger.change_type == StockChangeTypeEnum.MANUAL_ADJUSTMENT,
+            StockLedger.quantity_change < 0,
+            StockLedger.intake_id.isnot(None),
+            or_(
+                StockLedger.reason.is_(None),
+                ~StockLedger.reason.in_(["VOID_BATCH", "INTAKE_CORRECTION", "OVERSOLD_RECONCILE"]),
+            ),
+        )
+        .group_by(StockLedger.intake_id)
+    )
+    wastage_res = await db.execute(wastage_stmt)
+    wastage_map = {row.intake_id: (row.wastage_count, row.wastage_quantity) for row in wastage_res.all()}
+
     result = []
     for b in batches:
         is_ov = bool(b.batch_number and "-OV-" in b.batch_number)
@@ -2033,6 +2056,8 @@ async def get_all_batches(
         u_cost = float(b.unit_cost)
         total_billed = u_cost * usable_q
         purchase_cost = round(total_billed / init_q, 2) if init_q > 0 else u_cost
+
+        w_count, w_qty = wastage_map.get(b.id, (0, Decimal("0.000")))
 
         result.append({
             "id": b.id,
@@ -2064,6 +2089,9 @@ async def get_all_batches(
             "margin_type": b.item.margin_type if b.item else None,
             "retail_margin_pct": b.item.retail_margin_pct if b.item else None,
             "mrp_margin_pct": b.item.mrp_margin_pct if b.item else None,
+            "has_wastage": w_count > 0,
+            "wastage_count": w_count,
+            "wastage_quantity": w_qty,
         })
 
     if page is not None and page_size is not None:
@@ -2279,6 +2307,173 @@ async def log_stock_wastage(
         "new_current_stock": item.current_stock,
         "estimated_loss_amount": loss_amount,
         "ledger_entry_id": ledger_entry.id,
+    }
+
+
+async def get_batch_wastage_history(
+    db: AsyncSession,
+    outlet_id: uuid.UUID,
+    intake_id: uuid.UUID,
+) -> list[dict[str, Any]]:
+    """
+    Get all active wastage entries logged against a specific batch lot.
+    """
+    stmt = (
+        select(
+            StockLedger.id,
+            StockLedger.outlet_id,
+            StockLedger.item_id,
+            InventoryItem.name.label("item_name"),
+            StockLedger.intake_id,
+            StockIntake.batch_number,
+            func.abs(StockLedger.quantity_change).label("quantity"),
+            StockLedger.unit_cost_snapshot.label("unit_cost"),
+            StockLedger.reason,
+            StockLedger.notes,
+            StockLedger.created_at,
+            User.name.label("created_by_name")
+        )
+        .select_from(StockLedger)
+        .join(InventoryItem, StockLedger.item_id == InventoryItem.id)
+        .outerjoin(StockIntake, StockLedger.intake_id == StockIntake.id)
+        .outerjoin(User, StockLedger.created_by == User.id)
+        .where(
+            StockLedger.outlet_id == outlet_id,
+            StockLedger.intake_id == intake_id,
+            StockLedger.change_type == StockChangeTypeEnum.MANUAL_ADJUSTMENT,
+            StockLedger.quantity_change < 0,
+            or_(
+                StockLedger.reason.is_(None),
+                ~StockLedger.reason.in_(["VOID_BATCH", "INTAKE_CORRECTION", "OVERSOLD_RECONCILE"]),
+            ),
+        )
+        .order_by(StockLedger.created_at.desc())
+    )
+    res = await db.execute(stmt)
+    rows = res.all()
+
+    reason_map = {
+        "SPOILED_EXPIRED": "Spoiled / Expired",
+        "DAMAGED_TRANSIT": "Damaged / Broken",
+        "AUDIT_CORRECTION": "Audit Variance",
+        "THEFT_LOST": "Theft / Missing",
+        "OTHER": "Other Reason",
+    }
+
+    result = []
+    for r in rows:
+        qty = Decimal(str(r.quantity or 0))
+        uc = Decimal(str(r.unit_cost or 0)) if r.unit_cost is not None else Decimal("0.00")
+        wc = qty * uc
+        raw_reason = r.reason or ""
+        display_reason = reason_map.get(raw_reason, raw_reason.replace("_", " ").title()) if raw_reason else "Wastage"
+
+        result.append({
+            "id": r.id,
+            "outlet_id": r.outlet_id,
+            "item_id": r.item_id,
+            "item_name": r.item_name or "Unknown Item",
+            "intake_id": r.intake_id,
+            "batch_number": r.batch_number,
+            "quantity": qty,
+            "unit_cost": r.unit_cost,
+            "wastage_cost": round(wc, 2),
+            "reason": display_reason,
+            "notes": r.notes,
+            "created_at": r.created_at.replace(tzinfo=timezone.utc) if r.created_at and r.created_at.tzinfo is None else r.created_at,
+            "created_by_name": r.created_by_name or "Admin",
+        })
+    return result
+
+
+async def delete_and_restock_wastage(
+    db: AsyncSession,
+    outlet_id: uuid.UUID,
+    ledger_id: uuid.UUID,
+    user_id: uuid.UUID | None = None,
+) -> dict[str, Any]:
+    """
+    Safely undoes/deletes an accidental wastage write-off:
+    1. Finds the StockLedger entry by ledger_id and outlet_id.
+    2. Identifies the exact intake batch (intake_id) and inventory item (item_id).
+    3. Restores remaining_quantity back onto the batch lot.
+    4. Restores item current_stock.
+    5. Deletes the mistaken wastage entry from the ledger.
+    6. Reconciles item current_stock from active batch balances.
+    7. Refreshes DB objects and returns success confirmation.
+    """
+    res = await db.execute(
+        select(StockLedger).where(
+            StockLedger.id == ledger_id,
+            StockLedger.outlet_id == outlet_id,
+        )
+    )
+    ledger_entry = res.scalar_one_or_none()
+    if not ledger_entry:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Wastage record not found.",
+        )
+
+    if ledger_entry.change_type != StockChangeTypeEnum.MANUAL_ADJUSTMENT or ledger_entry.quantity_change >= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Specified ledger entry is not a negative stock wastage adjustment.",
+        )
+
+    waste_qty = abs(ledger_entry.quantity_change)
+
+    # 1. Fetch item
+    item = await db.get(InventoryItem, ledger_entry.item_id)
+    if not item or item.outlet_id != outlet_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Inventory item associated with this wastage was not found.",
+        )
+
+    # 2. Fetch and restock batch if intake_id is present
+    target_batch = None
+    if ledger_entry.intake_id:
+        target_batch = await db.get(StockIntake, ledger_entry.intake_id)
+        if target_batch and target_batch.outlet_id == outlet_id:
+            target_batch.remaining_quantity += waste_qty
+    else:
+        # If no intake_id on ledger entry, check if item has batches
+        recent_batch_res = await db.execute(
+            select(StockIntake)
+            .where(StockIntake.item_id == item.id, StockIntake.outlet_id == outlet_id)
+            .order_by(StockIntake.intake_date.desc(), StockIntake.created_at.desc())
+            .limit(1)
+        )
+        target_batch = recent_batch_res.scalar_one_or_none()
+        if target_batch:
+            target_batch.remaining_quantity += waste_qty
+        else:
+            item.current_stock += waste_qty
+
+    # 3. Delete the ledger record
+    await db.delete(ledger_entry)
+    await db.flush()
+
+    # 4. Reconcile item stock from batches to guarantee 100% sync
+    await reconcile_item_stock_from_batches(db, item.id)
+    await db.refresh(item)
+    if target_batch:
+        await db.refresh(target_batch)
+
+    unit_val = item.unit.value if hasattr(item.unit, "value") else str(item.unit or "units")
+    batch_num = target_batch.batch_number if target_batch else None
+    batch_msg = f" back to batch #{batch_num}" if batch_num else ""
+
+    return {
+        "success": True,
+        "message": f"Successfully undone wastage! Restored {waste_qty} {unit_val} of '{item.name}'{batch_msg}.",
+        "item_id": item.id,
+        "item_name": item.name,
+        "restored_quantity": waste_qty,
+        "batch_number": batch_num,
+        "new_current_stock": item.current_stock,
+        "new_batch_remaining": target_batch.remaining_quantity if target_batch else None,
     }
 
 

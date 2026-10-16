@@ -24,6 +24,7 @@ class StaffCreate(StrictSchema):
     role: RoleEnum = Field(default=RoleEnum.STAFF)
     password: str = Field(min_length=8, max_length=100)
     pin: str | None = Field(None, min_length=4, max_length=4, pattern="^[0-9]{4}$")
+    barcode: str | None = Field(None, max_length=100)
 
     @field_validator("phone", mode="before")
     @classmethod
@@ -49,6 +50,22 @@ class StaffUpdate(StrictSchema):
     phone: str | None = Field(None, max_length=50)
     role: RoleEnum | None = None
     status: str | None = Field(None, pattern="^(active|inactive)$")
+    barcode: str | None = Field(None, max_length=100)
+    pin: str | None = None
+
+    @field_validator("pin", mode="before")
+    @classmethod
+    def validate_pin(cls, v: Any) -> str | None:
+        if v is None:
+            return None
+        if isinstance(v, str):
+            v = v.strip()
+            if not v or v in ("••••", "****"):
+                return v
+            if len(v) != 4 or not v.isdigit():
+                raise ValueError("PIN must be exactly 4 numeric digits or empty to unset")
+            return v
+        return v
 
     @field_validator("phone", mode="before")
     @classmethod
@@ -76,6 +93,7 @@ class StaffResponse(BaseResponse):
     phone: str | None
     role: RoleEnum
     status: str
+    barcode: str | None = None
     has_pin: bool
     created_at: datetime
     updated_at: datetime
